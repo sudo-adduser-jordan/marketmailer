@@ -1,0 +1,15 @@
+%% coding: utf-8
+[{release,"marketmailer_release","1","16.1",
+          [{kernel,"10.4","./lib/kernel-10.4"},
+           {stdlib,"7.1","./lib/stdlib-7.1"},
+           {crypto,"5.7","./lib/crypto-5.7"},
+           {cowlib,"2.16.0","./lib/cowlib-2.16.0"},
+           {asn1,"5.4.2","./lib/asn1-5.4.2"},
+           {public_key,"1.18.3","./lib/public_key-1.18.3"},
+           {ssl,"11.4","./lib/ssl-11.4"},
+           {ranch,"1.8.1","./lib/ranch-1.8.1"},
+           {cowboy,"2.14.2","./lib/cowboy-2.14.2"},
+           {marketmailer,"0.1.0","./lib/marketmailer-0.1.0"},
+           {sasl,"4.3","./lib/sasl-4.3"},
+           {runtime_tools,"2.3","./lib/runtime_tools-2.3"}],
+          permanent}].
