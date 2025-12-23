@@ -1,2 +1,9 @@
-# marketmailer
- Eve online market dump and mail service.
+marketmailer
+=====
+
+An OTP application
+
+Build
+-----
+
+    $ rebar3 compile
