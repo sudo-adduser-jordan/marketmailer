@@ -31,7 +31,17 @@ init([]) ->
         intensity => 0,
         period => 1
     },
-    ChildSpecs = [],
+    ChildSpecs = [
+        #{
+          id       => marketmailer_gen_server,
+          start    => {marketmailer_gen_server, start_link, []},
+          restart  => permanent,
+          shutdown => 5000,
+          type     => worker,
+          modules  => [marketmailer_gen_server]
+        }
+
+    ],
     {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions
