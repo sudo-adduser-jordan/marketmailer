@@ -23,14 +23,14 @@
 
 start_link() ->
     Return = gen_server:start_link({local, ?MODULE}, ?MODULE, [], []),
-    io:format("start_link: ~p~n", [Return]),
+    io:format("start_link \t| ~p~n", [Return]),
     Return.
 
 init([]) ->
 
     %% Schedule first tick in 600 ms
     erlang:send_after(600, self(), tick),
-    io:format("Timer initialized: 0.6s~n", []),
+    io:format("Timer initialized \t| 0.6s~n", []),
 
     % %% Connect to Postgres (adjust these values)
     {ok, DatabaseConnection} = epgsql:connect(#{
@@ -42,30 +42,30 @@ init([]) ->
     }),
 
     State = #state{database_connection = DatabaseConnection},
-    io:format("Connected to Postgres: ~p~n", [DatabaseConnection]),
+    io:format("Connected to Postgres \t| ~p~n", [DatabaseConnection]),
     % {ok, State}.
 
     % State = [],
     Return = {ok, State},
-    io:format("init: ~p~n", [State]),
+    io:format("init State \t| ~p~n", [State]),
     Return.
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
     Return = {reply, Reply, State},
-    io:format("handle_call: ~p~n", [Return]),
+    io:format("handle_call \t| ~p~n", [Return]),
     Return.
 
 handle_cast(_Msg, State) ->
     Return = {noreply, State},
-    io:format("handle_cast: ~p~n", [Return]),
+    io:format("handle_cast \t| ~p~n", [Return]),
     Return.
 
 handle_info(_Info, State) ->
     erlang:send_after(600, self(), tick),
 
     Return = {noreply, State},
-    io:format("handle_info: ~p~n", [Return]),
+    io:format("handle_info \t| ~p~n", [Return]),
     Return.
 
 terminate(_Reason, _State) ->
@@ -74,11 +74,11 @@ terminate(_Reason, _State) ->
 
 
     Return = ok,
-    io:format("terminate: ~p~n", [Return]),
+    io:format("terminate \t| ~p~n", [Return]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     Return = {ok, State},
-    io:format("code_change: ~p~n", [Return]),
+    io:format("code_change \t| ~p~n", [Return]),
     Return.
 
