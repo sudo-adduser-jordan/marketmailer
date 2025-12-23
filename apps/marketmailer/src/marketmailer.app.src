@@ -1,11 +1,12 @@
 {application, marketmailer, [
-    {description, ""},
+    {description, "Eve online market mailer."},
     {vsn, "0.1.0"},
     {registered, []},
     {mod, {marketmailer_app, []}},
     {applications, [
         kernel,
-        stdlib
+        stdlib,
+        epgsql
     ]},
     {env, []},
     {modules, []},

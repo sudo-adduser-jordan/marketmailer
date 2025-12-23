@@ -12,6 +12,15 @@
     code_change/3
 ]).
 
+% -export([
+%     query/1, 
+%     squery/1
+% ]).
+
+%% Init with Postgres connection
+-record(state, {database_connection}).
+
+
 start_link() ->
     Return = gen_server:start_link({local, ?MODULE}, ?MODULE, [], []),
     io:format("start_link: ~p~n", [Return]),
@@ -25,19 +34,19 @@ init([]) ->
     erlang:send_after(600, self(), tick),
 
     % %% Connect to Postgres (adjust these values)
-    % {ok, DatabaseConnection} = epgsql:connect(#{
-    %     host => "localhost",
-    %     port => 5432,
-    %     database => "postgres",
-    %     username => "postgres",
-    %     password => "postgres"
-    % }),
+    {ok, DatabaseConnection} = epgsql:connect(#{
+        host => "localhost",
+        port => 5432,
+        database => "postgres",
+        username => "postgres",
+        password => "postgres"
+    }),
 
-    % State = #state{database_connection = DatabaseConnection},
-    % io:format("Connected to Postgres: ~p~n", [DatabaseConnection]),
+    State = #state{database_connection = DatabaseConnection},
+    io:format("Connected to Postgres: ~p~n", [DatabaseConnection]),
     % {ok, State}.
 
-    State = [],
+    % State = [],
     Return = {ok, State},
     io:format("init: ~p~n", [State]),
     Return.
