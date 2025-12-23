@@ -1,2 +1,5 @@
+rebar3 clean
+rebar3 compile
+rebar3 release
 
-./_build/default/rel/marketmailer/bin/marketmailer foreground
+rebar3 release; ./_build/default/rel/marketmailer/bin/marketmailer foreground

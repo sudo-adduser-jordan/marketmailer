@@ -45,7 +45,6 @@ init([]) ->
     io:format("Connected to Postgres \t| ~p~n", [DatabaseConnection]),
     % {ok, State}.
 
-
     %% Create emails table (idempotent with IF NOT EXISTS)
     {ok, [], []} = epgsql:squery(DatabaseConnection, "
         CREATE TABLE IF NOT EXISTS emails (
@@ -58,7 +57,6 @@ init([]) ->
         )
     "),
     io:format("Created table \t| emails~n", []),
-
 
     % State = [],
     Return = {ok, State},
@@ -86,7 +84,6 @@ handle_info(_Info, State) ->
 terminate(_Reason, _State) ->
     % epgsql:close(Conn),
     % io:format("Postgres connection closed~n", []),
-
 
     Return = ok,
     io:format("terminate \t| ~p~n", [Return]),
