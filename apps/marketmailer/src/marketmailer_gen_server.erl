@@ -27,11 +27,10 @@ start_link() ->
     Return.
 
 init([]) ->
-    %% Print once immediately (optional)
-    io:format("tick (init)~n", []),
 
     %% Schedule first tick in 600 ms
     erlang:send_after(600, self(), tick),
+    io:format("Timer initialized: 0.6s~n", []),
 
     % %% Connect to Postgres (adjust these values)
     {ok, DatabaseConnection} = epgsql:connect(#{
@@ -63,11 +62,6 @@ handle_cast(_Msg, State) ->
     Return.
 
 handle_info(_Info, State) ->
-
-    %% Print every 0.6 seconds
-    io:format("tick~n", []),
-
-    %% Schedule the next tick
     erlang:send_after(600, self(), tick),
 
     Return = {noreply, State},
