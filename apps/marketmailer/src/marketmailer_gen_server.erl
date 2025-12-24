@@ -12,14 +12,7 @@
     code_change/3
 ]).
 
-% -export([
-%     query/1, 
-%     squery/1
-% ]).
-
-%% Init with Postgres connection
 -record(state, {database_connection}).
-
 
 start_link() ->
     Return = gen_server:start_link({local, ?MODULE}, ?MODULE, [], []),
@@ -27,49 +20,10 @@ start_link() ->
     Return.
 
 init([]) ->
-
-    %% Schedule first tick in 600 ms
     erlang:send_after(1200, self(), tick),
-    io:format("Timer initialized \t| 1.2s~n", []),
 
-    % %% Connect to Postgres
-    {ok, DatabaseConnection} = epgsql:connect(#{
-        host => "localhost",
-        port => 5432,
-        database => "postgres",
-        username => "postgres",
-        password => "postgres"
-    }),
-
+    {ok, DatabaseConnection} = database:connect(),
     State = #state{database_connection = DatabaseConnection},
-    io:format("Connected to Postgres \t| ~p~n", [DatabaseConnection]),
-    % {ok, State}.
-
-    {ok, [], []} = epgsql:squery(DatabaseConnection, "
-        CREATE TABLE IF NOT EXISTS emails (
-            id SERIAL PRIMARY KEY,
-            recipient TEXT NOT NULL,
-            subject TEXT NOT NULL,
-            body TEXT,
-            sent_at TIMESTAMP DEFAULT NOW(),
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-    "),
-    io:format("Created table \t| emails~n", []),
-    
-    % Execute a simple query
-    case epgsql:squery(DatabaseConnection, "SELECT * FROM emails;") of
-        {ok, _Columns, Rows} ->
-            io:format("Rows \t| ~p~n", [Rows]),
-            
-            % Process the results
-            lists:foreach(fun(Row) ->
-                io:format("email \t| ~p~n", [Row])
-            end, Rows);
-        
-        {error, Reason} ->
-            io:format("Query failed \t| ~p~n", [Reason])
-    end,
 
     % State = [],
     Return = {ok, State},
