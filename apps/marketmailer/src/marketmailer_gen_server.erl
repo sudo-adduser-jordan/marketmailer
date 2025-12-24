@@ -29,10 +29,10 @@ start_link() ->
 init([]) ->
 
     %% Schedule first tick in 600 ms
-    erlang:send_after(600, self(), tick),
-    io:format("Timer initialized \t| 0.6s~n", []),
+    erlang:send_after(1200, self(), tick),
+    io:format("Timer initialized \t| 1.2s~n", []),
 
-    % %% Connect to Postgres (adjust these values)
+    % %% Connect to Postgres
     {ok, DatabaseConnection} = epgsql:connect(#{
         host => "localhost",
         port => 5432,
@@ -45,7 +45,6 @@ init([]) ->
     io:format("Connected to Postgres \t| ~p~n", [DatabaseConnection]),
     % {ok, State}.
 
-    %% Create emails table (idempotent with IF NOT EXISTS)
     {ok, [], []} = epgsql:squery(DatabaseConnection, "
         CREATE TABLE IF NOT EXISTS emails (
             id SERIAL PRIMARY KEY,
@@ -57,6 +56,20 @@ init([]) ->
         )
     "),
     io:format("Created table \t| emails~n", []),
+    
+    % Execute a simple query
+    case epgsql:squery(DatabaseConnection, "SELECT * FROM emails;") of
+        {ok, _Columns, Rows} ->
+            io:format("Rows \t| ~p~n", [Rows]),
+            
+            % Process the results
+            lists:foreach(fun(Row) ->
+                io:format("email \t| ~p~n", [Row])
+            end, Rows);
+        
+        {error, Reason} ->
+            io:format("Query failed \t| ~p~n", [Reason])
+    end,
 
     % State = [],
     Return = {ok, State},
@@ -81,10 +94,9 @@ handle_info(_Info, State) ->
     io:format("handle_info \t| ~p~n", [Return]),
     Return.
 
-terminate(_Reason, _State) ->
-    % epgsql:close(Conn),
-    % io:format("Postgres connection closed~n", []),
-
+terminate(_Reason, #state{database_connection = DatabaseConnection}) ->
+    epgsql:close(DatabaseConnection),
+    io:format("Postgres connection closed~n", []),
     Return = ok,
     io:format("terminate \t| ~p~n", [Return]),
     ok.
