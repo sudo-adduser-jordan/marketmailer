@@ -1,0 +1,14 @@
+import Config
+
+config :marketmailer, ecto_repos: [Marketmailer.Database]
+config :marketmailer, Marketmailer.Database,
+  username: "postgres",
+  password: "postgres",
+  database: "postgres",
+  hostname: "localhost",
+  pool_size: 10
+
+config :swoosh, :api_client, false
+config :marketmailer, Marketmailer.Mailer,
+  adapter: Swoosh.Adapters.Sendgrid,
+  api_key: "SG.x.x"

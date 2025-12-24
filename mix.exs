@@ -21,20 +21,35 @@ defmodule Marketmailer.MixProject do
 
   defp deps do
     [
-      {:req, "~> 0.5.0"},
-    #   {:ecto_sql, "~> 3.0"},
-    #   {:postgrex, ">= 0.0.0"}
+        {:req, "~> 0.5.0"},
+        {:ecto_sql, "~> 3.0"},
+        {:postgrex, ">= 0.0.0"},
+        {:swoosh, "~> 1.19"},
+        {:gen_smtp, "~> 1.0"}
     ]
   end
 
   defp aliases do
     [
-      setup: ["deps.get", "ecto.setup"],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
-      "ecto.reset": ["ecto.drop", "ecto.setup"],
-    #   test: ["ecto.create", "ecto.migrate", "test"],
-      test: ["test"],
-      format: ["format --check-formatted"]
+      setup: [
+        "deps.get",
+        "ecto.setup"
+      ],
+      "ecto.setup": [
+        "ecto.create",
+        # "ecto.migrate",
+        # "run priv/repo/seeds.exs"
+      ],
+      "ecto.reset": [
+        "ecto.drop",
+        "ecto.setup"
+      ],
+      format: [
+        "format --check-formatted"
+      ],
+      start: [
+        "run --no-halt"
+      ]
     ]
   end
 end
