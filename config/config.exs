@@ -1,5 +1,8 @@
 import Config
 
+config :esi_eve_online,
+  user_agent: "MyCoolApp/1.0 (email@example.com)"
+
 config :marketmailer, ecto_repos: [Marketmailer.Database]
 config :marketmailer, Marketmailer.Database,
   username: "postgres",
