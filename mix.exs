@@ -37,8 +37,8 @@ defmodule Marketmailer.MixProject do
       ],
       "ecto.setup": [
         "ecto.create",
-        # "ecto.migrate",
-        # "run priv/repo/seeds.exs"
+        "ecto.migrate",
+        "run priv/repo/seeds.exs"
       ],
       "ecto.reset": [
         "ecto.drop",

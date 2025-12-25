@@ -1,5 +1,5 @@
 defmodule Marketmailer.Mailer do
-  use Swoosh.Mailer, otp_app: :sample
+  use Swoosh.Mailer, otp_app: :marketmailer
 end
 
 defmodule Marketmailer.Email do

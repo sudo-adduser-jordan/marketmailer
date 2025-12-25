@@ -4,13 +4,21 @@ defmodule Marketmailer.Database do
     adapter: Ecto.Adapters.Postgres
 end
 
-defmodule Market do
+defmodule Database.Market do
   use Ecto.Schema
 
   schema "market" do
-    field :city,    :string
-    field :temp_lo, :integer
-    field :temp_hi, :integer
-    field :prcp,    :float, default: 0.0
+    field :duration,        :integer
+    field :is_buy_order,    :integer
+    field :issued,          :integer
+    field :location_id,     :integer
+    field :min_volume,      :integer
+    field :order_id,        :integer
+    field :price,           :integer
+    field :range,           :integer
+    field :system_id,       :integer
+    field :type_id,         :integer
+    field :volume_remain,   :integer
+    field :volume_total,    :integer
   end
 end
