@@ -27,8 +27,6 @@ defmodule Marketmailer.MixProject do
         {:swoosh, "~> 1.19"},
         {:gen_smtp, "~> 1.0"},
         {:esi_eve_online, git: "https://github.com/marcinruszkiewicz/esi_eve_online.git"}
-        # {:eve_esi, "~> 1.0"}
-        # {:esi_eve_online, "~> 0.5"}
     ]
   end
 

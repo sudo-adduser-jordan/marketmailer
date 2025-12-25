@@ -7,7 +7,7 @@ config :marketmailer, ecto_repos: [Marketmailer.Database]
 config :marketmailer, Marketmailer.Database,
   username: "postgres",
   password: "postgres",
-  database: "postgres",
+  database: "eve",
   hostname: "localhost",
   pool_size: 10
 

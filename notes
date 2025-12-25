@@ -3,3 +3,6 @@ rebar3 compile
 rebar3 release
 
 rebar3 release; ./_build/default/rel/marketmailer/bin/marketmailer foreground
+
+
+mix ecto.gen.migration create_market
