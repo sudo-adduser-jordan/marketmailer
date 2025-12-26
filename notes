@@ -6,3 +6,16 @@ rebar3 release; ./_build/default/rel/marketmailer/bin/marketmailer foreground
 
 
 mix ecto.gen.migration create_market
+
+host.docker.internal
+localhost
+127.0.0.1
+
+docker run -p 8080:80 \
+    -e PGADMIN_DEFAULT_EMAIL=admin@admin.com \
+    -e PGADMIN_DEFAULT_PASSWORD=postgres \
+    --name admin \
+    -d dpage/pgadmin4
+
+
+docker run --name pgadmin-container  -p 5050:80 -e PGADMIN_DEFAULT_EMAIL=test@test.com -e PGADMIN_DEFAULT_PASSWORD=test -d dpage/pgadmin4
