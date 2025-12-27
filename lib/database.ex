@@ -7,20 +7,20 @@ end
 defmodule Market do
   use Ecto.Schema
 
-    # %{
-    #   "duration" => 90,
-    #   "is_buy_order" => true,
-    #   "issued" => "2025-10-16T17:56:38Z",
-    #   "location_id" => 1035466617946,
-    #   "min_volume" => 1,
-    #   "order_id" => 7163873707,
-    #   "price" => 1001.0,
-    #   "range" => "solarsystem",
-    #   "system_id" => 30000240,
-    #   "type_id" => 5339,
-    #   "volume_remain" => 44,
-    #   "volume_total" => 50
-    # },
+  # %{
+  #   "duration" => 90,
+  #   "is_buy_order" => true,
+  #   "issued" => "2025-10-16T17:56:38Z",
+  #   "location_id" => 1035466617946,
+  #   "min_volume" => 1,
+  #   "order_id" => 7163873707,
+  #   "price" => 1001.0,
+  #   "range" => "solarsystem",
+  #   "system_id" => 30000240,
+  #   "type_id" => 5339,
+  #   "volume_remain" => 44,
+  #   "volume_total" => 50
+  # },
 
   schema "market" do
     field :duration, :integer
@@ -36,8 +36,4 @@ defmodule Market do
     field :volume_remain, :integer
     field :volume_total, :integer
   end
-
-
-
-
 end

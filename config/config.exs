@@ -9,7 +9,8 @@ config :marketmailer, Marketmailer.Database,
   password: "postgres",
   database: "eve",
   hostname: "localhost",
-  pool_size: 10
+  pool_size: 10,
+  log: false
 
 config :swoosh, :api_client, false
 config :marketmailer, Marketmailer.Mailer,
