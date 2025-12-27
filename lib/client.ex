@@ -23,13 +23,12 @@ defmodule Marketmailer.Client do
 
   defp work() do
     regions = Req.get!("https://esi.evetech.net/v1/universe/regions").body |> IO.inspect()
+    Marketmailer.Database.delete_all(Market )
 
     Task.async_stream(
       regions,
       fn region ->
         IO.inspect(region)
-
-        Marketmailer.Database.delete_all(Market )
 
 
         orders = Esi.Api.Markets.orders(region, order_type: "all") |> Enum.to_list()
@@ -52,12 +51,12 @@ defmodule Marketmailer.Client do
             ]
           end)
 
-        Enum.chunk_every(rows, 1024)
+        Enum.chunk_every(rows, 2048)
         |> Enum.each(fn chunk ->
           Marketmailer.Database.insert_all(Market, chunk)
         end)
 
-        IO.inspect("#{region} complete")
+        IO.puts("#{region} complete")
       end,
       timeout: 300_000
     )
