@@ -18,18 +18,18 @@ defmodule Marketmailer.Client do
   end
 
   defp schedule_work do
-    Process.send_after(self(), :work, 300_000)
+    Process.send_after(self(), :work, 300_000) # 5 minutes
   end
 
   defp work() do
     regions = Req.get!("https://esi.evetech.net/v1/universe/regions").body |> IO.inspect()
-    Marketmailer.Database.delete_all(Market )
+
+    Marketmailer.Database.delete_all(Market)
 
     Task.async_stream(
       regions,
       fn region ->
         IO.inspect(region)
-
 
         orders = Esi.Api.Markets.orders(region, order_type: "all") |> Enum.to_list()
 
@@ -61,5 +61,7 @@ defmodule Marketmailer.Client do
       timeout: 300_000
     )
     |> Enum.to_list()
+
+    IO.puts("work completed.")
   end
 end

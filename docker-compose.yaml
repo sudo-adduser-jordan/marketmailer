@@ -1,6 +1,9 @@
 volumes:
   database:
+  pgadmin:
+
 services:
+
   postgres:
     image: postgres:latest
     container_name: database
@@ -12,4 +15,16 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_USERNAME=postgres
     volumes:
-      -  database:/var/lib/postgresql/data
+      -  database:/var/lib/postgresql
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    ports:
+      - 8080:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: postgres@postgres.com
+      PGADMIN_DEFAULT_PASSWORD: postgres
+    volumes:
+      - pgadmin:/var/lib/pgadmin
