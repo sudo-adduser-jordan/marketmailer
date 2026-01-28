@@ -1,0 +1,5 @@
+
+mix ecto.gen.migration create_market
+
+
+add region names, item names, sytem names, location names
