@@ -31,30 +31,55 @@ defmodule Marketmailer.Client do
       fn region ->
         IO.inspect(region)
 
-        orders = Esi.Api.Markets.orders(region, order_type: "all") |> Enum.to_list()
 
-        rows =
-          Enum.map(orders, fn order ->
-            [
-              {:duration, order["duration"]},
-              {:is_buy_order, order["is_buy_order"]},
-              {:issued, order["issued"]},
-              {:location_id, order["location_id"]},
-              {:min_volume, order["min_volume"]},
-              {:order_id, order["order_id"]},
-              {:price, order["price"]},
-              {:range, order["range"]},
-              {:system_id, order["system_id"]},
-              {:type_id, order["type_id"]},
-              {:volume_remain, order["volume_remain"]},
-              {:volume_total, order["volume_total"]}
-            ]
-          end)
 
-        Enum.chunk_every(rows, 2048)
-        |> Enum.each(fn chunk ->
-          Marketmailer.Database.insert_all(Market, chunk)
-        end)
+        etag = "sfasdfasdfsfs"
+        headers = [{"If-None-Match", etag}]
+        case Esi.Api.Markets.orders(region, order_type: "all", headers: headers) do
+          {:ok, response_data, response_headers} ->
+            # Extract new ETag from response headers if available
+            new_etag =
+              case List.keyfind(response_headers, "etag", 0) do
+                {_, value} -> value
+                nil -> etag
+              end
+
+            # Process your orders
+            orders = Enum.to_list(response_data)
+            # Save new_etag for next request
+            IO.puts("Fetched orders with ETag: #{new_etag}")
+            {orders, new_etag}
+
+          {:error, %Esi.Error{status: 304}} ->
+            IO.puts("Data not modified since last fetch.")
+            :not_modified
+
+          {:error, reason} ->
+            IO.puts("Error fetching data: #{inspect(reason)}")
+            {:error, reason}
+        end
+        # rows =
+        #   Enum.map(orders, fn order ->
+        #     [
+        #       {:duration, order["duration"]},
+        #       {:is_buy_order, order["is_buy_order"]},
+        #       {:issued, order["issued"]},
+        #       {:location_id, order["location_id"]},
+        #       {:min_volume, order["min_volume"]},
+        #       {:order_id, order["order_id"]},
+        #       {:price, order["price"]},
+        #       {:range, order["range"]},
+        #       {:system_id, order["system_id"]},
+        #       {:type_id, order["type_id"]},
+        #       {:volume_remain, order["volume_remain"]},
+        #       {:volume_total, order["volume_total"]}
+        #     ]
+        #   end)
+
+        # Enum.chunk_every(rows, 2048)
+        # |> Enum.each(fn chunk ->
+        #   Marketmailer.Database.insert_all(Market, chunk)
+        # end)
 
         IO.puts("#{region} complete")
       end,
@@ -169,3 +194,51 @@ end
 
 # # Now, `result` is a map of region_id to market orders, with ETags managed
 # IO.inspect(result)
+
+
+# Store ETags per page/request URL
+etags = %{}
+
+def fetch_page_with_etag(page_url, current_etag) do
+  headers =
+    if current_etag do
+      [{"If-None-Match", current_etag}]
+    else
+      []
+    end
+
+  case Esi.Api.Markets.orders(page_url, headers: headers) do
+    {:ok, response_data, response_headers} ->
+      new_etag =
+        case List.keyfind(response_headers, "etag", 0) do
+          {_, value} -> value
+          nil -> current_etag
+        end
+      orders = Enum.to_list(response_data)
+      {:ok, orders, new_etag}
+
+    {:error, %Esi.Error{status: 304}} ->
+      # No change
+      {:not_modified, current_etag}
+
+    {:error, reason} ->
+      {:error, reason}
+  end
+end
+
+
+
+# For each page/request URL
+page_url = "/some/request/url"
+current_etag = Map.get(etags, page_url)
+
+case fetch_page_with_etag(page_url, current_etag) do
+  {:ok, data, new_etag} ->
+    # Save the new ETag for this page
+    etags = Map.put(etags, page_url, new_etag)
+    # Process data
+  {:not_modified, _} ->
+    # Data unchanged
+  {:error, reason} ->
+    # Handle error
+end

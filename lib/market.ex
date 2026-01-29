@@ -1,95 +1,78 @@
-defmodule EsiMarketFetcher do
-  @moduledoc """
-  Fetches market orders from all regions with ETag caching using ETS.
-  """
+# defmodule EsiMarketFetcher do
+#   @ets_table :request_etags
 
-  @ets_table :region_etags
+#   # Call this once during application startup
+#   def init do
+#     unless :ets.whereis(@ets_table) != :undefined do
+#       :ets.new(@ets_table, [:named_table, :set, :public])
+#     end
+#     :ok
+#   end
 
-  # Call this once during application startup
-  def init do
-    # Create ETS table if it doesn't exist
-    unless :ets.whereis(@ets_table) != :undefined do
-      :ets.new(@ets_table, [:named_table, :set, :public])
-    end
-    :ok
-  end
+#   def fetch_regions do
+#     Req.get!("https://esi.evetech.net/v1/universe/regions").body
+#   end
 
-  # Store ETag for a region
-  def store_etag(region_id, etag) do
-    :ets.insert(@ets_table, {region_id, etag})
-  end
+#   def fetch_region_orders_paginated(region_id) do
+#     etag = get_etag(region_id)
+#     headers = if etag, do: [{"if_none_match", etag}], else: []
 
-  # Retrieve ETag for a region
-  def get_etag(region_id) do
-    case :ets.lookup(@ets_table, region_id) do
-      [{^region_id, etag}] -> etag
-      [] -> nil
-    end
-  end
+#     url = "/markets/regions/#{region_id}/orders"
 
-  # Fetch all regions
-  def fetch_regions do
-    Req.get!("https://esi.evetech.net/v1/universe/regions").body
-  end
+#     # Create the stream
+#     stream = EsiEveOnline.stream!(url, headers)
 
-  # Fetch market orders for a region with ETag support
-  def fetch_region_orders(region_id) do
-    etag = get_etag(region_id)
+#     # Fetch all pages, stop early if 304 (not modified)
+#     case fetch_pages(stream, region_id, etag, []) do
+#       {:ok, data_pages, _} ->
+#         total_orders = List.flatten(data_pages)
+#         IO.puts("Region #{region_id} total orders: #{length(total_orders)}")
+#         {:ok, total_orders}
+#       {:error, reason} ->
+#         IO.puts("Error in pagination for region #{region_id}: #{inspect(reason)}")
+#         {:error, reason}
+#     end
+#   end
 
-    headers =
-      if etag do
-        [{"if_none_match", etag}]
-      else
-        []
-      end
+#   defp fetch_pages(stream, region_id, etag, acc) do
+#     Enum.reduce_while(stream, {:ok, acc, etag}, fn
+#       {:ok, data, headers}, {:ok, acc, current_etag} ->
+#         # Update ETag
+#         new_etag = case List.keyfind(headers, "etag", 0) do
+#             {_, value} -> value
+#             nil -> current_etag
+#         end
+#         store_etag(region_id, new_etag)
+#         {:cont, {:ok, [data | acc], new_etag}}
 
-    url = "/markets/regions/#{region_id}/orders"
+#       {:error, %Esi.Error{status: 304}}, {:ok, acc, current_etag} ->
+#         # Data not modified; stop fetching further pages
+#         {:halt, {:ok, Enum.reverse(acc), current_etag}}
 
-    case EsiEveOnline.request_with_headers(url, headers) do
-      {:ok, data, response_headers} ->
-        # Extract new ETag
-        new_etag =
-          case List.keyfind(response_headers, "etag", 0) do
-            {_, value} -> value
-            nil -> etag
-          end
+#       {:error, reason}, _ ->
+#         {:halt, {:error, reason}}
+#     end)
+#   end
 
-        # Store new ETag
-        store_etag(region_id, new_etag)
-        {:ok, data}
+#   def fetch_all do
+#     init()
+#     regions = fetch_regions()
 
-      {:error, %Esi.Error{status: 304}} ->
-        # Not modified
-        {:not_modified}
+#     results =
+#       Enum.map(regions, fn region_id ->
+#         case fetch_region_orders_paginated(region_id) do
+#           {:ok, data_pages} ->
+#             total_orders = List.flatten(data_pages)
+#             IO.puts("Region #{region_id} total orders: #{length(total_orders)}")
+#             {region_id, total_orders}
 
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
+#           {:error, reason} ->
+#             IO.puts("Error fetching region #{region_id}: #{inspect(reason)}")
+#             {region_id, :error}
+#         end
+#       end)
 
-  # Run the full process
-  def run do
-    init()
-    regions = fetch_regions()
-
-    results =
-      Enum.map(regions, fn region_id ->
-        case fetch_region_orders(region_id) do
-          {:ok, data} ->
-            IO.puts("Fetched data for region #{region_id}, orders count: #{length(data)}")
-            {region_id, data}
-
-          {:not_modified} ->
-            IO.puts("Region #{region_id} data not modified.")
-            {region_id, :not_modified}
-
-          {:error, reason} ->
-            IO.puts("Error fetching region #{region_id}: #{inspect(reason)}")
-            {region_id, :error}
-        end
-      end)
-
-    IO.inspect(results, label: "Market Orders Results")
-    results
-  end
-end
+#     IO.inspect(results, label: "Market Orders with Pagination & ETag")
+#     results
+#   end
+# end

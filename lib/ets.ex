@@ -1,5 +1,5 @@
-defmodule EsiEtagCache do
-  @table_name :region_etags
+defmodule EtagCache do
+  @table_name :request_etags
 
   # Initialize ETS table (call this once during app startup)
   def start_link do
@@ -7,31 +7,18 @@ defmodule EsiEtagCache do
     :ok
   end
 
-  # Store ETag for a region
-  def store_etag(region_id, etag) do
-    :ets.insert(@table_name, {region_id, etag})
+  # Store ETag for a request
+  def store_etag(request, etag) do
+    :ets.insert(@table_name, {request, etag})
   end
 
-  # # Function to store ETag for a region
-# def store_etag(region_id, etag) do
-#   :ets.insert(:region_etags, {region_id, etag})
-# end
 
-
-  # Retrieve ETag for a region
-  def get_etag(region_id) do
-    case :ets.lookup(@table_name, region_id) do
-      [{^region_id, etag}] -> etag
+  # Retrieve ETag for a request
+  def get_etag(request) do
+    case :ets.lookup(@table_name, request) do
+      [{^request, etag}] -> etag
       [] -> nil
     end
   end
-
-# # Function to retrieve ETag for a region
-# def get_etag(region_id) do
-#   case :ets.lookup(:region_etags, region_id) do
-#     [{^region_id, etag}] -> etag
-#     [] -> nil
-#   end
-# end
 
 end
