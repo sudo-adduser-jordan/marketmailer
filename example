@@ -1,205 +1,27 @@
-defmodule Marketmailer.Client do
-  use GenServer
+# defp fetch_orders_page_with_etag({region_id, page} = key, current_etag) do
+#   headers = maybe_put_if_none_match([], current_etag)
 
-  @work_interval 300_000
-  @regions_url "https://esi.evetech.net/latest/universe/regions/"
-  @orders_base_url "https://esi.evetech.net/latest/markets"
+#   case ESI.Market.get_region_orders(region_id, %{order_type: "all", page: page}, headers) do
+#     {:ok, %ESI.Response{status: 304, headers: resp_headers}} ->
+#       new_etag = find_etag(resp_headers) || current_etag
+#       {:not_modified, key, new_etag}
 
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
-  end
+#     {:ok, %ESI.Response{status: 200, headers: resp_headers, body: body}} when is_list(body) ->
+#       new_etag = find_etag(resp_headers) || current_etag
+#       upsert_orders(body, etag_key(key), new_etag)
+#       {:ok, key, new_etag}
 
-  @impl true
-  def init(state) do
-    # Load etags from DB on startup
-    etags = load_etags_from_db()
-    state = Map.put(state, :etags, etags)
+#     other ->
+#       {:error, key, other}
+#   end
+# end
 
-    {new_state, _results} = work(state)
-    schedule_work()
-    {:ok, new_state}
-  end
 
-  @impl true
-  def handle_info(:work, state) do
-    {new_state, results} = work(state)
+# map = map
+#       |> Map.put(:etag_scope, "#{region_id}-#{page}")
+#       |> Map.put(:etag_value, etag)
 
-    # Sync etags back to DB
-    if new_state.etags != state.etags do
-      save_etags_to_db(new_state.etags)
-    end
 
-    schedule_work()
-    {:noreply, new_state}
-  end
-
-  defp schedule_work do
-    Process.send_after(self(), :work, @work_interval)
-  end
-
-  defp work(%{etags: etags} = state) do
-    case fetch_regions() do
-      {:ok, regions} ->
-        urls =
-          regions
-          |> Enum.flat_map(fn region_id ->
-            case fetch_region_pages(region_id) do
-              {:ok, pages_info} -> pages_info
-              {:error, _} -> []
-            end
-          end)
-
-        results =
-          urls
-          |> Enum.map(fn {url, _current_etag} = page_info ->
-            Task.async(fn -> fetch_orders_url(page_info, Map.get(etags, url)) end)
-          end)
-          |> Enum.map(&Task.await(&1, @work_interval))
-
-        updated_etags =
-          results
-          |> Enum.reduce(etags, fn
-            {:ok, url, new_etag}, acc -> Map.put(acc, url, new_etag)
-            {:not_modified, url, new_etag}, acc -> Map.put(acc, url, new_etag)
-            {:error, url, _reason}, acc -> acc
-          end)
-
-        {%{state | etags: updated_etags}, results}
-
-      {:error, reason} ->
-        IO.puts("Failed to fetch regions: #{inspect(reason)}")
-        {state, []}
-    end
-  end
-
-  defp fetch_regions do
-    case Req.get(@regions_url) do
-      {:ok, %Req.Response{status: 200, body: body}} when is_list(body) ->
-        {:ok, body}
-      other ->
-        {:error, other}
-    end
-  end
-
-  defp fetch_region_pages(region_id) do
-    case fetch_first_page(region_id) do
-      {:ok, %Req.Response{status: 200, headers: headers}} ->
-        pages = headers["x-pages"] || "1"
-        page_count = String.to_integer(pages)
-
-        urls =
-          for page <- 1..page_count do
-            {page_url(region_id, page), nil}
-          end
-
-        {:ok, urls}
-
-      other ->
-        {:error, other}
-    end
-  end
-
-  defp fetch_first_page(region_id) do
-    Req.get(page_url(region_id, 1), params: [order_type: "all"])
-  end
-
-  defp page_url(region_id, page) do
-    "#{@orders_base_url}/#{region_id}/orders/?order_type=all&page=#{page}"
-  end
-
-  defp fetch_orders_url({url, _}, current_etag) do
-    headers = maybe_put_if_none_match([], current_etag)
-
-    case Req.get(url, headers: headers) do
-      {:ok, %Req.Response{status: 304, headers: resp_headers}} ->
-        new_etag = find_etag(resp_headers) || current_etag
-        {:not_modified, url, new_etag}
-
-      {:ok, %Req.Response{status: 200, headers: resp_headers, body: body}}
-        when is_list(body) ->
-        new_etag = find_etag(resp_headers) || current_etag
-
-        # Upsert orders to keep DB in sync with this exact ETag
-        upsert_orders(body, url, new_etag)
-        {:ok, url, new_etag}
-
-      other ->
-        IO.inspect(other, label: "Fetch #{url} failed")
-        {:error, url, other}
-    end
-  end
-
-  ## DATABASE ETAG SYNC
-
-  defp load_etags_from_db do
-    case Marketmailer.Database.all(Etag) do
-      {:ok, etag_records} ->
-        etag_records
-        |> Enum.into(%{}, fn record ->
-          {record.url, record.etag}
-        end)
-      {:error, _} -> %{}
-    end
-  end
-
-  defp save_etags_to_db(etags) do
-    etag_list =
-      Map.to_list(etags)
-      |> Enum.map(fn {url, etag} ->
-        [url: url, etag: etag]
-      end)
-
-    # Upsert etags (delete old, insert new)
-    Marketmailer.Database.delete_all(Etag)
-    Marketmailer.Database.insert_all(Etag, etag_list)
-  end
-
-  defp upsert_orders(orders, url, etag) do
-    order_list =
-      orders
-      |> Enum.map(fn order ->
-        order_map = [
-          order_id: order["order_id"],
-          type_id: order["type_id"],
-          price: order["price"],
-          volume_remain: order["volume_remain"],
-          volume_total: order["volume_total"],
-          duration: order["duration"],
-          is_buy_order: order["is_buy_order"],
-          issued: order["issued"],
-          location_id: order["location_id"],
-          min_volume: order["min_volume"],
-          range: order["range"],
-          system_id: order["system_id"]
-        ]
-        # Add etag_url and etag_value to keep orders in sync with their source
-        Map.put(order_map, :etag_url, url)
-        Map.put(order_map, :etag_value, etag)
-      end)
-
-    # Upsert: delete orders from this URL first, then insert fresh
-    Marketmailer.Database.delete_by(Market, etag_url: url)
-    order_list
-    |> Enum.chunk_every(2048)
-    |> Enum.each(fn chunk ->
-      Marketmailer.Database.insert_all(Market, chunk)
-    end)
-  end
-
-  ## Helpers
-
-  defp maybe_put_if_none_match(headers, nil), do: headers
-  defp maybe_put_if_none_match(headers, etag), do: [{"If-None-Match", etag} | headers]
-
-  defp find_etag(headers) do
-    headers
-    |> Enum.find_value(fn
-      {"etag", v} -> v
-      {"ETag", v} -> v
-      _ -> nil
-    end)
-  end
-end
 
 
 # # migration
