@@ -1,5 +1,106 @@
+Common Practices for Removing Stale Data with URL+ETag Tracking (Non-Elixir)
 
-mix ecto.gen.migration create_market
+When using URL+ETag patterns for data sync, here are the industry-standard approaches to remove stale database data:
+1. "Delete by Source URL" (Most Common)
 
+text
+On each successful fetch of URL+ETag:
+1. DELETE FROM orders WHERE etag_url = '<current_url>'
+2. INSERT fresh orders with etag_url = '<current_url>'
 
-add region names, item names, sytem names, location names
+Used by: Netflix, Twitter API syncs, most ETL pipelines
+
+    Pros: Guaranteed sync, no staleness possible
+
+    Cons: Full rewrite per URL (but fast with indexed etag_url)
+
+2. "Soft Delete + TTL"
+
+text
+orders table:
+- etag_url 
+- etag_value  
+- updated_at (timestamp)
+- is_deleted (boolean)
+
+Cleanup cron: DELETE WHERE updated_at < NOW() - INTERVAL 1 DAY AND is_deleted = true
+
+Used by: AWS services, most SaaS platforms
+
+    Mark as is_deleted when ETag says 304/not present
+
+    Background job purges old soft deletes
+
+3. "Partition by ETag URL Prefix"
+
+text
+PARTITION BY RANGE (substring(etag_url, 1, 10))  -- First 10 chars of URL
+
+Used by: Google BigQuery, partitioned data lakes
+
+    Drop entire partitions for dead URLs
+
+    Ultra-fast for bulk cleanup
+
+4. "Tombstone Pattern" (Event Sourcing)
+
+text
+events table:
+- url="region123/page1" 
+- etag="abc123"
+- type="snapshot" | "delete"
+
+On 304: INSERT event(type: "delete", url: "...")
+Consumers ignore tombstoned URLs.
+
+Used by: Kafka Streams, Apache Flink
+5. "Missing ETag Purge" (Your Current Pattern Enhanced)
+
+sql
+-- Background job, hourly
+DELETE FROM orders 
+WHERE etag_url NOT IN (SELECT url FROM etags WHERE etag IS NOT NULL)
+
+    Your etags table becomes the source of truth
+
+    Orders from URLs with no active ETag → automatically stale → DELETE
+
+Recommended Hybrid (Production Pattern)
+
+sql
+-- Schema
+CREATE TABLE orders (
+  order_id BIGINT PRIMARY KEY,
+  etag_url TEXT NOT NULL,
+  etag_value TEXT NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_etag_url ON orders(etag_url);
+CREATE INDEX idx_updated_stale ON orders(updated_at);
+
+-- Your current flow (per URL fetch):
+DELETE FROM orders WHERE etag_url = ?
+INSERT fresh orders (etag_url=?, etag_value=?)
+
+-- Background cleanup (hourly cron):
+DELETE FROM orders 
+WHERE updated_at < NOW() - INTERVAL '6 hours'  -- Safety window
+
+Why this wins:
+
+    Primary sync: DELETE+INSERT per URL → perfect freshness
+
+    Safety net: TTL cleanup catches edge cases (GenServer crashes mid-cycle)
+
+    Fast: Single indexed DELETE per URL
+
+    Survivable: Restart-safe, no data loss
+
+Scale variant (100k+ URLs):
+
+sql
+-- Batch multiple URLs
+DELETE FROM orders WHERE etag_url = ANY($1::text[])  -- Array of URLs
+
+This is the pattern used by Stripe, GitHub API syncs, most financial data pipelines. Your current DELETE by etag_url + INSERT is already correct—just add the TTL cleanup cron

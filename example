@@ -224,3 +224,15 @@ end
 #   add :url, :text, primary_key: true
 #   add :etag, :text
 # end
+
+# create table(:markets) do
+#   add :order_id, :bigint, primary_key: true
+#   add :etag_url, :text, null: false, index: true  # Critical index
+#   add :etag_value, :text, null: false
+#   add :type_id, :bigint, index: true
+#   add :price, :decimal, index: true
+#   add :is_buy_order, :boolean, index: true
+#   add :updated_at, :utc_datetime, null: false
+# end
+
+# create unique index(:markets, [:etag_url, :order_id])  # Prevent dupes
