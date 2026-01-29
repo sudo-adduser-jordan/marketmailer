@@ -169,21 +169,3 @@ end
 
 # # Now, `result` is a map of region_id to market orders, with ETags managed
 # IO.inspect(result)
-
-
-
-# # Create an ETS table (do this once at application startup)
-# :ets.new(:region_etags, [:named_table, :set, :public])
-
-# # Function to store ETag for a region
-# def store_etag(region_id, etag) do
-#   :ets.insert(:region_etags, {region_id, etag})
-# end
-
-# # Function to retrieve ETag for a region
-# def get_etag(region_id) do
-#   case :ets.lookup(:region_etags, region_id) do
-#     [{^region_id, etag}] -> etag
-#     [] -> nil
-#   end
-# end
