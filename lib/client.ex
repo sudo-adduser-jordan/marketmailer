@@ -3,7 +3,6 @@ defmodule Marketmailer.Client do
 
   @work_interval 300_000
   @orders_base_url "https://esi.evetech.net/latest/markets"
-  @regions_url "https://esi.evetech.net/latest/universe/regions/"
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
@@ -12,8 +11,9 @@ defmodule Marketmailer.Client do
   @impl true
   def init(state) do
     # Load etags from DB on startup
-    etags = load_etags_from_db()
-    state = Map.put(state, :etags, etags)
+    # etags = load_etags_from_db()
+    # state = Map.put(state, :etags, etags)
+    state = Map.put(state, :etags, nil)
 
     {new_state, _results} = work(state)
     schedule_work()
@@ -38,16 +38,131 @@ defmodule Marketmailer.Client do
   end
 
   defp work(%{etags: etags} = state) do
-    case fetch_regions() do
-      {:ok, regions} ->
-        urls =
-          regions
-          |> Enum.flat_map(fn region_id ->
-            case fetch_region_pages(region_id) do
-              {:ok, pages_info} -> pages_info
-              {:error, _} -> []
-            end
-          end)
+    regions = [
+      10_000_001,
+      10_000_002,
+      10_000_003,
+      10_000_004,
+      10_000_005,
+      10_000_006,
+      10_000_007,
+      10_000_008,
+      10_000_009,
+      10_000_010,
+      10_000_011,
+      10_000_012,
+      10_000_013,
+      10_000_014,
+      10_000_015,
+      10_000_016,
+      10_000_017,
+      10_000_018,
+      10_000_019,
+      10_000_020,
+      10_000_021,
+      10_000_022,
+      10_000_023,
+      10_000_025,
+      10_000_027,
+      10_000_028,
+      10_000_029,
+      10_000_030,
+      10_000_031,
+      10_000_032,
+      10_000_033,
+      10_000_034,
+      10_000_035,
+      10_000_036,
+      10_000_037,
+      10_000_038,
+      10_000_039,
+      10_000_040,
+      10_000_041,
+      10_000_042,
+      10_000_043,
+      10_000_044,
+      10_000_045,
+      10_000_046,
+      10_000_047,
+      10_000_048,
+      10_000_049,
+      10_000_050,
+      10_000_051,
+      10_000_052,
+      10_000_053,
+      10_000_054,
+      10_000_055,
+      10_000_056,
+      10_000_057,
+      10_000_058,
+      10_000_059,
+      10_000_060,
+      10_000_061,
+      10_000_062,
+      10_000_063,
+      10_000_064,
+      10_000_065,
+      10_000_066,
+      10_000_067,
+      10_000_068,
+      10_000_069,
+      10_000_070,
+      10_001_000,
+      11_000_001,
+      11_000_002,
+      11_000_003,
+      11_000_004,
+      11_000_005,
+      11_000_006,
+      11_000_007,
+      11_000_008,
+      11_000_009,
+      11_000_010,
+      11_000_011,
+      11_000_012,
+      11_000_013,
+      11_000_014,
+      11_000_015,
+      11_000_016,
+      11_000_017,
+      11_000_018,
+      11_000_019,
+      11_000_020,
+      11_000_021,
+      11_000_022,
+      11_000_023,
+      11_000_024,
+      11_000_025,
+      11_000_026,
+      11_000_027,
+      11_000_028,
+      11_000_029,
+      11_000_030,
+      11_000_031,
+      11_000_032,
+      11_000_033,
+      12_000_001,
+      12_000_002,
+      12_000_003,
+      12_000_004,
+      12_000_005,
+      14_000_001,
+      14_000_002,
+      14_000_003,
+      14_000_004,
+      14_000_005,
+      19_000_001
+    ]
+
+    urls =
+      regions
+      |> Enum.flat_map(fn region_id ->
+        case fetch_region_pages(region_id) do
+          {:ok, pages_info} -> pages_info
+          {:error, _} -> []
+        end
+      end)
+
 
         max_concurrency = System.schedulers_online() * 10
 
@@ -75,21 +190,6 @@ defmodule Marketmailer.Client do
           end)
 
         {%{state | etags: updated_etags}, results}
-
-      {:error, reason} ->
-        IO.puts("Failed to fetch regions: #{inspect(reason)}")
-        {state, []}
-    end
-  end
-
-  defp fetch_regions do
-    case Req.get(@regions_url) do
-      {:ok, %Req.Response{status: 200, body: body}} when is_list(body) ->
-        {:ok, body}
-
-      other ->
-        {:error, other}
-    end
   end
 
   defp process_first_page(orders, url, etag) do
