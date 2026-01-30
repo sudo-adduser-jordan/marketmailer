@@ -131,7 +131,7 @@ defmodule Marketmailer.Client do
   def init(state) do
     # etags: %{url => etag_string}
     state = Map.put(state, :etags, %{})
-      work(state)
+    work(state)
     Process.send_after(self(), :work, 0)
     {:ok, state}
   end
@@ -171,7 +171,8 @@ defmodule Marketmailer.Client do
     case fetch_page(base_url, etags, region_id, 1) do
       :not_modified ->
         IO.puts("Region #{region_id}: 304 (no changes)")
-        :ok # No changes for this region.
+        # No changes for this region.
+        :ok
 
       {:ok, response} ->
         pages =
@@ -193,7 +194,7 @@ defmodule Marketmailer.Client do
               page_url = "#{base_url}?page=#{page}"
               fetch_page(page_url, etags, region_id, page)
             end,
-            max_concurrency: System.schedulers_online() * 8,
+            max_concurrency: System.schedulers_online() * 10000,
             timeout: @work_interval
           )
           |> Stream.run()
@@ -235,9 +236,7 @@ defmodule Marketmailer.Client do
         #   "Region #{region_id} page #{page_number}: #{length(orders)} orders (status #{response.status})"
         # )
 
-        IO.puts(
-          "Region #{region_id} page #{page_number}: (status #{response.status})"
-        )
+        IO.puts("Region #{region_id} page #{page_number}: (status #{response.status})")
         {:ok, response}
 
       true ->
@@ -248,7 +247,4 @@ defmodule Marketmailer.Client do
         {:error, {:unexpected_status, response.status}}
     end
   end
-
-
-
 end
