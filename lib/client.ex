@@ -2,7 +2,7 @@ defmodule Marketmailer.Client do
   use GenServer
 
   # https://esi.evetech.net/markets/{region_id}/orders
-  @orders_base_url "https://esi.evetech.net/markets"
+  # @orders_base_url "https://esi.evetech.net/markets"
   @work_interval 300_000
   @regions [
     10_000_001,
@@ -126,159 +126,67 @@ defmodule Marketmailer.Client do
 
   @impl true
   def init(state) do
-    # Load etags from DB on startup
-    # etags = load_etags_from_db()
-    # state = Map.put(state, :etags, etags)
-
-    etags = %{}
-    state = Map.put(state, :etags, etags)
-
-    work(state)
-    # {new_state, _results} = work(state)
-    schedule_work()
+    # Initialize state IMMEDIATELY, no side-effects
+    state = Map.put(state, :etags, %{})
+    Process.send_after(self(), :work, 0)
     {:ok, state}
-    # {:ok, new_state}
   end
 
   @impl true
   def handle_info(:work, state) do
-    {new_state, _} = work(state)
-
-    # Sync etags back to DB
-    # if new_state.etags != state.etags do
-    #   save_etags_to_db(new_state.etags)
-    # end
-
-    schedule_work()
-    {:noreply, new_state}
-  end
-
-  defp schedule_work do
+    work(state)
     Process.send_after(self(), :work, @work_interval)
+    {:noreply, state}
   end
 
-  # defp work(%{etags: etags} = state) do
-  defp work(_state) do
-
-  @regions |> Task.async_stream(fn region_id ->
-
-    response = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
-    |> Req.get!()
-
-    pages = response.headers["x-pages"]
-    |> List.first()
-    |> String.to_integer()
-
-    etag = response.headers["etag"]
-    |> List.first()
-
-    page_urls = if pages > 1 do
-      for page <- 2..pages do "https://esi.evetech.net/v1/markets/#{region_id}/orders?page=#{page}" end
-    else [] end
-
-    page_urls |> IO.inspect(label: "\n Region: #{region_id} \n\t Etag: #{etag} \n\t Orders: #{length(response.body)} \n\t Pages: #{pages} \n ")
-
-    end,
+  defp work(state) do
+    @regions
+    |> Task.async_stream(&fetch_region(&1, state.etags),
       max_concurrency: System.schedulers_online() * 4,
-      timeout: @work_interval
-  ) |> Enum.to_list()
+      timeout: 60_000
+    )
+    |> Stream.run()
 
-    # stream_results =
-    #   Task.async_stream(
-    #     urls,
-    #     fn {url, _} = page_info ->
-    #       fetch_orders_url(page_info, Map.get(etags, url))
-    #     end,
-    #     max_concurrency: max_concurrency,
-    #     timeout: @work_interval
-    #   )
-
-    # results = Enum.to_list(stream_results)
-
-    # updated_etags =
-    #   Enum.reduce(results, etags, fn
-    #     {:ok, {:ok, url, new_etag}}, acc ->
-    #       Map.put(acc, url, new_etag)
-
-    #     {:ok, {:not_modified, url, new_etag}}, acc ->
-    #       Map.put(acc, url, new_etag)
-
-    #     {:ok, {:error, _url, _reason}}, acc ->
-    #       acc
-
-    #     _other, acc ->
-    #       acc
-    #   end)
-
-    # {%{state | etags: updated_etags}, results}
+    # Return state only, NOT {:noreply, state}
+    state
   end
 
-  defp fetch_first_page(region_id) do
-    Req.get(page_url(region_id, 1), params: [order_type: "all"])
-  end
+  defp fetch_region(region_id, etags) do
+    url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
 
-  defp page_url(region_id, page) do
-    "#{@orders_base_url}/#{region_id}/orders/?order_type=all&page=#{page}" |> IO.inspect() |> to_string()
-  end
+    # send etag
+    # etag = Map.get(etags, url, nil)
 
-  defp process_first_page(orders, _url, etag) do
-    if orders && length(orders) > 0 do
-      # upsert_orders(orders, url, etag || "")
-      {:ok, etag}
-    else
-      :ok
+    # Fetch page 1
+    response = Req.get!(url)
+    pages = response.headers["x-pages"] |> hd() |> String.to_integer()
+    etag = response.headers["etag"] |> hd()
+
+    # Update etag (cast to caller's pid or use ETS)
+    GenServer.cast(Marketmailer.Client, {:etag_updated, url, etag})
+
+    retry_fn = fn n -> trunc(:math.pow(2, n) * 1000 * (1 - 0.1 * :rand.uniform())) end
+    # Fetch remaining pages
+    if pages > 1 do
+      page_urls = for page <- 2..pages, do: "#{url}?page=#{page}"
+
+      page_urls
+      |> Task.async_stream(
+        fn page_url ->
+          Req.get!(page_url, retry_delay: retry_fn)
+        end,
+        max_concurrency: 8
+      )
+      |> Stream.run()
     end
+
+    :ok
   end
 
-  defp fetch_orders_url({url, _}, current_etag) do
-    headers = maybe_put_if_none_match([], current_etag)
-
-    case Req.get(url, headers: headers) do
-      {:ok, %Req.Response{status: 304, headers: resp_headers}} ->
-        new_etag = find_etag(resp_headers) || current_etag
-        {:not_modified, url, new_etag}
-
-      {:ok, %Req.Response{status: 200, headers: resp_headers, body: body}}
-      when is_list(body) ->
-        new_etag = find_etag(resp_headers) || current_etag
-
-        # Upsert orders to keep DB in sync with this exact ETag
-        # upsert_orders(body, url, new_etag)
-        {:ok, url, new_etag}
-
-      other ->
-        IO.inspect(other, label: "Fetch #{url} failed")
-        {:error, url, other}
-    end
-  end
-
-  defp fetch_region_pages(region_id) do
-    case fetch_first_page(region_id) do
-      {:ok, %Req.Response{status: 200, headers: headers, body: body}} ->
-        pages = headers["x-pages"] || "1"
-        page_count = String.to_integer(pages)
-
-        # Use first page URL and etag if available, generate others
-        first_url = page_url(region_id, 1)
-        first_etag = find_etag(headers)
-
-        urls =
-          for page <- 1..page_count do
-            url = page_url(region_id, page)
-            etag = if page == 1 and first_etag, do: first_etag, else: nil
-            {url, etag}
-          end
-
-        # Process first page data immediately (don't wait for Task)
-        case process_first_page(body, first_url, first_etag) do
-          {:ok, first_etag} -> {:ok, urls}
-          # Still return URLs even if processing fails
-          _ -> {:ok, urls}
-        end
-
-      other ->
-        {:error, other}
-    end
+  @impl true
+  def handle_cast({:etag_updated, url, etag}, state) do
+    new_etags = Map.put(state.etags, url, etag)
+    {:noreply, %{state | etags: new_etags}}
   end
 
   ## DATABASE ETAG SYNC
@@ -308,58 +216,44 @@ defmodule Marketmailer.Client do
   #   Marketmailer.Database.insert_all(Etag, etag_list)
   # end
 
-  defp upsert_orders(orders, url, etag) do
-    order_list =
-      orders
-      |> Enum.map(fn order ->
-        order_map = [
-          order_id: order["order_id"],
-          type_id: order["type_id"],
-          price: order["price"],
-          volume_remain: order["volume_remain"],
-          volume_total: order["volume_total"],
-          duration: order["duration"],
-          is_buy_order: order["is_buy_order"],
-          issued: order["issued"],
-          location_id: order["location_id"],
-          min_volume: order["min_volume"],
-          range: order["range"],
-          system_id: order["system_id"]
-        ]
+  # defp upsert_orders(orders, url, etag) do
+  #   order_list =
+  #     orders
+  #     |> Enum.map(fn order ->
+  #       order_map = [
+  #         order_id: order["order_id"],
+  #         type_id: order["type_id"],
+  #         price: order["price"],
+  #         volume_remain: order["volume_remain"],
+  #         volume_total: order["volume_total"],
+  #         duration: order["duration"],
+  #         is_buy_order: order["is_buy_order"],
+  #         issued: order["issued"],
+  #         location_id: order["location_id"],
+  #         min_volume: order["min_volume"],
+  #         range: order["range"],
+  #         system_id: order["system_id"]
+  #       ]
 
-        # Convert list of tuples to map
-        map = Map.new(order_map)
+  #       # Convert list of tuples to map
+  #       map = Map.new(order_map)
 
-        # Add etag_url and etag_value to keep orders in sync with their source
-        map = Map.put(map, :etag_url, url)
-        map = Map.put(map, :etag_value, etag)
+  #       # Add etag_url and etag_value to keep orders in sync with their source
+  #       map = Map.put(map, :etag_url, url)
+  #       map = Map.put(map, :etag_value, etag)
 
-        map
-      end)
+  #       map
+  #     end)
 
-    # Upsert: delete orders from this URL first, then insert fresh
-    # Marketmailer.Database.delete_by(Market, etag_url: url)
+  #   # Upsert: delete orders from this URL first, then insert fresh
+  #   # Marketmailer.Database.delete_by(Market, etag_url: url)
 
-    order_list
-    |> Enum.chunk_every(2048)
-    |> Enum.each(fn chunk ->
-      Marketmailer.Database.insert_all(Market, chunk)
-    end)
-  end
-
-  ## Helpers
-
-  defp maybe_put_if_none_match(headers, nil), do: headers
-  defp maybe_put_if_none_match(headers, etag), do: [{"If-None-Match", etag} | headers]
-
-  defp find_etag(headers) do
-    headers
-    |> Enum.find_value(fn
-      {"etag", v} -> v
-      {"ETag", v} -> v
-      _ -> nil
-    end)
-  end
+  #   order_list
+  #   |> Enum.chunk_every(2048)
+  #   |> Enum.each(fn chunk ->
+  #     Marketmailer.Database.insert_all(Market, chunk)
+  #   end)
+  # end
 end
 
 # # migration
