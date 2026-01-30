@@ -1,9 +1,7 @@
 defmodule Marketmailer.Client do
   use GenServer
 
-  # https://esi.evetech.net/markets/{region_id}/orders
-  # @orders_base_url "https://esi.evetech.net/markets"
-  @work_interval 300_000
+  @work_interval 300_000 # 5 minutes
   @regions [
     10_000_001,
     10_000_002,
