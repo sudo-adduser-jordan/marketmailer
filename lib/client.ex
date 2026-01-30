@@ -165,7 +165,6 @@ defmodule Marketmailer.Client do
     # Update etag (cast to caller's pid or use ETS)
     GenServer.cast(Marketmailer.Client, {:etag_updated, url, etag})
 
-    retry_fn = fn n -> trunc(:math.pow(2, n) * 1000 * (1 - 0.1 * :rand.uniform())) end
     # Fetch remaining pages
     if pages > 1 do
       page_urls = for page <- 2..pages, do: "#{url}?page=#{page}"
@@ -173,7 +172,7 @@ defmodule Marketmailer.Client do
       page_urls
       |> Task.async_stream(
         fn page_url ->
-          Req.get!(page_url, retry_delay: retry_fn)
+          Req.get!(page_url)
         end,
         max_concurrency: 8
       )
