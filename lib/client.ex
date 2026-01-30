@@ -192,7 +192,8 @@ defmodule Marketmailer.Client do
               page_url = "#{base_url}?page=#{page}"
               fetch_page(page_url, etags, region_id, page)
             end,
-            max_concurrency: System.schedulers_online() * 10000,
+            max_concurrency: System.schedulers_online() * 10000, # server cant keep up
+            max_concurrency: System.schedulers_online() * 64,
             timeout: @work_interval
           )
           |> Stream.run()
@@ -227,14 +228,15 @@ defmodule Marketmailer.Client do
           GenServer.cast(__MODULE__, {:etag_updated, url, new_etag})
         end
 
-        # per-page upsert, tied to THIS url + THIS etag
-        # orders = response.body
-        # upsert_orders(orders, url, new_etag)
-        # IO.puts(
-        #   "Region #{region_id} page #{page_number}: #{length(orders)} orders (status #{response.status})"
-        # )
+        orders = response.body
 
-        IO.puts("Region #{region_id} page #{page_number}: (status #{response.status})")
+        # per-page upsert, tied to THIS url + THIS etag
+        # upsert_orders(orders, url, new_etag)
+
+        IO.puts(
+          "#{response.status} #{region_id} page #{page_number} \t #{length(orders)} orders "
+        )
+
         {:ok, response}
 
       true ->
