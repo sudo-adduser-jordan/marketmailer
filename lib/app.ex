@@ -4,7 +4,7 @@ defmodule Marketmailer.Application do
   @impl true
   def start(_type, _args) do
     children = [
-        Marketmailer.Database,
+        # Marketmailer.Database,
         # Marketmailer.Mailer,
         # Marketmailer.Email,
         Marketmailer.Client,
