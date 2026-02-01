@@ -22,25 +22,11 @@ defmodule Marketmailer.RegionWorker do
     {:noreply, state}
   end
 
-  # defp fetch_region(region_id) do
-  #   url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
-
-  #   case fetch_page(url, region_id, 1) do
-  #     {:ok, %{ttl: ttl}} ->
-  #       ttl
-
-  #     # Default to 1 min retry on error/304
-  #     _ ->
-  #       60_000
-  #   end
-  # end
-
   defp fetch_region(region_id) do
     url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
 
     case fetch_page(url, region_id, 1) do
       {:ok, %{ttl: ttl, total_pages: total_pages}} ->
-        # ALWAYS spawn for pages 2..N
         if total_pages > 1 do
           spawn_pagination_tasks(region_id, total_pages)
         end
@@ -48,112 +34,60 @@ defmodule Marketmailer.RegionWorker do
         ttl
 
       _ ->
+        # Default to 1 min retry on error/304
         60_000
     end
   end
-
-  # defp fetch_page(url, region_id, page_number) do
-  #   etag = get_etag_with_fallback(url)
-  #   headers = if etag, do: [{"If-None-Match", etag}], else: []
-
-  #   case Req.get(url, headers: headers) do
-  #     {:ok, %{status: 304} = res} ->
-  #       IO.puts("304 #{region_id} page #{page_number}")
-  #       {:ok, %{ttl: calculate_ttl(res)}}
-
-  #     {:ok, %{status: 200} = res} ->
-  #       new_etag =
-  #         res.headers
-  #         |> Map.get("etag", [])
-  #         |> List.first()
-
-  #       if new_etag, do: save_etag(url, new_etag)
-
-  #       # upsert_orders(res.body, url, new_etag)
-
-  #       if page_number > 1 do
-  #         spawn_pagination_tasks(res, region_id)
-  #       end
-
-  #       ttl = calculate_ttl(res)
-
-  #       total_seconds = div(ttl, 1000)
-  #       minutes = div(total_seconds, 60)
-  #       seconds = rem(total_seconds, 60)
-
-  #       formatted_time =
-  #         "~2..0B:~2..0B"
-  #         |> :io_lib.format([minutes, seconds])
-  #         |> List.to_string()
-
-  #       ttl = 20000
-
-  #       IO.puts(
-  #         "200 #{region_id} page #{page_number} \t #{length(res.body)} orders \t #{ttl} #{new_etag}"
-  #       )
-
-  #       {:ok, %{ttl: ttl}}
-
-  #     {:error, _} ->
-  #       :error
-  #   end
-  # end
 
   defp fetch_page(url, region_id, page_number) do
     etag = get_etag_with_fallback(url)
     headers = if etag, do: [{"If-None-Match", etag}], else: []
 
     case Req.get(url, headers: headers) do
-      {:ok, res} when res.status in [200, 304] ->
-        # Extract pages count
-        total_pages =
-          case Req.Response.get_header(res, "x-pages") do
-            [val | _] -> String.to_integer(val)
-            [] -> 1
-          end
-
-        if res.status == 200 do
-          # To this (cleaner and solves the warning):
-          case Req.Response.get_header(res, "etag") do
-            [etag_value | _] -> save_etag(url, etag_value)
-            [] -> :ok
-          end
-
-          # new_etag = List.first(Req.Response.get_header(res, "etag") || [])
-          # if new_etag, do: save_etag(url, new_etag)
-          IO.puts("200 #{region_id} page #{page_number} - New Data")
-        else
-          IO.puts("304 #{region_id} page #{page_number} - No Change")
+      {:ok, %{status: 200} = response} ->
+        if new_etag = List.first(Req.Response.get_header(response, "etag")) do
+          save_etag(url, new_etag)
+          # upsert_orders(response.body, url, new_etag)
         end
 
-        # Return the total_pages so we can use it even on 304
-        # {:ok, %{ttl: calculate_ttl(res), total_pages: total_pages}}
+        total_pages = get_total_pages(response)
+        ttl = calculate_ttl(response)
+
+        IO.puts(
+          "200 #{region_id} page #{page_number} \t #{length(response.body)} orders \t #{format_ttl(ttl)} #{new_etag}"
+        )
+
+        {:ok, %{ttl: ttl, total_pages: total_pages}}
+
+      {:ok, %{status: 304} = response} ->
+        total_pages = get_total_pages(response)
+        IO.puts("304 #{region_id} page #{page_number}")
         {:ok, %{ttl: 20000, total_pages: total_pages}}
 
+      {:ok, %{status: 429}} ->
+        IO.puts("429 #{region_id} \t Rate Limited")
+        {:error, :rate_limited}
+
+      {:ok, %{status: 404}} ->
+        IO.puts("404 #{region_id} \t")
+        {:error, :not_found}
+
+      {:ok, %{status: status}} ->
+        IO.puts("#{status} #{region_id}")
+        {:error, :unexpected_status}
+
       {:error, reason} ->
-        IO.inspect(reason, label: "Fetch Error")
+        IO.inspect(reason, label: "Network/Request Error")
         :error
     end
   end
 
-  # defp spawn_pagination_tasks(response, region_id) do
-  #   pages_header = List.first(response.headers["x-pages"] || ["1"])
-  #   total_pages = String.to_integer(pages_header)
-
-  #   if total_pages > 1 do
-  #     # Task.async_stream to fetch pages 2..N in parallel.
-  #     2..total_pages
-  #     |> Task.async_stream(
-  #       fn page ->
-  #         page_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
-  #         fetch_page(page_url, region_id, page)
-  #       end,
-  #       timeout: 60_000,
-  #       max_concurrency: System.schedulers_online()
-  #     )
-  #     |> Stream.run()
-  #   end
-  # end
+  defp get_total_pages(response) do
+    response
+    |> Req.Response.get_header("x-pages")
+    |> List.first("1")
+    |> String.to_integer()
+  end
 
   defp spawn_pagination_tasks(region_id, total_pages) do
     2..total_pages
@@ -162,9 +96,8 @@ defmodule Marketmailer.RegionWorker do
         page_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
         fetch_page(page_url, region_id, page)
       end,
-      # High timeout because 400+ pages can take a while
-      timeout: 120_000,
-      max_concurrency: 20
+      timeout: 60_000,
+      max_concurrency: System.schedulers_online()
     )
     |> Stream.run()
   end
@@ -182,6 +115,16 @@ defmodule Marketmailer.RegionWorker do
         IO.inspect("Missing expires header")
         300_000
     end
+  end
+
+  defp format_ttl(ttl_ms) do
+    total_seconds = div(ttl_ms, 1000)
+    minutes = div(total_seconds, 60)
+    seconds = rem(total_seconds, 60)
+
+    "~2..0B:~2..0B"
+    |> :io_lib.format([minutes, seconds])
+    |> List.to_string()
   end
 
   defp parse_http_date(date_str) do
