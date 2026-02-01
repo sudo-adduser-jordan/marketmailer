@@ -5,7 +5,7 @@ defmodule Marketmailer.Application do
   def start(_type, _args) do
     :ets.new(:market_etags, [:named_table, :set, :public])
     children = [
-      Marketmailer.Database,
+      # Marketmailer.Database,
       # Marketmailer.Mailer,
       {Registry, [keys: :unique, name: Marketmailer.Registry]},
       Marketmailer.RegionDynamicSupervisor,
