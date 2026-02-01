@@ -18,6 +18,7 @@ end
 
 defmodule Marketmailer.RegionManager do
   use GenServer
+  require Logger
 
   @regions [
     10_000_001,
