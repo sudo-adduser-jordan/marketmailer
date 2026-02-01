@@ -3,13 +3,15 @@ defmodule Marketmailer.Application do
 
   @impl true
   def start(_type, _args) do
+    :ets.new(:market_etags, [:named_table, :set, :public])
     children = [
       Marketmailer.Database,
-      Marketmailer.Client,
       # Marketmailer.Mailer,
+      {Registry, [keys: :unique, name: Marketmailer.Registry]},
+      Marketmailer.RegionDynamicSupervisor,
+      Marketmailer.RegionManager
     ]
 
-    opts = [strategy: :one_for_one, name: Marketmailer.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link(children, strategy: :one_for_one)
   end
 end

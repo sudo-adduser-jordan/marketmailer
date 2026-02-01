@@ -56,3 +56,6 @@ defmodule Etag do
     |> unique_constraint(:url)
   end
 end
+
+
+# create unique index(:markets, [:etag_url, :order_id])  # Prevent dupes

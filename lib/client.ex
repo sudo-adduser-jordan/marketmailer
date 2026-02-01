@@ -1,9 +1,24 @@
-defmodule Marketmailer.Client do
+defmodule Marketmailer.RegionDynamicSupervisor do
+  use DynamicSupervisor
+
+  def start_link(_opts) do
+    DynamicSupervisor.start_link(__MODULE__, :ok, name: __MODULE__)
+  end
+
+  def start_child(region_id) do
+    spec = {Marketmailer.RegionWorker, region_id}
+    DynamicSupervisor.start_child(__MODULE__, spec)
+  end
+
+  @impl true
+  def init(:ok) do
+    DynamicSupervisor.init(strategy: :one_for_one)
+  end
+end
+
+defmodule Marketmailer.RegionManager do
   use GenServer
 
-  # 5 minutes
-  @work_interval 300_000
-  @table_name :market_etags
   @regions [
     10_000_001,
     10_000_002,
@@ -120,135 +135,156 @@ defmodule Marketmailer.Client do
     19_000_001
   ]
 
-  ## Public API
-
+  @spec start_link(any()) :: :ignore | {:error, any()} | {:ok, pid()}
   def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
-  end
-
-  ## GenServer callbacks
-
-  @impl true
-  def init(state) do
-    # :set = unique keys (URL)
-    # :public = any process can read/write to it
-    # :named_table = we can refer to it by @table_name instead of a PID
-    :ets.new(@table_name, [
-      :set,
-      :public,
-      :named_table,
-      read_concurrency: true,
-      write_concurrency: true
-    ])
-
-    work()
-    {:ok, state}
+    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
   @impl true
-  def handle_info(:work, state) do
-    work()
+  def init(:ok) do
+    send(self(), {:start_workers, @regions})
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_info({:start_workers, []}, state) do
     {:noreply, state}
   end
 
-  ## Internal
+  @impl true
+  def handle_info({:start_workers, [region | rest]}, state) do
+    Marketmailer.RegionDynamicSupervisor.start_child(region)
+    Process.send_after(self(), {:start_workers, rest}, 100)
+    {:noreply, state}
+  end
+end
 
-  defp work() do
-    @regions
-    |> Task.async_stream(
-      fn region_id -> fetch_region(region_id) end,
-      max_concurrency: System.schedulers_online(),
-      timeout: @work_interval
-    )
-    |> Stream.run()
+defmodule Marketmailer.RegionWorker do
+  use GenServer, restart: :transient
 
-    Process.send_after(self(), :work, @work_interval)
+  @table_name :market_etags
+
+  def start_link(region_id) do
+    GenServer.start_link(__MODULE__, region_id, name: via_tuple(region_id))
+  end
+
+  defp via_tuple(region_id), do: {:via, Registry, {Marketmailer.Registry, {:region, region_id}}}
+
+  @impl true
+  def init(region_id) do
+    send(self(), :work)
+    {:ok, %{region_id: region_id}}
+  end
+
+  @impl true
+  def handle_info(:work, %{region_id: region_id} = state) do
+    # fetch_region now returns the TTL in milliseconds
+    delay = fetch_region(region_id)
+
+    # Schedule next run based on ESI's 'expires' header (plus 2s buffer)
+    Process.send_after(self(), :work, delay + 2000)
+
+    {:noreply, state}
   end
 
   defp fetch_region(region_id) do
     url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
 
     case fetch_page(url, region_id, 1) do
-      :not_modified ->
-        :ok
-
-      {:ok, response} ->
-        pages =
-          response.headers["x-pages"]
-          |> List.first()
-          |> String.to_integer()
-
-        if pages > 1 do
-          2..pages
-          |> Task.async_stream(
-            fn page ->
-              page_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
-              fetch_page(page_url, region_id, page)
-            end,
-            max_concurrency: System.schedulers_online() * 2,
-            timeout: @work_interval
-          )
-          |> Stream.run()
-        end
-
-        :ok
-
-      {:error, reason} ->
-        IO.warn("#{region_id}: #{inspect(reason)}")
-        :ok
+      {:ok, %{ttl: ttl}} -> ttl
+      # Default to 1 min retry on error/304
+      _ -> 60_000
     end
   end
 
   defp fetch_page(url, region_id, page_number) do
-    page_etag = get_etag_with_fallback(url)
-
-    headers = if page_etag, do: [{"If-None-Match", page_etag}], else: []
+    etag = get_etag_with_fallback(url)
+    headers = if etag, do: [{"If-None-Match", etag}], else: []
 
     case Req.get(url, headers: headers) do
-      {:ok, %{status: 304}} ->
-        IO.puts("Region #{region_id} page #{page_number}: 304")
-        :not_modified
+      {:ok, %{status: 304} = res} ->
+        {:ok, %{ttl: calculate_ttl(res)}}
 
-      {:ok, %{status: status} = response} when status in 200..299 ->
-        #  Sun, 01 Feb 2026 04:39:07 GMT
-        expiry = List.first(response.headers["expires"])
-
-        total_seconds =
-          expiry
-          |> String.to_charlist()
-          |> :httpd_util.convert_request_date()
-          |> NaiveDateTime.from_erl!()
-          |> DateTime.from_naive!("Etc/UTC")
-          |> DateTime.diff(DateTime.utc_now(), :second)
-          |> max(0)
-
-        hours = div(total_seconds, 3600)
-        minutes = div(rem(total_seconds, 3600), 60)
-        seconds = rem(total_seconds, 60)
-
-        formatted =
-          :io_lib.format("~2..0b:~2..0b:~2..0b", [hours, minutes, seconds]) |> List.to_string()
-
-        new_etag = List.first(response.headers["etag"])
+      {:ok, %{status: 200} = res} ->
+        new_etag =
+          res.headers
+          |> Map.get("etag", [])
+          |> List.first()
 
         if new_etag, do: save_etag(url, new_etag)
 
-        orders = response.body
+        # Handle Database Insert
+        upsert_orders(res.body, url, new_etag)
 
-        upsert_orders(orders, url, new_etag)
+        # Handle Pagination if it's page 1
+        if page_number == 1 do
+          spawn_pagination_tasks(res, region_id)
+        end
 
-        IO.puts(
-          "#{status} #{region_id} page #{page_number} \t #{length(orders)} orders \t #{formatted} #{new_etag}"
-        )
+        {:ok, %{ttl: calculate_ttl(res)}}
 
-        {:ok, response}
+      {:error, _} ->
+        :error
+    end
+  end
 
-      {:ok, response} ->
-        IO.warn("Unexpected status: #{response.status}")
-        {:error, response.status}
+  defp spawn_pagination_tasks(response, region_id) do
+    pages_header = List.first(response.headers["x-pages"] || ["1"])
+    total_pages = String.to_integer(pages_header)
 
-      {:error, reason} ->
-        {:error, reason}
+    if total_pages > 1 do
+      # We use Task.async_stream to fetch pages 2..N in parallel.
+      # We don't need to return anything here; they just write to the DB/ETS.
+      2..total_pages
+      |> Task.async_stream(
+        fn page ->
+          page_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
+          fetch_page(page_url, region_id, page)
+        end,
+        max_concurrency: 5,
+        timeout: 60_000
+      )
+      |> Stream.run()
+    end
+  end
+
+  defp calculate_ttl(response) do
+    # httpdate format "Sun, 01 Feb 2026 05:00:00 GMT"
+    # expiry = List.first(response.headers["expires"])
+
+    # expiry_dt =
+    #   expiry
+    #   |> String.to_charlist()
+    #   |> :httpd_util.convert_request_date()
+    #   |> NaiveDateTime.from_erl!()
+    #   |> DateTime.from_naive!("Etc/UTC")
+
+    # # Return milliseconds until expiry
+    # DateTime.diff(expiry_dt, DateTime.utc_now(), :millisecond) |> max(0)
+    with [expiry_str] <- response.headers["expires"],
+         {:ok, expiry_dt} <- parse_http_date(expiry_str) do
+      diff = DateTime.diff(expiry_dt, DateTime.utc_now(), :millisecond)
+      # If the clock is slightly off or it's already expired,
+      # default to a 30-second "retry" wait.
+      max(diff, 30_000)
+    else
+      # Default to 5 mins if header is missing
+      _ -> 300_000
+    end
+  end
+
+  defp parse_http_date(date_str) do
+    case date_str |> String.to_charlist() |> :httpd_util.convert_request_date() do
+      :bad_date ->
+        :error
+
+      {{_, _, _}, {_, _, _}} = erl_datetime ->
+        dt =
+          erl_datetime
+          |> NaiveDateTime.from_erl!()
+          |> DateTime.from_naive!("Etc/UTC")
+
+        {:ok, dt}
     end
   end
 
