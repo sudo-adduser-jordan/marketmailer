@@ -1,8 +1,7 @@
 defmodule Marketmailer.Client do
   use GenServer
+  require Logger
 
-  # 5 minutes
-  @work_interval 300_000
   @table_name :market_etags
   @regions [
     10_000_001,
@@ -130,9 +129,6 @@ defmodule Marketmailer.Client do
 
   @impl true
   def init(state) do
-    # :set = unique keys (URL)
-    # :public = any process can read/write to it
-    # :named_table = we can refer to it by @table_name instead of a PID
     :ets.new(@table_name, [
       :set,
       :public,
@@ -141,7 +137,7 @@ defmodule Marketmailer.Client do
       write_concurrency: true
     ])
 
-    work()
+    send(self(), :check_schedule)
     {:ok, state}
   end
 
