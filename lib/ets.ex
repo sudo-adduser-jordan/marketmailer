@@ -12,7 +12,6 @@ defmodule EtagCache do
     :ets.insert(@table_name, {request, etag})
   end
 
-
   # Retrieve ETag for a request
   def get_etag(request) do
     case :ets.lookup(@table_name, request) do
@@ -22,13 +21,3 @@ defmodule EtagCache do
   end
 
 end
-
-
-# defmodule EtagCache do
-#   use Agent
-
-#   def start_link(_), do: Agent.start_link(fn -> %{} end, name: __MODULE__)
-
-#   def get(region_id), do: Agent.get(__MODULE__, &Map.get(&1, region_id))
-#   def put(region_id, etag), do: Agent.update(__MODULE__, &Map.put(&1, region_id, etag))
-# end

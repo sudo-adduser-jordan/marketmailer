@@ -3,6 +3,7 @@ defmodule Marketmailer.Client do
 
   # 5 minutes
   @work_interval 300_000
+  @table_name :market_etags
   @regions [
     10_000_001,
     10_000_002,
@@ -129,48 +130,46 @@ defmodule Marketmailer.Client do
 
   @impl true
   def init(state) do
-    # etags: %{url => etag_string} # move to database
-    state = Map.put(state, :etags, %{})
-    work(state)
-    Process.send_after(self(), :work, 0)
+    # :set = unique keys (URL)
+    # :public = any process can read/write to it
+    # :named_table = we can refer to it by @table_name instead of a PID
+    :ets.new(@table_name, [
+      :set,
+      :public,
+      :named_table,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+
+    work()
     {:ok, state}
   end
 
   @impl true
   def handle_info(:work, state) do
-    work(state)
-    Process.send_after(self(), :work, @work_interval)
+    work()
     {:noreply, state}
-  end
-
-  @impl true
-  def handle_cast({:etag_updated, url, etag}, state) do
-    new_etags = Map.put(state.etags, url, etag)
-    {:noreply, %{state | etags: new_etags}}
   end
 
   ## Internal
 
-  defp work(state) do
-    etags_snapshot = state.etags
-
+  defp work() do
     @regions
     |> Task.async_stream(
-      fn region_id -> fetch_region(region_id, etags_snapshot) end,
+      fn region_id -> fetch_region(region_id) end,
       max_concurrency: System.schedulers_online(),
       timeout: @work_interval
     )
     |> Stream.run()
 
-    :ok
+    Process.send_after(self(), :work, @work_interval)
   end
 
-  defp fetch_region(region_id, etags) do
+  defp fetch_region(region_id) do
+    url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
 
-    case fetch_page("https://esi.evetech.net/v1/markets/#{region_id}/orders/", etags, region_id, 1) do
+    case fetch_page(url, region_id, 1) do
       :not_modified ->
-        IO.puts("Region #{region_id}: 304 (no changes)")
-        # No changes for this region.
         :ok
 
       {:ok, response} ->
@@ -179,67 +178,150 @@ defmodule Marketmailer.Client do
           |> List.first()
           |> String.to_integer()
 
-        # orders = response.body
-        # upsert_orders(orders, url, new_etag)
-
         if pages > 1 do
           2..pages
           |> Task.async_stream(
             fn page ->
               page_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
-              fetch_page(page_url, etags, region_id, page)
+              fetch_page(page_url, region_id, page)
             end,
-            max_concurrency: System.schedulers_online() * 64,
+            max_concurrency: System.schedulers_online() * 2,
             timeout: @work_interval
           )
           |> Stream.run()
         end
+
         :ok
 
       {:error, reason} ->
-        IO.warn("Failed to fetch region #{region_id}: #{inspect(reason)}")
+        IO.warn("#{region_id}: #{inspect(reason)}")
         :ok
     end
   end
 
-  defp fetch_page(url, etags, region_id, page_number) do
-    page_etag = Map.get(etags, url)
-    headers = if page_etag, do: [{"If-None-Match", page_etag}], else: []
-    response = Req.get!(url, headers: headers)
+  defp fetch_page(url, region_id, page_number) do
+    page_etag = get_etag_with_fallback(url)
 
-    cond do
-      response.status == 304 ->
-        # No changes for THIS URL.
-        IO.puts("Region #{region_id} page #{page_number}: 304 (no changes)")
+    headers = if page_etag, do: [{"If-None-Match", page_etag}], else: []
+
+    case Req.get(url, headers: headers) do
+      {:ok, %{status: 304}} ->
+        IO.puts("Region #{region_id} page #{page_number}: 304")
         :not_modified
 
-      response.status in 200..299 ->
-        new_etag =
-          response.headers["etag"]
-          |> List.first()
+      {:ok, %{status: status} = response} when status in 200..299 ->
+        #  Sun, 01 Feb 2026 04:39:07 GMT
+        expiry = List.first(response.headers["expires"])
 
-        if is_binary(new_etag) do
-          GenServer.cast(__MODULE__, {:etag_updated, url, new_etag})
-        end
+        total_seconds =
+          expiry
+          |> String.to_charlist()
+          |> :httpd_util.convert_request_date()
+          |> NaiveDateTime.from_erl!()
+          |> DateTime.from_naive!("Etc/UTC")
+          |> DateTime.diff(DateTime.utc_now(), :second)
+          |> max(0)
+
+        hours = div(total_seconds, 3600)
+        minutes = div(rem(total_seconds, 3600), 60)
+        seconds = rem(total_seconds, 60)
+
+        formatted =
+          :io_lib.format("~2..0b:~2..0b:~2..0b", [hours, minutes, seconds]) |> List.to_string()
+
+        new_etag = List.first(response.headers["etag"])
+
+        if new_etag, do: save_etag(url, new_etag)
 
         orders = response.body
 
-        # per-page upsert, tied to THIS url + THIS etag
-        # upsert_orders(orders, url, new_etag)
+        upsert_orders(orders, url, new_etag)
 
         IO.puts(
-          "#{response.status} #{region_id} page #{page_number} \t #{length(orders)} orders \t #{new_etag}"
+          "#{status} #{region_id} page #{page_number} \t #{length(orders)} orders \t #{formatted} #{new_etag}"
         )
 
         {:ok, response}
 
-      true ->
-        IO.warn(
-          "Region #{region_id} page #{page_number}: unexpected status #{response.status} for #{url}"
-        )
+      {:ok, response} ->
+        IO.warn("Unexpected status: #{response.status}")
+        {:error, response.status}
 
-        {:error, {:unexpected_status, response.status}}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
+  defp upsert_orders(orders, _url, _etag) do
+    timestamp = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+    # 1. Define exactly what should be updated if an order_id already exists.
+    # We exclude :inserted_at so we keep the original "first seen" date.
+    fields_to_update = [
+      :duration,
+      :is_buy_order,
+      :issued,
+      :location_id,
+      :min_volume,
+      :price,
+      :range,
+      :system_id,
+      :type_id,
+      :volume_remain,
+      :volume_total,
+      :updated_at
+    ]
+
+    entries =
+      Enum.map(orders, fn order ->
+        order
+        |> Map.new(fn {k, v} -> {String.to_atom(k), v} end)
+        |> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
+      end)
+
+    entries
+    |> Enum.chunk_every(500)
+    |> Enum.each(fn chunk ->
+      Marketmailer.Database.insert_all(
+        Market,
+        chunk,
+        on_conflict: {:replace, fields_to_update},
+        conflict_target: :order_id
+      )
+    end)
+  end
+
+  # Multi-layered retrieval
+  defp get_etag_with_fallback(url) do
+    case :ets.lookup(@table_name, url) do
+      [{^url, etag}] ->
+        etag
+
+      [] ->
+        # Check DB if not in memory (useful after a restart)
+        case Marketmailer.Database.get(Etag, url) do
+          nil ->
+            nil
+
+          record ->
+            # Warm the cache
+            :ets.insert(@table_name, {url, record.etag})
+            record.etag
+        end
+    end
+  end
+
+  # Multi-layered storage
+  defp save_etag(url, etag) do
+    # Update Memory
+    :ets.insert(@table_name, {url, etag})
+
+    # Update DB (Upsert)
+    %Etag{url: url}
+    |> Etag.changeset(%{etag: etag})
+    |> Marketmailer.Database.insert(
+      on_conflict: [set: [etag: etag]],
+      conflict_target: :url
+    )
+  end
 end

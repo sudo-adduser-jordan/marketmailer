@@ -4,10 +4,9 @@ defmodule Marketmailer.Application do
   @impl true
   def start(_type, _args) do
     children = [
-        # Marketmailer.Database,
-        # Marketmailer.Mailer,
-        # Marketmailer.Email,
-        Marketmailer.Client,
+      Marketmailer.Database,
+      Marketmailer.Client,
+      # Marketmailer.Mailer,
     ]
 
     opts = [strategy: :one_for_one, name: Marketmailer.Supervisor]
