@@ -1,7 +1,8 @@
 defmodule Marketmailer.Client do
   use GenServer
 
-  @work_interval 300_000 # 5 minutes
+  # 5 minutes
+  @work_interval 300_000
   @regions [
     10_000_001,
     10_000_002,
@@ -119,6 +120,7 @@ defmodule Marketmailer.Client do
   ]
 
   ## Public API
+
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
@@ -127,7 +129,7 @@ defmodule Marketmailer.Client do
 
   @impl true
   def init(state) do
-    # etags: %{url => etag_string}
+    # etags: %{url => etag_string} # move to database
     state = Map.put(state, :etags, %{})
     work(state)
     Process.send_after(self(), :work, 0)
@@ -164,9 +166,8 @@ defmodule Marketmailer.Client do
   end
 
   defp fetch_region(region_id, etags) do
-    base_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
 
-    case fetch_page(base_url, etags, region_id, 1) do
+    case fetch_page("https://esi.evetech.net/v1/markets/#{region_id}/orders/", etags, region_id, 1) do
       :not_modified ->
         IO.puts("Region #{region_id}: 304 (no changes)")
         # No changes for this region.
@@ -176,12 +177,8 @@ defmodule Marketmailer.Client do
         pages =
           response.headers["x-pages"]
           |> List.first()
-          |> case do
-            nil -> 1
-            v -> String.to_integer(v)
-          end
+          |> String.to_integer()
 
-        # per-page upsert, tied to THIS url + THIS etag
         # orders = response.body
         # upsert_orders(orders, url, new_etag)
 
@@ -189,16 +186,14 @@ defmodule Marketmailer.Client do
           2..pages
           |> Task.async_stream(
             fn page ->
-              page_url = "#{base_url}?page=#{page}"
+              page_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
               fetch_page(page_url, etags, region_id, page)
             end,
-            max_concurrency: System.schedulers_online() * 10000, # server cant keep up
             max_concurrency: System.schedulers_online() * 64,
             timeout: @work_interval
           )
           |> Stream.run()
         end
-
         :ok
 
       {:error, reason} ->
@@ -210,7 +205,6 @@ defmodule Marketmailer.Client do
   defp fetch_page(url, etags, region_id, page_number) do
     page_etag = Map.get(etags, url)
     headers = if page_etag, do: [{"If-None-Match", page_etag}], else: []
-
     response = Req.get!(url, headers: headers)
 
     cond do
@@ -234,7 +228,7 @@ defmodule Marketmailer.Client do
         # upsert_orders(orders, url, new_etag)
 
         IO.puts(
-          "#{response.status} #{region_id} page #{page_number} \t #{length(orders)} orders "
+          "#{response.status} #{region_id} page #{page_number} \t #{length(orders)} orders \t #{new_etag}"
         )
 
         {:ok, response}
@@ -247,4 +241,5 @@ defmodule Marketmailer.Client do
         {:error, {:unexpected_status, response.status}}
     end
   end
+
 end
