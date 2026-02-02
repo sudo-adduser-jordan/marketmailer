@@ -26,7 +26,6 @@ defmodule Marketmailer.RegionWorker do
       {:ok, %{ttl: ttl, pages: pages}} ->
         if pages > 1, do: spawn_pages(id, pages)
         ttl
-
       _ ->
         60_000
     end
@@ -52,20 +51,25 @@ defmodule Marketmailer.RegionWorker do
     if etag, do: :ets.insert(@table_name, {url, etag})
 
     ttl = parse_ttl(response)
-    # upsert_orders(response.body, url, ttl)
+    upsert_orders(response.body, url, ttl)
 
     Logger.info(
       "200 #{id} page #{page} \t #{length(response.body)} orders  \t #{format_ttl(ttl)} #{etag}"
     )
 
-    {:ok, %{ttl: ttl, pages: get_pages(response)}}
+    # {:ok, %{ttl: ttl, pages: get_pages(response)}}
+    {:ok, %{ttl: 30000, pages: get_pages(response)}}
   end
 
+#   defp handle_response(%{status: 304}, response, id, page),
   defp handle_response(%{status: 304}, id, page, _),
     do:
       (
+        # ttl = parse_ttl(response)
         Logger.info("304 #{id} page #{page}")
-        {:ok, %{ttl: 20_000, pages: 1}}
+        # Logger.info("304 #{id} page #{page} \t #{ttl}")
+        # {:ok, %{ttl: ttl, pages: 1}} # fix
+        {:ok, %{ttl: 10000, pages: 1}} # fix
       )
 
   defp handle_response(response, id, _, _),
@@ -125,42 +129,41 @@ defmodule Marketmailer.RegionWorker do
     |> List.to_string()
   end
 
-  # defp upsert_orders(orders, _url, _etag) do
-  #   timestamp = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+  defp upsert_orders(orders, _url, _etag) do
+    timestamp = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
 
-  #   # Define exactly what should be updated if an order_id already exists.
-  #   # exclude :inserted_at so we keep the original "first seen" date.
-  #   fields_to_update = [
-  #     :duration,
-  #     :is_buy_order,
-  #     :issued,
-  #     :location_id,
-  #     :min_volume,
-  #     :price,
-  #     :range,
-  #     :system_id,
-  #     :type_id,
-  #     :volume_remain,
-  #     :volume_total,
-  #     :updated_at
-  #   ]
+    fields_to_update = [
+      :duration,
+      :is_buy_order,
+      :issued,
+      :location_id,
+      :min_volume,
+      :price,
+      :range,
+      :system_id,
+      :type_id,
+      :volume_remain,
+      :volume_total,
+      :updated_at
+    ]
 
-  #   entries =
-  #     Enum.map(orders, fn order ->
-  #       order
-  #       |> Map.new(fn {k, v} -> {String.to_atom(k), v} end)
-  #       |> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
-  #     end)
+    entries =
+      Enum.map(orders, fn order ->
+        order
+        |> Map.new(fn {key, value} -> {String.to_atom(key), value} end)
+        |> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
+      end)
 
-  #   entries
-  #   |> Enum.chunk_every(500)
-  #   |> Enum.each(fn chunk ->
-  #     Marketmailer.Database.insert_all(
-  #       Market,
-  #       chunk,
-  #       on_conflict: {:replace, fields_to_update},
-  #       conflict_target: :order_id
-  #     )
-  #   end)
-  # end
+    entries
+    |> Enum.chunk_every(2000)
+    |> Enum.each(fn chunk ->
+      Marketmailer.Database.insert_all(
+        Market,
+        chunk,
+        on_conflict: {:replace, fields_to_update},
+        conflict_target: :order_id
+      )
+    end)
+  end
+
 end
