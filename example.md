@@ -140,12 +140,39 @@ This TTL influences the worker’s scheduling, dictating the polling cadence.
 
 ### Market schema
 
-```sh
-- Represents a market order record with fields like order_id, price, volume_total, etc.
+```elixir
+schema "market" do
+  field :duration, :integer
+  field :is_buy_order, :boolean
+  field :issued, :string
+  field :location_id, :integer
+  field :min_volume, :integer
+  field :order_id, :integer
+  field :price, :float
+  field :range, :string
+  field :system_id, :integer
+  field :type_id, :integer
+  field :volume_remain, :integer
+  field :volume_total, :integer
+timestamps()
+end
+
+
+@primary_key {:url, :string, autogenerate: false}
+schema "etags" do
+  field :etag, :string
+  timestamps()
+end
+
+def changeset(etag, attrs) do
+  etag
+    |> cast(attrs, [:url, :etag])
+    |> validate_required([:url, :etag])
+    |> unique_constraint(:url)
+end
 ```
 
 ### upsert_orders/3
-
 ```sh
 - Normalizes incoming JSON maps (string keys → atoms).
 - Adds inserted_at and updated_at timestamps.
@@ -155,13 +182,26 @@ This TTL influences the worker’s scheduling, dictating the polling cadence.
 
 ### Etag schema
 
+```elixir
+@primary_key {:url, :string, autogenerate: false}
+schema "etags" do
+  field :etag, :string
+  timestamps()
+end
+
+def changeset(etag, attrs) do
+  etag
+    |> cast(attrs, [:url, :etag])
+    |> validate_required([:url, :etag])
+    |> unique_constraint(:url)
+end
+```
+
 ```sh
 - Primary key is `url`.
 - Stores the current etag string plus timestamps.
 - Used by the ETag caching logic as the persistent store.
 ```
-
----
 
 ## Naming and introspection
 
