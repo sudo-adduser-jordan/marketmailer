@@ -64,7 +64,7 @@ defmodule Marketmailer.RegionWorker do
   defp handle_response(%{status: 304}, id, page, _),
     do:
       (
-        Logger.info("304 #{id} Page #{page}")
+        Logger.info("304 #{id} page #{page}")
         {:ok, %{ttl: 20_000, pages: 1}}
       )
 
