@@ -1,5 +1,9 @@
 import Config
 
+config :logger, :console,
+  format: "$message\n",
+  metadata: []
+
 config :esi_eve_online,
   user_agent: "lostcoastwizard > Beam me up, Scotty!"
 

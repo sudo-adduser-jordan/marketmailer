@@ -1,13 +1,12 @@
 defmodule Marketmailer.RegionWorker do
   use GenServer, restart: :transient
+  require Logger
 
   @table_name :market_etags
 
-  def start_link(region_id) do
-    GenServer.start_link(__MODULE__, region_id, name: via_tuple(region_id))
-  end
+  def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
 
-  defp via_tuple(region_id), do: {:via, Registry, {Marketmailer.Registry, {:region, region_id}}}
+  defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
 
   @impl true
   def init(region_id) do
@@ -17,114 +16,73 @@ defmodule Marketmailer.RegionWorker do
 
   @impl true
   def handle_info(:work, %{region_id: region_id} = state) do
-    delay = fetch_region(region_id)
+    delay = sync_region(region_id)
     Process.send_after(self(), :work, delay + 2000)
     {:noreply, state}
   end
 
-  defp fetch_region(region_id) do
-    url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/"
-
-    case fetch_page(url, region_id, 1) do
-      {:ok, %{ttl: ttl, total_pages: total_pages}} ->
-        if total_pages > 1 do
-          spawn_pagination_tasks(region_id, total_pages)
-        end
-
+  defp sync_region(id) do
+    case request(id, 1) do
+      {:ok, %{ttl: ttl, pages: pages}} ->
+        if pages > 1, do: spawn_pages(id, pages)
         ttl
 
       _ ->
-        # Default to 1 min retry on error/304
         60_000
     end
   end
 
-  defp fetch_page(url, region_id, page_number) do
-    etag = get_etag_with_fallback(url)
-    headers = if etag, do: [{"If-None-Match", etag}], else: []
+  defp spawn_pages(id, total),
+    do:
+      Task.async_stream(2..total, &request(id, &1), max_concurrency: System.schedulers_online())
+      |> Stream.run()
 
-    case Req.get(url, headers: headers) do
-      {:ok, %{status: 200} = response} ->
-        if new_etag = List.first(Req.Response.get_header(response, "etag")) do
-          save_etag(url, new_etag)
-          # upsert_orders(response.body, url, new_etag)
-        end
+  defp request(id, page) do
+    url = "https://esi.evetech.net/v1/markets/#{id}/orders/?page=#{page}"
+    etag = etag_lookup(url)
+    headers = if etag, do: [{"if-none-match", etag}], else: []
 
-        total_pages = get_total_pages(response)
-        ttl = calculate_ttl(response)
-
-        IO.puts(
-          "200 #{region_id} page #{page_number} \t #{length(response.body)} orders \t #{format_ttl(ttl)} #{new_etag}"
-        )
-
-        {:ok, %{ttl: ttl, total_pages: total_pages}}
-
-      {:ok, %{status: 304} = response} ->
-        total_pages = get_total_pages(response)
-        IO.puts("304 #{region_id} page #{page_number}")
-        {:ok, %{ttl: 20000, total_pages: total_pages}}
-
-      {:ok, %{status: 429}} ->
-        IO.puts("429 #{region_id} \t Rate Limited")
-        {:error, :rate_limited}
-
-      {:ok, %{status: 404}} ->
-        IO.puts("404 #{region_id} \t")
-        {:error, :not_found}
-
-      {:ok, %{status: status}} ->
-        IO.puts("#{status} #{region_id}")
-        {:error, :unexpected_status}
-
-      {:error, reason} ->
-        IO.inspect(reason, label: "Network/Request Error")
-        :error
+    with {:ok, response} <- Req.get(url, headers: headers) do
+      handle_response(response, id, page, url)
     end
   end
 
-  defp get_total_pages(response) do
-    response
-    |> Req.Response.get_header("x-pages")
-    |> List.first("1")
-    |> String.to_integer()
-  end
+  defp handle_response(%{status: 200} = response, id, page, url) do
+    etag = List.first(Req.Response.get_header(response, "etag"))
+    if etag, do: :ets.insert(@table_name, {url, etag})
 
-  defp spawn_pagination_tasks(region_id, total_pages) do
-    2..total_pages
-    |> Task.async_stream(
-      fn page ->
-        page_url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
-        fetch_page(page_url, region_id, page)
-      end,
-      timeout: 60_000,
-      max_concurrency: System.schedulers_online()
+    ttl = parse_ttl(response)
+    # upsert_orders(response.body, url, ttl)
+
+    Logger.info(
+      "200 #{id} page #{page} \t #{length(response.body)} orders  \t #{format_ttl(ttl)} #{etag}"
     )
-    |> Stream.run()
+
+    {:ok, %{ttl: ttl, pages: get_pages(response)}}
   end
 
-  defp calculate_ttl(response) do
-    with [expiry_str] <- response.headers["expires"],
-         {:ok, expiry_dt} <- parse_http_date(expiry_str) do
-      diff = DateTime.diff(expiry_dt, DateTime.utc_now(), :millisecond)
-      # If the clock is slightly off or it's already expired,
-      # default to a 1-second "retry" wait.
-      max(diff, 1000)
-    else
-      # Default to 5 mins if header is missing
-      _ ->
-        IO.inspect("Missing expires header")
-        300_000
+  defp handle_response(%{status: 304}, id, page, _),
+    do:
+      (
+        Logger.info("304 #{id} Page:#{page}")
+        {:ok, %{ttl: 20_000, pages: 1}}
+      )
+
+  defp handle_response(response, id, _, _),
+    do:
+      (
+        Logger.error("Error #{response.status} on #{id}")
+        {:error, response.status}
+      )
+
+  defp get_pages(response),
+    do: response |> Req.Response.get_header("x-pages") |> List.first("1") |> String.to_integer()
+
+  defp etag_lookup(url) do
+    case :ets.lookup(@table_name, url) do
+      [{_, etag}] -> etag
+      _ -> nil
     end
-  end
-
-  defp format_ttl(ttl_ms) do
-    total_seconds = div(ttl_ms, 1000)
-    minutes = div(total_seconds, 60)
-    seconds = rem(total_seconds, 60)
-
-    "~2..0B:~2..0B"
-    |> :io_lib.format([minutes, seconds])
-    |> List.to_string()
   end
 
   defp parse_http_date(date_str) do
@@ -142,76 +100,67 @@ defmodule Marketmailer.RegionWorker do
     end
   end
 
-  defp upsert_orders(orders, _url, _etag) do
-    timestamp = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
-
-    # Define exactly what should be updated if an order_id already exists.
-    # exclude :inserted_at so we keep the original "first seen" date.
-    fields_to_update = [
-      :duration,
-      :is_buy_order,
-      :issued,
-      :location_id,
-      :min_volume,
-      :price,
-      :range,
-      :system_id,
-      :type_id,
-      :volume_remain,
-      :volume_total,
-      :updated_at
-    ]
-
-    entries =
-      Enum.map(orders, fn order ->
-        order
-        |> Map.new(fn {k, v} -> {String.to_atom(k), v} end)
-        |> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
-      end)
-
-    entries
-    |> Enum.chunk_every(500)
-    |> Enum.each(fn chunk ->
-      Marketmailer.Database.insert_all(
-        Market,
-        chunk,
-        on_conflict: {:replace, fields_to_update},
-        conflict_target: :order_id
-      )
-    end)
-  end
-
-  # Multi-layered retrieval
-  defp get_etag_with_fallback(url) do
-    case :ets.lookup(@table_name, url) do
-      [{^url, etag}] ->
-        etag
-
-      [] ->
-        #   # Check DB if not in memory (useful after a restart)
-        #   case Marketmailer.Database.get(Etag, url) do
-        # nil ->
-        nil
-
-        #     record ->
-        #       # Warm the cache
-        #       :ets.insert(@table_name, {url, record.etag})
-        #       record.etag
-        #   end
+  defp parse_ttl(response) do
+    with [expiry_str] <- response.headers["expires"],
+         {:ok, expiry_dt} <- parse_http_date(expiry_str) do
+      diff = DateTime.diff(expiry_dt, DateTime.utc_now(), :millisecond)
+      # If the clock is slightly off or it's already expired,
+      # default to a 1-second "retry" wait.
+      max(diff, 1000)
+    else
+      # Default to 5 mins if header is missing
+      _ ->
+        Logger.error("Missing expires header")
+        300_000
     end
   end
 
-  # Multi-layered storage
-  defp save_etag(url, etag) do
-    # Update Memory
-    :ets.insert(@table_name, {url, etag})
+  defp format_ttl(ttl_ms) do
+    total_seconds = div(ttl_ms, 1000)
+    minutes = div(total_seconds, 60)
+    seconds = rem(total_seconds, 60)
 
-    # Update DB (Upsert)
-    # %Etag{url: url}
-    # |> Etag.changeset(%{etag: etag})
-    # |> Marketmailer.Database.insert(
-    #   on_conflict: [set: [etag: etag]],
-    #   conflict_target: :url
-    # )
+    "~2..0B:~2..0B"
+    |> :io_lib.format([minutes, seconds])
+    |> List.to_string()
   end
+
+  # defp upsert_orders(orders, _url, _etag) do
+  #   timestamp = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
+  #   # Define exactly what should be updated if an order_id already exists.
+  #   # exclude :inserted_at so we keep the original "first seen" date.
+  #   fields_to_update = [
+  #     :duration,
+  #     :is_buy_order,
+  #     :issued,
+  #     :location_id,
+  #     :min_volume,
+  #     :price,
+  #     :range,
+  #     :system_id,
+  #     :type_id,
+  #     :volume_remain,
+  #     :volume_total,
+  #     :updated_at
+  #   ]
+
+  #   entries =
+  #     Enum.map(orders, fn order ->
+  #       order
+  #       |> Map.new(fn {k, v} -> {String.to_atom(k), v} end)
+  #       |> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
+  #     end)
+
+  #   entries
+  #   |> Enum.chunk_every(500)
+  #   |> Enum.each(fn chunk ->
+  #     Marketmailer.Database.insert_all(
+  #       Market,
+  #       chunk,
+  #       on_conflict: {:replace, fields_to_update},
+  #       conflict_target: :order_id
+  #     )
+  #   end)
+  # end
 end
