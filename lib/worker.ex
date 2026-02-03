@@ -26,6 +26,7 @@ defmodule Marketmailer.RegionWorker do
       {:ok, %{ttl: ttl, pages: pages}} ->
         if pages > 1, do: spawn_pages(id, pages)
         ttl
+
       _ ->
         60_000
     end
@@ -35,6 +36,11 @@ defmodule Marketmailer.RegionWorker do
     do:
       Task.async_stream(2..total, &request(id, &1), max_concurrency: System.schedulers_online())
       |> Stream.run()
+      # |> Enum.each(fn
+      #   {:ok, {:ok, _data}} -> :ok
+      #   {:ok, {:error, reason}} -> Logger.error("Page fetch failed: #{reason}")
+      #   {:exit, reason} -> Logger.error("Task crashed: #{inspect(reason)}")
+      # end)
 
   defp request(id, page) do
     url = "https://esi.evetech.net/v1/markets/#{id}/orders/?page=#{page}"
@@ -57,20 +63,15 @@ defmodule Marketmailer.RegionWorker do
       "200 #{id} page #{page} \t #{length(response.body)} orders  \t #{format_ttl(ttl)} #{etag}"
     )
 
-    # {:ok, %{ttl: ttl, pages: get_pages(response)}}
-    {:ok, %{ttl: 30000, pages: get_pages(response)}}
+    {:ok, %{ttl: ttl, pages: get_pages(response)}}
   end
 
-#   defp handle_response(%{status: 304}, response, id, page),
-  defp handle_response(%{status: 304}, id, page, _),
-    do:
-      (
-        # ttl = parse_ttl(response)
-        Logger.info("304 #{id} page #{page}")
-        # Logger.info("304 #{id} page #{page} \t #{ttl}")
-        # {:ok, %{ttl: ttl, pages: 1}} # fix
-        {:ok, %{ttl: 10000, pages: 1}} # fix
-      )
+  defp handle_response(%{status: 304} = response, id, page, _url) do
+    ttl = parse_ttl(response)
+    Logger.info("304 #{id} page #{page} \t #{format_ttl(ttl)}" )
+    # {:ok, %{ttl: ttl, pages: 1}}
+    {:ok, %{ttl: ttl, pages: get_pages(response)}}
+  end
 
   defp handle_response(response, id, _, _),
     do:
@@ -165,5 +166,4 @@ defmodule Marketmailer.RegionWorker do
       )
     end)
   end
-
 end
