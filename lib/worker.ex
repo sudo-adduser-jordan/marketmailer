@@ -37,12 +37,6 @@ defmodule Marketmailer.RegionWorker do
       Task.async_stream(2..total, &request(id, &1), max_concurrency: System.schedulers_online())
       |> Stream.run()
 
-  # |> Enum.each(fn
-  #   {:ok, {:ok, _data}} -> :ok
-  #   {:ok, {:error, reason}} -> Logger.error("Page fetch failed: #{reason}")
-  #   {:exit, reason} -> Logger.error("Task crashed: #{inspect(reason)}")
-  # end)
-
   defp request(id, page) do
     url = "https://esi.evetech.net/v1/markets/#{id}/orders/?page=#{page}"
     etag = etag_lookup(url)
