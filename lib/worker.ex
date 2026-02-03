@@ -36,11 +36,12 @@ defmodule Marketmailer.RegionWorker do
     do:
       Task.async_stream(2..total, &request(id, &1), max_concurrency: System.schedulers_online())
       |> Stream.run()
-      # |> Enum.each(fn
-      #   {:ok, {:ok, _data}} -> :ok
-      #   {:ok, {:error, reason}} -> Logger.error("Page fetch failed: #{reason}")
-      #   {:exit, reason} -> Logger.error("Task crashed: #{inspect(reason)}")
-      # end)
+
+  # |> Enum.each(fn
+  #   {:ok, {:ok, _data}} -> :ok
+  #   {:ok, {:error, reason}} -> Logger.error("Page fetch failed: #{reason}")
+  #   {:exit, reason} -> Logger.error("Task crashed: #{inspect(reason)}")
+  # end)
 
   defp request(id, page) do
     url = "https://esi.evetech.net/v1/markets/#{id}/orders/?page=#{page}"
@@ -64,11 +65,12 @@ defmodule Marketmailer.RegionWorker do
     )
 
     {:ok, %{ttl: ttl, pages: get_pages(response)}}
+    # {:ok, %{ttl: 6969, pages: get_pages(response)}} # how low can you go !
   end
 
   defp handle_response(%{status: 304} = response, id, page, _url) do
     ttl = parse_ttl(response)
-    Logger.info("304 #{id} page #{page} \t #{format_ttl(ttl)}" )
+    Logger.info("304 #{id} page #{page} \t #{format_ttl(ttl)}")
     # {:ok, %{ttl: ttl, pages: 1}}
     {:ok, %{ttl: ttl, pages: get_pages(response)}}
   end
@@ -90,32 +92,21 @@ defmodule Marketmailer.RegionWorker do
     end
   end
 
-  defp parse_http_date(date_str) do
-    case date_str |> String.to_charlist() |> :httpd_util.convert_request_date() do
-      :bad_date ->
-        :error
-
-      {{_, _, _}, {_, _, _}} = erl_datetime ->
-        dt =
-          erl_datetime
-          |> NaiveDateTime.from_erl!()
-          |> DateTime.from_naive!("Etc/UTC")
-
-        {:ok, dt}
-    end
-  end
-
   defp parse_ttl(response) do
-    with [expiry_str] <- response.headers["expires"],
-         {:ok, expiry_dt} <- parse_http_date(expiry_str) do
-      diff = DateTime.diff(expiry_dt, DateTime.utc_now(), :millisecond)
-      # If the clock is slightly off or it's already expired,
-      # default to a 1-second "retry" wait.
-      max(diff, 1000)
-    else
-      # Default to 5 mins if header is missing
+    expires =
+      response.headers["expires"]
+      |> List.first()
+
+    case expires |> String.to_charlist() |> :httpd_util.convert_request_date() do
+      {{_, _, _}, {_, _, _}} = erl_dt ->
+        erl_dt
+        |> NaiveDateTime.from_erl!()
+        |> DateTime.from_naive!("Etc/UTC")
+        |> DateTime.diff(DateTime.utc_now(), :millisecond)
+        |> max(1000)
+
       _ ->
-        Logger.error("Missing expires header")
+        Logger.error("Missing or invalid expires header")
         300_000
     end
   end
@@ -156,7 +147,8 @@ defmodule Marketmailer.RegionWorker do
       end)
 
     entries
-    |> Enum.chunk_every(2000)
+    # |> Enum.chunk_every(2000)
+    |> Enum.chunk_every(1000) # orders per page
     |> Enum.each(fn chunk ->
       Marketmailer.Database.insert_all(
         Market,
