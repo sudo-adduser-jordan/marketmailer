@@ -12,60 +12,64 @@ defmodule Marketmailer.ESI do
 
     headers = if etag, do: [{"if-none-match", etag}], else: []
 
-    case Req.get(url, headers: headers,pool_timeout: :infinity) do
-      {:ok, %{status: 200} = resp} ->
-        new_etag = resp.headers["etag"] |> List.first()
+
+    # handle 503, handle 404 halt and only ping for status
+    case Req.get(url, headers: headers, pool_timeout: :infinity) do
+      {:ok, %{status: 200} = response} ->
+        new_etag = response.headers["etag"] |> List.first()
         if new_etag, do: :ets.insert(:market_cache, {url, new_etag})
 
-        meta = parse_metadata(resp, url)
+        meta = parse_metadata(response, url)
 
         Logger.info(
-          "200 #{region_id} page #{page} \t #{length(resp.body)} orders  \t #{format_ttl(meta.ttl)} #{new_etag}"
+          "#{response.status} #{region_id} page #{page} \t #{length(response.body)} orders  \t #{format_ttl(meta.ttl)} #{new_etag}"
         )
 
-        {:ok, resp.body, meta}
+        {:ok, response.body, meta}
 
-      {:ok, %{status: 304} = resp} ->
-        meta = parse_metadata(resp, url)
+      {:ok, %{status: 304} = response} ->
+        meta = parse_metadata(response, url)
+        Logger.info("#{response.status} #{region_id} page #{page} \t #{format_ttl(meta.ttl)}")
+        {:not_modified, meta}
 
-        Logger.info(
-          "304 #{region_id} page #{page} \t #{format_ttl(meta.ttl)}"
-        )
-
-        {:not_modified, parse_metadata(resp, url)}
-
-      {:ok, resp} ->
-        {:error, resp.status}
+      {:ok, response} ->
+        meta = parse_metadata(response, url)
+        Logger.info("#{response.status} #{region_id} page #{page} \t #{format_ttl(meta.ttl)}")
+        {:error, response.status}
 
       {:error, reason} ->
+        Logger.info("Error: #{reason}")
         {:error, reason}
     end
   end
 
-  defp parse_metadata(resp, url) do
+  defp parse_metadata(response, url) do
     # Get the header value first
-    raw_pages = resp.headers["x-pages"] |> List.first()
-    etag = resp.headers["etag"] |> List.first()
+    raw_pages = response.headers["x-pages"] |> List.first()
+    etag = response.headers["etag"] |> List.first()
 
     %{
-      pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1),
-      ttl: calculate_ttl(resp.headers["expires"] |> List.first()),
-      # Matches the key the worker is looking for
       url: url,
-      # Matches the key the worker is looking for
-      etag: etag
+      etag: etag,
+      ttl: calculate_ttl(response.headers["expires"] |> List.first()),
+      pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1)
     }
   end
 
-  defp calculate_ttl(nil), do: 300_000
+  defp calculate_ttl(nil) do
+    IO.puts("calculate_ttl error")
+    60_000
+  end
 
   defp calculate_ttl(expires) do
     with {{_, _, _}, {_, _, _}} = erl_dt <-
            :httpd_util.convert_request_date(String.to_charlist(expires)),
-         dt <- DateTime.from_naive!(NaiveDateTime.from_erl!(erl_dt), "Etc/UTC") do
-      max(DateTime.diff(dt, DateTime.utc_now(), :millisecond), 5000)
+         datetime <- DateTime.from_naive!(NaiveDateTime.from_erl!(erl_dt), "Etc/UTC") do
+      max(DateTime.diff(datetime, DateTime.utc_now(), :millisecond), 5000)
     else
-      _ -> 60_000
+      _ ->
+        IO.puts("calculate_ttl error")
+        60000
     end
   end
 
@@ -74,9 +78,20 @@ defmodule Marketmailer.ESI do
     minutes = div(total_seconds, 60)
     seconds = rem(total_seconds, 60)
 
-    "~2..0B:~2..0B"
-    |> :io_lib.format([minutes, seconds])
-    |> List.to_string()
+    # Using string interpolation and padding
+    m = String.pad_leading("#{minutes}", 2, "0")
+    s = String.pad_leading("#{seconds}", 2, "0")
+
+    "#{m}:#{s}"
   end
 
+  # defp format_ttl(ttl_ms) do
+  #   total_seconds = div(ttl_ms, 1000)
+  #   minutes = div(total_seconds, 60)
+  #   seconds = rem(total_seconds, 60)
+
+  #   "~2..0B:~2..0B"
+  #   |> :io_lib.format([minutes, seconds])
+  #   |> List.to_string()
+  # end
 end

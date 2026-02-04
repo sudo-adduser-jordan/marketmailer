@@ -27,6 +27,7 @@ defmodule Marketmailer.PageWorker do
         schedule_next(meta.ttl)
 
       {:error, _} ->
+        IO.puts("fetch error")
         schedule_next(60_000)
     end
 

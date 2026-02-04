@@ -1,7 +1,6 @@
 defmodule Marketmailer.Application do
   use Application
 
-
   @regions [
     10_000_001,
     10_000_002,
@@ -129,7 +128,7 @@ defmodule Marketmailer.Application do
       Marketmailer.Database,
       {Registry, keys: :unique, name: Marketmailer.Registry},
       {DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
-      {Task.Supervisor, name: Marketmailer.TaskSup}, # Ensure this is here for your PageWorker
+      {Task.Supervisor, name: Marketmailer.TaskSup},
 
       %{
         id: Marketmailer.RegionManagerSupervisor,

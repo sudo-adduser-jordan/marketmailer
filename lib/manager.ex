@@ -7,9 +7,9 @@ defmodule Marketmailer.RegionManager do
   defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
 
   def init(id) do
-    # Start ONLY page 1 immediately
+    # Start page 1 immediately
     DynamicSupervisor.start_child(Marketmailer.PageSup, {Marketmailer.PageWorker, {id, 1}})
-    # We know at least page 1 exists
+    # At least page 1 exists
     {:ok, %{id: id, page_count: 1}}
   end
 
