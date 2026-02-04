@@ -1,144 +1,40 @@
 defmodule Marketmailer.RegionManager do
   use GenServer
-  require Logger
 
-  @regions [
-    10_000_001,
-    10_000_002,
-    10_000_003,
-    10_000_004,
-    10_000_005,
-    10_000_006,
-    10_000_007,
-    10_000_008,
-    10_000_009,
-    10_000_010,
-    10_000_011,
-    10_000_012,
-    10_000_013,
-    10_000_014,
-    10_000_015,
-    10_000_016,
-    10_000_017,
-    10_000_018,
-    10_000_019,
-    10_000_020,
-    10_000_021,
-    10_000_022,
-    10_000_023,
-    10_000_025,
-    10_000_027,
-    10_000_028,
-    10_000_029,
-    10_000_030,
-    10_000_031,
-    10_000_032,
-    10_000_033,
-    10_000_034,
-    10_000_035,
-    10_000_036,
-    10_000_037,
-    10_000_038,
-    10_000_039,
-    10_000_040,
-    10_000_041,
-    10_000_042,
-    10_000_043,
-    10_000_044,
-    10_000_045,
-    10_000_046,
-    10_000_047,
-    10_000_048,
-    10_000_049,
-    10_000_050,
-    10_000_051,
-    10_000_052,
-    10_000_053,
-    10_000_054,
-    10_000_055,
-    10_000_056,
-    10_000_057,
-    10_000_058,
-    10_000_059,
-    10_000_060,
-    10_000_061,
-    10_000_062,
-    10_000_063,
-    10_000_064,
-    10_000_065,
-    10_000_066,
-    10_000_067,
-    10_000_068,
-    10_000_069,
-    10_000_070,
-    10_001_000,
-    11_000_001,
-    11_000_002,
-    11_000_003,
-    11_000_004,
-    11_000_005,
-    11_000_006,
-    11_000_007,
-    11_000_008,
-    11_000_009,
-    11_000_010,
-    11_000_011,
-    11_000_012,
-    11_000_013,
-    11_000_014,
-    11_000_015,
-    11_000_016,
-    11_000_017,
-    11_000_018,
-    11_000_019,
-    11_000_020,
-    11_000_021,
-    11_000_022,
-    11_000_023,
-    11_000_024,
-    11_000_025,
-    11_000_026,
-    11_000_027,
-    11_000_028,
-    11_000_029,
-    11_000_030,
-    11_000_031,
-    11_000_032,
-    11_000_033,
-    12_000_001,
-    12_000_002,
-    12_000_003,
-    12_000_004,
-    12_000_005,
-    14_000_001,
-    14_000_002,
-    14_000_003,
-    14_000_004,
-    14_000_005,
-    19_000_001
-  ]
+  def start_link(region_id),
+    do: GenServer.start_link(__MODULE__, region_id, name: via(region_id))
 
-  @spec start_link(any()) :: :ignore | {:error, any()} | {:ok, pid()}
-  def start_link(_opts) do
-    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
+
+  def init(id) do
+    # Start ONLY page 1 immediately
+    DynamicSupervisor.start_child(Marketmailer.PageSup, {Marketmailer.PageWorker, {id, 1}})
+    # We know at least page 1 exists
+    {:ok, %{id: id, page_count: 1}}
   end
 
-  @impl true
-  def init(:ok) do
-    send(self(), {:start_workers, @regions})
-    {:ok, %{}}
+  def handle_info({:update_page_count, new_count}, %{id: id, page_count: current} = state) do
+    if new_count != current do
+      adjust_workers(id, current, new_count)
+      {:noreply, %{state | page_count: new_count}}
+    else
+      {:noreply, state}
+    end
   end
 
-  @impl true
-  def handle_info({:start_workers, []}, state) do
-    {:noreply, state}
+  defp adjust_workers(id, old, new) when new > old do
+    Enum.each((old + 1)..new, fn p ->
+      DynamicSupervisor.start_child(Marketmailer.PageSup, {Marketmailer.PageWorker, {id, p}})
+    end)
   end
 
-  @impl true
-  def handle_info({:start_workers, [region | rest]}, state) do
-    Marketmailer.RegionDynamicSupervisor.start_child(region)
-    # Process.send_after(self(), {:start_workers, rest}, 0)
-    Process.send_after(self(), {:start_workers, rest}, 100)
-    {:noreply, state}
+  defp adjust_workers(id, old, new) when new < old do
+    Enum.each((new + 1)..old, fn p ->
+      # Gracefully stop workers that are no longer needed
+      case Registry.lookup(Marketmailer.Registry, {:page, id, p}) do
+        [{pid, _}] -> GenServer.stop(pid)
+        _ -> :ok
+      end
+    end)
   end
 end

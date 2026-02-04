@@ -3,14 +3,12 @@ defmodule Marketmailer.Database.Migrations.CreateMarketAndEtags do
 
   def change do
 
-    # drop_if_exists table(:market)
-    # drop_if_exists table(:etags)
-
     create table(:market, primary_key: false) do
       add :order_id, :bigint, primary_key: true
       add :duration, :integer
       add :is_buy_order, :boolean
       add :issued, :string
+      # add :issued, :utc_datetime # Changed to datetime for better querying
       add :location_id, :bigint
       add :min_volume, :integer
       add :price, :float
@@ -19,15 +17,13 @@ defmodule Marketmailer.Database.Migrations.CreateMarketAndEtags do
       add :type_id, :integer
       add :volume_remain, :integer
       add :volume_total, :integer
-
-      timestamps()
     end
 
     create table(:etags, primary_key: false) do
       add :url, :string, primary_key: true
       add :etag, :string
-
-      timestamps()
     end
+
+    # create unique_index(:market, [:etag_url, :order_id]) # Prevent dupes
   end
 end
