@@ -1,18 +1,22 @@
 import Config
 
-config :esi_eve_online,
-  user_agent: "MyCoolApp/1.0 (email@example.com)"
+config :logger, :console,
+  format: "$message\n",
+  metadata: []
 
 config :marketmailer, ecto_repos: [Marketmailer.Database]
+
 config :marketmailer, Marketmailer.Database,
   username: "postgres",
   password: "postgres",
   database: "eve",
   hostname: "localhost",
-  pool_size: 10,
+  queue_interval: 69420,
+  timeout: 69420,
   log: false
 
 config :swoosh, :api_client, false
+
 config :marketmailer, Marketmailer.Mailer,
   adapter: Swoosh.Adapters.Sendgrid,
   api_key: "SG.x.x"

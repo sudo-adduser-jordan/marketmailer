@@ -2,25 +2,32 @@ defmodule Marketmailer.Database do
   use Ecto.Repo,
     otp_app: :marketmailer,
     adapter: Ecto.Adapters.Postgres
+
+  @order_fields [
+    :order_id, :duration, :is_buy_order, :issued, :location_id,
+    :min_volume, :price, :range, :system_id, :type_id,
+    :volume_remain, :volume_total
+  ]
+
+  def upsert_orders(orders) do
+
+    entries = Enum.map(orders, fn order ->
+      Map.new(@order_fields, fn field ->
+        {field, Map.get(order, Atom.to_string(field))}
+      end)
+    end)
+
+    insert_all(
+      Market,
+      entries,
+        on_conflict: {:replace, @order_fields},
+        conflict_target: :order_id
+    )
+  end
 end
 
 defmodule Market do
   use Ecto.Schema
-
-  # %{
-  #   "duration" => 90,
-  #   "is_buy_order" => true,
-  #   "issued" => "2025-10-16T17:56:38Z",
-  #   "location_id" => 1035466617946,
-  #   "min_volume" => 1,
-  #   "order_id" => 7163873707,
-  #   "price" => 1001.0,
-  #   "range" => "solarsystem",
-  #   "system_id" => 30000240,
-  #   "type_id" => 5339,
-  #   "volume_remain" => 44,
-  #   "volume_total" => 50
-  # },
 
   schema "market" do
     field :duration, :integer
