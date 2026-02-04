@@ -29,7 +29,7 @@ defmodule Marketmailer.ESI do
         meta = parse_metadata(resp, url)
 
         Logger.info(
-          "200 #{region_id} page #{page} \t #{format_ttl(meta.ttl)}"
+          "304 #{region_id} page #{page} \t #{format_ttl(meta.ttl)}"
         )
 
         {:not_modified, parse_metadata(resp, url)}

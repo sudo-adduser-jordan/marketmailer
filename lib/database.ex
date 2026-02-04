@@ -44,3 +44,22 @@ defmodule Market do
     field :volume_total, :integer
   end
 end
+
+
+defmodule Etag do
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  @primary_key {:url, :string, autogenerate: false}
+  schema "etags" do
+    field :etag, :string
+    timestamps()
+  end
+
+  def changeset(etag, attrs) do
+    etag
+    |> cast(attrs, [:url, :etag])
+    |> validate_required([:url, :etag])
+    |> unique_constraint(:url)
+  end
+end

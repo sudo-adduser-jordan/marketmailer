@@ -4,7 +4,7 @@ defmodule Marketmailer.MixProject do
   def project do
     [
       app: :marketmailer,
-      version: "0.1.0",
+      version: "0.0.1",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -14,7 +14,7 @@ defmodule Marketmailer.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :inets],
       mod: {Marketmailer.Application, []}
     ]
   end
@@ -26,7 +26,7 @@ defmodule Marketmailer.MixProject do
         {:postgrex, ">= 0.0.0"},
         {:swoosh, "~> 1.19"},
         {:gen_smtp, "~> 1.0"},
-        {:esi_eve_online, git: "https://github.com/marcinruszkiewicz/esi_eve_online.git"}
+        # {:esi_eve_online, git: "https://github.com/marcinruszkiewicz/esi_eve_online.git"}
     ]
   end
 
