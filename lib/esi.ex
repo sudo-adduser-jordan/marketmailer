@@ -22,19 +22,19 @@ defmodule Marketmailer.ESI do
         meta = parse_metadata(response, url)
 
         Logger.info(
-          "#{response.status} #{region_id} page #{page} \t #{length(response.body)} orders  \t #{format_ttl(meta.ttl)} #{new_etag}"
+          "#{response.status} #{region_id} page #{page} \t #{length(response.body)} orders  \t #{format_ttl(meta.ttl)} #{url}"
         )
 
         {:ok, response.body, meta}
 
       {:ok, %{status: 304} = response} ->
         meta = parse_metadata(response, url)
-        Logger.info("#{response.status} #{region_id} page #{page} \t #{format_ttl(meta.ttl)}")
+        Logger.info("#{response.status} #{region_id} page #{page} \t #{format_ttl(meta.ttl)} #{url}")
         {:not_modified, meta}
 
       {:ok, response} ->
         meta = parse_metadata(response, url)
-        Logger.info("#{response.status} #{region_id} page #{page} \t #{format_ttl(meta.ttl)}")
+        Logger.info("#{response.status} #{region_id} page #{page} \t #{format_ttl(meta.ttl)} #{url}")
         {:error, response.status}
 
       {:error, reason} ->
@@ -44,20 +44,16 @@ defmodule Marketmailer.ESI do
   end
 
   defp parse_metadata(response, url) do
-    # Get the header value first
     raw_pages = response.headers["x-pages"] |> List.first()
-    etag = response.headers["etag"] |> List.first()
-
     %{
       url: url,
-      etag: etag,
+      etag: response.headers["etag"] |> List.first(),
       ttl: calculate_ttl(response.headers["expires"] |> List.first()),
       pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1)
     }
   end
 
   defp calculate_ttl(nil) do
-    IO.puts("calculate_ttl error")
     60_000
   end
 
@@ -68,7 +64,6 @@ defmodule Marketmailer.ESI do
       max(DateTime.diff(datetime, DateTime.utc_now(), :millisecond), 5000)
     else
       _ ->
-        IO.puts("calculate_ttl error")
         60000
     end
   end
