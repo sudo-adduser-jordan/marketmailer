@@ -1,6 +1,7 @@
 defmodule Marketmailer.Application do
   use Application
 
+  @user_agent "lostcoastwizard > BEAM me up, Scotty!"
   @regions [
     10_000_001,
     10_000_002,
@@ -117,6 +118,7 @@ defmodule Marketmailer.Application do
     19_000_001
   ]
 
+  def user_agent, do: @user_agent
   def regions, do: @regions
 
   @impl true
@@ -327,12 +329,13 @@ defmodule Marketmailer.ESI do
 
     # Read ETag from DB-backed cache (optionally mirror to ETS)
     etag = Marketmailer.Database.get_etag(url)
+    # Add the User-Agent to your headers list
+    headers = [
+      {"User-Agent", Marketmailer.Application.user_agent()}
+    ]
 
     headers =
-      case etag do
-        nil -> []
-        etag -> [{"If-None-Match", etag}]
-      end
+      if etag, do: [{"If-None-Match", etag} | headers], else: headers
 
     case Req.get(url, headers: headers, pool_timeout: :infinity) do
       {:ok, %{status: 200} = response} ->
@@ -506,7 +509,6 @@ defmodule Marketmailer.Database do
     :ets.insert(:market_cache, {url, etag})
     :ok
   end
-
 end
 
 defmodule Market do
