@@ -20,8 +20,9 @@ defmodule Marketmailer.Database.Migrations.CreateMarketAndEtags do
     end
 
     create table(:etags, primary_key: false) do
-      add :etag, :string, primary_key: true
-      add :url, :string
+      add :url, :string, primary_key: true
+      add :etag, :string
+      timestamps()
     end
 
   end

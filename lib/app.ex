@@ -121,7 +121,7 @@ defmodule Marketmailer.Application do
 
   @impl true
   def start(_type, _args) do
-    # In‑memory ETag cache (optionally preload from DB on boot)
+    # Optional:  memory cache ETS in front of DB
     :ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
 
     children = [
@@ -129,7 +129,8 @@ defmodule Marketmailer.Application do
       {Registry, keys: :unique, name: Marketmailer.Registry},
       {DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
       {Task.Supervisor, name: Marketmailer.TaskSup},
-      Marketmailer.RegionManagerSupervisor
+      Marketmailer.RegionManagerSupervisor,
+      Marketmailer.EtagWarmup
     ]
 
     opts = [strategy: :one_for_one, name: Marketmailer.Supervisor]
@@ -140,7 +141,6 @@ end
 defmodule Marketmailer.RegionManagerSupervisor do
   use Supervisor
 
-  # @impl true
   def start_link(arg) do
     Supervisor.start_link(__MODULE__, arg, name: __MODULE__)
   end
@@ -270,13 +270,15 @@ defmodule Marketmailer.PageWorker do
       case Marketmailer.ESI.fetch(region_id, page) do
         {:ok, data, context} ->
           Marketmailer.Database.upsert_orders(data)
-          :ets.insert(:market_cache, {context.url, context.etag})
+          Marketmailer.Database.upsert_etag(context.url, context.etag)
 
           notify_manager(manager, context.pages)
           schedule_next(context.ttl)
           %{state | errors: 0}
 
         {:not_modified, context} ->
+          Marketmailer.Database.upsert_etag(context.url, context.etag)
+
           notify_manager(manager, context.pages)
           schedule_next(context.ttl)
           %{state | errors: 0}
@@ -323,11 +325,8 @@ defmodule Marketmailer.ESI do
   def fetch(region_id, page \\ 1) do
     url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
 
-    etag =
-      case :ets.lookup(:market_cache, url) do
-        [{_url, val}] -> val
-        _ -> nil
-      end
+    # Read ETag from DB-backed cache (optionally mirror to ETS)
+    etag = Marketmailer.Database.get_etag(url)
 
     headers =
       case etag do
@@ -335,9 +334,7 @@ defmodule Marketmailer.ESI do
         etag -> [{"If-None-Match", etag}]
       end
 
-    # NOTE: configure Req client / pool in your app config
-    # case Req.get(url, headers: headers, pool_timeout: :infinity) do
-    case Req.get(url, headers: headers) do
+    case Req.get(url, headers: headers, pool_timeout: :infinity) do
       {:ok, %{status: 200} = response} ->
         context = parse_metadata(response, url)
 
@@ -373,11 +370,6 @@ defmodule Marketmailer.ESI do
     raw_pages = header_first(response.headers, "x-pages")
     etag = header_first(response.headers, "etag")
     expires = header_first(response.headers, "expires")
-
-    # keep ETS in sync on every 200/304
-    if etag do
-      :ets.insert(:market_cache, {url, etag})
-    end
 
     %{
       url: url,
@@ -418,6 +410,8 @@ defmodule Marketmailer.Database do
     otp_app: :marketmailer,
     adapter: Ecto.Adapters.Postgres
 
+  import Ecto.Query
+
   @order_fields [
     :order_id,
     :duration,
@@ -442,7 +436,6 @@ defmodule Marketmailer.Database do
 
     rows =
       Enum.map(orders, fn order ->
-        # order is assumed to have string keys from JSON
         base =
           Enum.into(@order_fields, %{}, fn field ->
             key = Atom.to_string(field)
@@ -461,6 +454,59 @@ defmodule Marketmailer.Database do
       conflict_target: :order_id
     )
   end
+
+  ## ETag helpers
+
+  # For reads, optionally use ETS first for speed, then fall back to DB.
+  def get_etag(url) do
+    etag_from_ets =
+      case :ets.lookup(:market_cache, url) do
+        [{^url, etag}] -> etag
+        _ -> nil
+      end
+
+    case etag_from_ets do
+      nil ->
+        case one(from e in Etag, where: e.url == ^url, select: e.etag) do
+          nil ->
+            nil
+
+          etag ->
+            :ets.insert(:market_cache, {url, etag})
+            etag
+        end
+
+      etag ->
+        etag
+    end
+  end
+
+  # Single-row per URL, older rows effectively removed/overwritten.
+  def upsert_etag(nil, _etag), do: :ok
+  def upsert_etag(_url, nil), do: :ok
+
+  def upsert_etag(url, etag) do
+    now = NaiveDateTime.utc_now(:second)
+
+    insert_all(
+      Etag,
+      [
+        %{
+          url: url,
+          etag: etag,
+          inserted_at: now,
+          updated_at: now
+        }
+      ],
+      on_conflict: {:replace, [:etag, :updated_at]},
+      conflict_target: :url
+    )
+
+    # Keep ETS in sync as a write-through cache
+    :ets.insert(:market_cache, {url, etag})
+    :ok
+  end
+
 end
 
 defmodule Market do
@@ -491,6 +537,8 @@ defmodule Etag do
   schema "etags" do
     field :etag, :string
     field :url, :string
+
+    timestamps()
   end
 
   def changeset(etag, attrs) do
@@ -498,5 +546,29 @@ defmodule Etag do
     |> cast(attrs, [:url, :etag])
     |> validate_required([:url, :etag])
     |> unique_constraint(:url)
+  end
+end
+
+defmodule Marketmailer.EtagWarmup do
+  use GenServer
+  import Ecto.Query
+
+  def start_link(arg), do: GenServer.start_link(__MODULE__, arg, name: __MODULE__)
+
+  @impl true
+  def init(_arg) do
+    send(self(), :warmup)
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_info(:warmup, state) do
+    # Load all etags into ETS (if you expect millions, switch to streaming / limit)
+    Marketmailer.Database.all(from e in Etag, select: {e.url, e.etag})
+    |> Enum.each(fn {url, etag} ->
+      :ets.insert(:market_cache, {url, etag})
+    end)
+
+    {:noreply, state}
   end
 end
