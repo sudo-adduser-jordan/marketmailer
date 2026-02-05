@@ -1,3 +1,5 @@
 docker compose down -v
 
 halt when api is down and only ping every x seconds
+
+when a worker dies, clean out the url in the data base
