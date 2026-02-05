@@ -140,3 +140,252 @@ defmodule Marketmailer.Application do
     Supervisor.start_link(children, opts)
   end
 end
+
+defmodule Marketmailer.RegionManager do
+  use GenServer
+
+  def start_link(region_id),
+    do: GenServer.start_link(__MODULE__, region_id, name: via(region_id))
+
+  defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
+
+  def init(id) do
+    # Start page 1 immediately
+    DynamicSupervisor.start_child(Marketmailer.PageSup, {Marketmailer.PageWorker, {id, 1}})
+    # At least page 1 exists
+    {:ok, %{id: id, page_count: 1}}
+  end
+
+  def handle_info({:update_page_count, new_count}, %{id: id, page_count: current} = state) do
+    if new_count != current do
+      adjust_workers(id, current, new_count)
+      {:noreply, %{state | page_count: new_count}}
+    else
+      {:noreply, state}
+    end
+  end
+
+  defp adjust_workers(id, old, new) when new > old do
+    Enum.each((old + 1)..new, fn p ->
+      DynamicSupervisor.start_child(Marketmailer.PageSup, {Marketmailer.PageWorker, {id, p}})
+    end)
+  end
+
+  defp adjust_workers(id, old, new) when new < old do
+    Enum.each((new + 1)..old, fn p ->
+      # Gracefully stop workers that are no longer needed
+      case Registry.lookup(Marketmailer.Registry, {:page, id, p}) do
+        [{pid, _}] -> GenServer.stop(pid)
+        _ -> :ok
+      end
+    end)
+  end
+end
+
+defmodule Marketmailer.PageWorker do
+  use GenServer, restart: :transient
+
+  def start_link({region_id, page}),
+    do: GenServer.start_link(__MODULE__, {region_id, page}, name: via(region_id, page))
+
+  defp via(region_id, page),
+    do: {:via, Registry, {Marketmailer.Registry, {:page, region_id, page}}}
+
+  def init({region_id, page}) do
+    send(self(), :work)
+    {:ok, {region_id, page}}
+  end
+
+  def handle_info(:work, {region_id, page} = state) do
+    case Marketmailer.ESI.fetch(region_id, page) do
+      {:ok, data, context} ->
+
+        Marketmailer.Database.upsert_orders(data)
+        :ets.insert(:market_cache, {context.url, context.etag})
+
+        notify_manager(region_id, context.pages)
+        schedule_next(context.ttl)
+
+      {:not_modified, context} ->
+        notify_manager(region_id, context.pages)
+        schedule_next(context.ttl)
+
+      {:error, _} ->
+        IO.puts("fetch error")
+        schedule_next(60_000)
+    end
+
+    {:noreply, state}
+  end
+
+  defp schedule_next(ttl), do: Process.send_after(self(), :work, ttl)
+
+  defp notify_manager(region_id, count) do
+    case Registry.lookup(Marketmailer.Registry, {:region, region_id}) do
+      [{pid, _}] -> send(pid, {:update_page_count, count})
+      _ -> :ok
+    end
+  end
+end
+
+defmodule Marketmailer.ESI do
+  require Logger
+
+  def fetch(region_id, page \\ 1) do
+    url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
+
+    etag =
+      case :ets.lookup(:market_cache, url) do
+        [{_, val}] -> val
+        _ -> nil
+      end
+
+    headers = if etag, do: [{"if-none-match", etag}], else: []
+
+
+    # handle 503, handle 404 halt and only ping for status
+    case Req.get(url, headers: headers, pool_timeout: :infinity) do
+      {:ok, %{status: 200} = response} ->
+        new_etag = response.headers["etag"] |> List.first()
+        if new_etag, do: :ets.insert(:market_cache, {url, new_etag})
+
+        context = parse_metadata(response, url)
+
+        Logger.info(
+          "#{response.status} #{region_id} page #{page} \t #{length(response.body)} orders  \t #{format_ttl(context.ttl)} #{url}"
+        )
+
+        {:ok, response.body, context}
+
+      {:ok, %{status: 304} = response} ->
+        context = parse_metadata(response, url)
+        Logger.info("#{response.status} #{region_id} page #{page} \t #{format_ttl(context.ttl)} #{url}")
+        {:not_modified, context}
+
+      {:ok, response} ->
+        Logger.info("#{response.status} #{region_id} page #{page} \t #{url}")
+        {:error, response.status}
+
+      {:error, reason} ->
+        Logger.info("Error: #{reason}")
+
+        {:error, reason}
+    end
+  end
+
+  defp parse_metadata(response, url) do
+    raw_pages = response.headers["x-pages"] |> List.first()
+    %{
+      url: url,
+      etag: response.headers["etag"] |> List.first(),
+      ttl: calculate_ttl(response.headers["expires"] |> List.first()),
+      pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1)
+    }
+  end
+
+  defp calculate_ttl(nil) do
+    60_000
+  end
+
+  defp calculate_ttl(expires) do
+    with {{_, _, _}, {_, _, _}} = erl_dt <-
+           :httpd_util.convert_request_date(String.to_charlist(expires)),
+         datetime <- DateTime.from_naive!(NaiveDateTime.from_erl!(erl_dt), "Etc/UTC") do
+      max(DateTime.diff(datetime, DateTime.utc_now(), :millisecond), 5000)
+    else
+      _ ->
+        60000
+    end
+  end
+
+  defp format_ttl(ttl_ms) do
+    total_seconds = div(ttl_ms, 1000)
+    minutes = div(total_seconds, 60)
+    seconds = rem(total_seconds, 60)
+
+    # Using string interpolation and padding
+    m = String.pad_leading("#{minutes}", 2, "0")
+    s = String.pad_leading("#{seconds}", 2, "0")
+
+    "#{m}:#{s}"
+  end
+
+end
+
+defmodule Marketmailer.Database do
+  use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
+
+  @order_fields [
+    :order_id,
+    :duration,
+    :is_buy_order,
+    :issued,
+    :location_id,
+    :min_volume,
+    :price,
+    :range,
+    :system_id,
+    :type_id,
+    :volume_remain,
+    :volume_total,
+    :inserted_at,
+    :updated_at
+  ]
+
+  def upsert_orders(orders) when is_list(orders) do
+    timestamp = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+    entries =
+      Enum.map(orders, fn order ->
+        Map.new(@order_fields, fn field ->
+          {field, Map.get(order, Atom.to_string(field))}
+        end)
+        |> Map.put(:inserted_at, timestamp)
+        |> Map.put(:updated_at, timestamp)
+      end)
+
+    insert_all(
+      Market,
+      entries,
+      on_conflict: {:replace, @order_fields},
+      conflict_target: :order_id
+    )
+  end
+end
+
+# Marketmailer.Database.
+defmodule Market do
+  use Ecto.Schema
+
+  schema "market" do
+    field :duration, :integer
+    field :is_buy_order, :boolean
+    field :issued, :string
+    field :location_id, :integer
+    field :min_volume, :integer
+    field :order_id, :integer
+    field :price, :float
+    field :range, :string
+    field :system_id, :integer
+    field :type_id, :integer
+    field :volume_remain, :integer
+    field :volume_total, :integer
+    timestamps()
+  end
+end
+
+defmodule Etag do
+  use Ecto.Schema
+  import Ecto.Changeset
+
+  schema "etags" do
+    field :etag, :string
+    field :url, :string
+  end
+
+  def changeset(etag, attrs) do
+    etag
+    |> cast(attrs, [:url, :etag])
+    |> validate_required([:url, :etag])
+    |> unique_constraint(:url)
+  end
+end
