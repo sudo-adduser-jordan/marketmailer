@@ -11,8 +11,9 @@ config :marketmailer, Marketmailer.Database,
   password: "postgres",
   database: "eve",
   hostname: "localhost",
-  queue_interval: 69420,
-  timeout: 69420,
+  queue_interval: System.schedulers_online() * 1000, # instead of making a queue in gen server, configure postgres to not timeout requests in its queue
+  timeout: System.schedulers_online() * 1000,
+  # pool_size: System.schedulers_online() * 4,
   log: false
 
 config :swoosh, :api_client, false
