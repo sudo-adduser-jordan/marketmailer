@@ -1,1 +1,3 @@
 docker compose down -v
+
+halt when api is down and only ping every x seconds
