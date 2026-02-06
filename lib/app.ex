@@ -194,10 +194,8 @@ defmodule Marketmailer.PageWorker do
     state
   end
 
-  # Add jitter to avoid all workers waking in lockstep
-  defp schedule_next(ms) do
-    Process.send_after(self(), :work, ms)
-  end
+
+  defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
 
   defp backoff_ms(errors),
     do: min((60_000 * :math.pow(2, errors)) |> round, 300_000)
