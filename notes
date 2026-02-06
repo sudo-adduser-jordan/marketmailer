@@ -1,19 +1,4 @@
-- halt on 503 - downtime
-retry: got response with status 503, will retry in 2000ms, 2 attempts left
 
 docker compose down -v
-
-halt when api is down and only ping every x seconds
-
-when a worker dies, clean out the url in the data base
-
-
-x-esi-error-limit-remain = how many fails you have left in the time frame set by reset
-and
-x-esi-error-limit-reset = how many seconds until the remain is reset to max value
-
-The error limit is global for all endpoints.
-
-Once remain hit zero, you will get the 420. So, once remain hit zero (or get close to the limit - if you have multiple requests in flight), you need to stop all requests for reset seconds.
 
 
