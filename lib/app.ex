@@ -157,7 +157,6 @@ defmodule Marketmailer.PageWorker do
         new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
         {:noreply, new_state}
 
-      # ESI is down. We already set the ETS flag in fetch/2.
       {:error, :service_unavailable, ctx} ->
         Logger.info("503 #{id}     \t #{ctx.url}")
         schedule_next(@ping_interval)
