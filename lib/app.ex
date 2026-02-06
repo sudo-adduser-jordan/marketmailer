@@ -26,7 +26,8 @@ defmodule Marketmailer.Application do
       {DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
       {Task.Supervisor, name: Marketmailer.TaskSup},
       Marketmailer.RegionManagerSupervisor,
-      Marketmailer.EtagWarmup
+      Marketmailer.EtagWarmup,
+      # Marketmailer.MailWorker
     ]
 
     opts = [
@@ -166,9 +167,7 @@ defmodule Marketmailer.PageWorker do
         delay = backoff_ms(errs)
         schedule_next(delay)
 
-        Logger.warning(
-          "Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
-        )
+        Logger.warning("Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s")
 
         {:noreply, %{state | errors: errs + 1}}
     end
@@ -193,7 +192,6 @@ defmodule Marketmailer.PageWorker do
     schedule_next(ttl)
     state
   end
-
 
   defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
 
@@ -267,8 +265,7 @@ defmodule Marketmailer.ESI do
   end
 
   # Set a timestamp 10s in the future
-  defp activate_maintenance, do:
-  :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
+  defp activate_maintenance, do: :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
 
   defp clear_maintenance, do: :ets.delete(@table, @maint_key)
 
@@ -365,6 +362,21 @@ defmodule Marketmailer.Database do
 
     :ets.insert(:market_cache, {url, etag})
   end
+
+  def cheapest_order do
+    Market
+    |> order_by(asc: :price)
+    |> limit(1)
+    |> one()
+  end
+
+  def cheapest_order_for_type(type_id) do
+    Market
+    |> where([m], m.type_id == ^type_id)
+    |> order_by(asc: :price)
+    |> limit(1)
+    |> one()
+  end
 end
 
 defmodule Market do
@@ -404,7 +416,9 @@ end
 defmodule Marketmailer.EtagWarmup do
   use GenServer
   import Ecto.Query
+
   def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
+
   @impl true
   def init(_) do
     send(self(), :warmup)
@@ -418,4 +432,69 @@ defmodule Marketmailer.EtagWarmup do
 
     {:noreply, s}
   end
+end
+
+defmodule Marketmailer.Mailer do
+  use Swoosh.Mailer, otp_app: :marketmailer
+end
+
+defmodule Marketmailer.MailWorker do
+  use GenServer
+  require Logger
+
+  @interval :timer.seconds(60)
+
+  # Public API
+  def start_link(_),
+    do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
+
+  @impl true
+  def init(_) do
+    schedule_tick()
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_info(:tick, state) do
+    send_cheapest_order_email()
+    schedule_tick()
+    {:noreply, state}
+  end
+
+  defp schedule_tick do
+    Process.send_after(self(), :tick, @interval)
+  end
+
+  defp send_cheapest_order_email do
+    case Marketmailer.Database.cheapest_order() do
+      nil ->
+        Logger.debug("No orders available; skipping mail")
+
+      order ->
+        Logger.info("Sending mail for cheapest order #{order.order_id} at #{order.price}")
+        deliver_email(order)
+    end
+  end
+
+defp deliver_email(order) do
+  from = Application.fetch_env!(:marketmailer, :mail_from)
+  to   = Application.fetch_env!(:marketmailer, :mail_to)
+
+  email =
+    Swoosh.Email.new()
+    |> Swoosh.Email.from(from)
+    |> Swoosh.Email.to(to)
+    |> Swoosh.Email.subject("Cheapest market order")
+    |> Swoosh.Email.text_body("""
+    Cheapest order:
+
+    Order ID: #{order.order_id}
+    Price: #{order.price}
+    Type ID: #{order.type_id}
+    Volume: #{order.volume_remain}/#{order.volume_total}
+    Location: #{order.location_id}
+    """)
+
+  Marketmailer.Mailer.deliver(email)
+end
 end

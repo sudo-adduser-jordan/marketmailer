@@ -21,12 +21,14 @@ defmodule Marketmailer.MixProject do
 
   defp deps do
     [
-        {:req, "~> 0.5.0"},
-        {:ecto_sql, "~> 3.0"},
-        {:postgrex, ">= 0.0.0"},
-        {:swoosh, "~> 1.19"},
-        {:gen_smtp, "~> 1.0"},
-        # {:esi_eve_online, git: "https://github.com/marcinruszkiewicz/esi_eve_online.git"}
+      {:req, "~> 0.5.0"},
+      {:ecto_sql, "~> 3.0"},
+      {:postgrex, ">= 0.0.0"},
+      {:swoosh, "~> 1.19"},
+      {:gen_smtp, "~> 1.0"},
+      # required by Swoosh.Adapters.Gmail
+      {:mail, ">= 0.0.0"},
+      {:hackney, "~> 1.9"},
     ]
   end
 
@@ -49,6 +51,7 @@ defmodule Marketmailer.MixProject do
         "format --check-formatted"
       ],
       start: [
+        "setup",
         "run --no-halt"
       ]
     ]
