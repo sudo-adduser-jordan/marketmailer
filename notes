@@ -1,4 +1,5 @@
 - halt on 503 - downtime
+retry: got response with status 503, will retry in 2000ms, 2 attempts left
 
 docker compose down -v
 
