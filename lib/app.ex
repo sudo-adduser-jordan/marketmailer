@@ -117,11 +117,11 @@ defmodule Marketmailer.PageWorker do
   def handle_info(:work, state) do
     if Marketmailer.ESI.maintenance_active?() do
       # Global maintenance is on. Try to extend the timer to "claim" the next 10s slot.
-      # If we successfully update the TS, we are the 'chosen' pinger.
+      # If successfully updated the TS, this worker is the the 'chosen' pinger.
       if try_claim_ping() do
         perform_fetch(state)
       else
-        # Another worker is already the designated pinger or we're waiting
+        # Another worker is already the designated pinger or waiting
         schedule_next(@ping_interval)
         {:noreply, state}
       end
@@ -164,11 +164,10 @@ defmodule Marketmailer.PageWorker do
   end
 
   defp try_claim_ping do
-    # Use ets:update_counter or a simple insert with a logic check to ensure
     # only one process 'wins' the right to ping during this 10s window.
     now = System.system_time(:millisecond)
-    # Simple version: if current TS in ETS is still in future, we don't ping.
-    # If we are the one to "push" the TS further, we bought the right.
+    # if current TS in ETS is still in future, don't ping.
+    # If this worker are the one to "push" the TS further, this worker bought the right.
     case :ets.lookup(:esi_error_state, :maintenance_mode) do
       [{:maintenance_mode, t}] when t > now ->
         false
@@ -254,10 +253,9 @@ defmodule Marketmailer.ESI do
     end
   end
 
-  defp activate_maintenance do
-    # Set a timestamp 10s in the future
-    :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
-  end
+  # Set a timestamp 10s in the future
+  defp activate_maintenance, do:
+  :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
 
   defp clear_maintenance, do: :ets.delete(@table, @maint_key)
 
