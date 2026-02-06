@@ -231,7 +231,7 @@ defmodule Marketmailer.ESI do
     headers =
       [{"User-Agent", Marketmailer.Application.user_agent()}] ++ if etag, do: [{"If-None-Match", etag}], else: []
 
-    case Req.get(url, headers: headers, pool_timeout: 69420) do
+    case Req.get(url, headers: headers, pool_timeout: System.schedulers_online() * 1000) do
       {:ok, %{status: 200} = r} ->
         clear_maintenance()
         {:ok, r.body, meta(r, url)}
