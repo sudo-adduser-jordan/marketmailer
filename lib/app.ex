@@ -2,7 +2,6 @@ defmodule Marketmailer.Application do
   use Application
 
   @user_agent "lostcoastwizard > BEAM me up, Scotty!"
-
   @regions [
     10_000_001,
     10_000_002,
@@ -124,7 +123,6 @@ defmodule Marketmailer.Application do
 
   @impl true
   def start(_type, _args) do
-    # ETS for ETag and error-limit state
     :ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
     :ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 
@@ -137,7 +135,11 @@ defmodule Marketmailer.Application do
       Marketmailer.EtagWarmup
     ]
 
-    opts = [strategy: :one_for_one, name: Marketmailer.Supervisor]
+    opts = [
+      strategy: :one_for_one,
+      name: Marketmailer.Supervisor
+    ]
+
     Supervisor.start_link(children, opts)
   end
 end
@@ -145,9 +147,7 @@ end
 defmodule Marketmailer.RegionManagerSupervisor do
   use Supervisor
 
-  def start_link(arg) do
-    Supervisor.start_link(__MODULE__, arg, name: __MODULE__)
-  end
+  def start_link(arg), do: Supervisor.start_link(__MODULE__, arg, name: __MODULE__)
 
   @impl true
   def init(_arg) do
@@ -169,19 +169,12 @@ defmodule Marketmailer.RegionManager do
 
   @moduledoc false
 
-  def start_link(region_id),
-    do: GenServer.start_link(__MODULE__, region_id, name: via(region_id))
-
+  def start_link(region_id), do: GenServer.start_link(__MODULE__, region_id, name: via(region_id))
   defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
 
   @impl true
   def init(id) do
-    {:ok, _} =
-      DynamicSupervisor.start_child(
-        Marketmailer.PageSup,
-        {Marketmailer.PageWorker, {self(), id, 1}}
-      )
-
+    {:ok, _} = DynamicSupervisor.start_child(Marketmailer.PageSup, {Marketmailer.PageWorker, {self(), id, 1}})
     {:ok, %{id: id, page_count: 1}}
   end
 
@@ -199,18 +192,13 @@ defmodule Marketmailer.RegionManager do
   end
 
   defp adjust_workers(id, old, new) when new > old do
-    for p <- (old + 1)..new do
-      spec = {Marketmailer.PageWorker, {self(), id, p}}
+    for page <- (old + 1)..new do
+      spec = {Marketmailer.PageWorker, {self(), id, page}}
 
       case DynamicSupervisor.start_child(Marketmailer.PageSup, spec) do
-        {:ok, _pid} ->
-          :ok
-
-        {:error, {:already_started, _pid}} ->
-          :ok
-
-        {:error, reason} ->
-          Logger.error("Failed to start page worker #{id}/#{p}: #{inspect(reason)}")
+        {:ok, _pid} -> :ok
+        {:error, {:already_started, _pid}} -> :ok
+        {:error, reason} -> Logger.error("Failed to start page worker #{id}/#{page}: #{inspect(reason)}")
       end
     end
 
@@ -218,12 +206,12 @@ defmodule Marketmailer.RegionManager do
   end
 
   defp adjust_workers(id, old, new) when new < old do
-    for p <- (new + 1)..old do
-      key = {:page, id, p}
+    for page <- (new + 1)..old do
+      key = {:page, id, page}
 
       case Registry.lookup(Marketmailer.Registry, key) do
         [{pid, _meta}] ->
-          Logger.debug("Stopping worker for region #{id} page #{p}")
+          Logger.debug("Stopping worker for region #{id} page #{page}")
           GenServer.stop(pid, :normal)
 
         [] ->
@@ -241,14 +229,10 @@ defmodule Marketmailer.PageWorker do
   use GenServer, restart: :transient
   require Logger
 
-  @moduledoc false
-
   def start_link({manager_pid, region_id, page}),
-    do:
-      GenServer.start_link(__MODULE__, {manager_pid, region_id, page}, name: via(region_id, page))
+    do: GenServer.start_link(__MODULE__, {manager_pid, region_id, page}, name: via(region_id, page))
 
-  defp via(region_id, page),
-    do: {:via, Registry, {Marketmailer.Registry, {:page, region_id, page}}}
+  defp via(region_id, page), do: {:via, Registry, {Marketmailer.Registry, {:page, region_id, page}}}
 
   @impl true
   def init({manager_pid, region_id, page}) do
@@ -268,7 +252,6 @@ defmodule Marketmailer.PageWorker do
         :work,
         %{manager: manager, region_id: region_id, page: page, errors: errors} = state
       ) do
-    # Respect global error-limit pause before each request
     Marketmailer.ESI.wait_for_error_window()
 
     new_state =
@@ -359,7 +342,6 @@ defmodule Marketmailer.ESI do
     headers =
       if etag, do: [{"If-None-Match", etag} | base_headers], else: base_headers
 
-    # Do not call wait_for_error_window here; workers already call it.
     case Req.get(url, headers: headers, pool_timeout: 69420) do
       {:ok, %{status: 200} = response} ->
         context = parse_metadata(response, url)
@@ -373,9 +355,7 @@ defmodule Marketmailer.ESI do
       {:ok, %{status: 304} = response} ->
         context = parse_metadata(response, url)
 
-        Logger.info(
-          "#{response.status} #{region_id} page #{page}\t#{format_ttl(context.ttl)} #{url}"
-        )
+        Logger.info("#{response.status} #{region_id} page #{page}\t#{format_ttl(context.ttl)} #{url}")
 
         {:not_modified, context}
 
@@ -395,9 +375,9 @@ defmodule Marketmailer.ESI do
     do: headers |> Map.get(key, []) |> List.first()
 
   defp parse_metadata(response, url) do
-    raw_pages        = header_first(response.headers, "x-pages")
-    etag             = header_first(response.headers, "etag")
-    expires          = header_first(response.headers, "expires")
+    raw_pages = header_first(response.headers, "x-pages")
+    etag = header_first(response.headers, "etag")
+    expires = header_first(response.headers, "expires")
     raw_error_remain = header_first(response.headers, "x-esi-error-limit-remain")
 
     ttl_from_expires = calculate_ttl(expires)
