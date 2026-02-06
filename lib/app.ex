@@ -86,8 +86,18 @@ defmodule Marketmailer.RegionManager do
     end
   end
 
-  defp start_page(id, p),
-    do: DynamicSupervisor.start_child(Marketmailer.PageSup, {Marketmailer.PageWorker, {self(), id, p}})
+  defp start_page(id, p) do
+    case Registry.lookup(Marketmailer.Registry, {:page, id, p}) do
+      [] ->
+        DynamicSupervisor.start_child(
+          Marketmailer.PageSup,
+          {Marketmailer.PageWorker, {self(), id, p}}
+        )
+
+      _ ->
+        :ok
+    end
+  end
 
   defp stop_page(id, p) do
     for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, id, p}),
@@ -117,7 +127,6 @@ defmodule Marketmailer.PageWorker do
   def handle_info(:work, state) do
     if Marketmailer.ESI.maintenance_active?() do
       # Global maintenance is on. Try to extend the timer to "claim" the next 10s slot.
-      # If successfully updated the TS, this worker is the the 'chosen' pinger.
       if try_claim_ping() do
         perform_fetch(state)
       else
@@ -139,14 +148,14 @@ defmodule Marketmailer.PageWorker do
         Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
         Marketmailer.Database.upsert_orders(data)
         Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
-        notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
-        {:noreply, state}
+        new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+        {:noreply, new_state}
 
       {:not_modified, ctx} ->
         Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
         Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
-        notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
-        {:noreply, state}
+        new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+        {:noreply, new_state}
 
       # ESI is down. We already set the ETS flag in fetch/2.
       {:error, :service_unavailable, ctx} ->
@@ -157,7 +166,11 @@ defmodule Marketmailer.PageWorker do
       {:error, reason} ->
         delay = backoff_ms(errs)
         schedule_next(delay)
-        Logger.warning("Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s")
+
+        Logger.warning(
+          "Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
+        )
+
         {:noreply, %{state | errors: errs + 1}}
     end
   end
@@ -165,8 +178,7 @@ defmodule Marketmailer.PageWorker do
   defp try_claim_ping do
     # only one process 'wins' the right to ping during this 10s window.
     now = System.system_time(:millisecond)
-    # if current TS in ETS is still in future, don't ping.
-    # If this worker are the one to "push" the TS further, this worker bought the right.
+
     case :ets.lookup(:esi_error_state, :maintenance_mode) do
       [{:maintenance_mode, t}] when t > now ->
         false
@@ -183,8 +195,13 @@ defmodule Marketmailer.PageWorker do
     state
   end
 
-  defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
-  defp backoff_ms(errors), do: min((60_000 * :math.pow(2, errors)) |> round, 300_000)
+  # Add jitter to avoid all workers waking in lockstep
+  defp schedule_next(ms) do
+    Process.send_after(self(), :work, ms)
+  end
+
+  defp backoff_ms(errors),
+    do: min((60_000 * :math.pow(2, errors)) |> round, 300_000)
 
   defp format_ttl(ttl_ms) do
     total_seconds = div(ttl_ms, 1_000)
@@ -229,7 +246,7 @@ defmodule Marketmailer.ESI do
     headers =
       [{"User-Agent", Marketmailer.Application.user_agent()}] ++ if etag, do: [{"If-None-Match", etag}], else: []
 
-    case Req.get(url, headers: headers, pool_timeout: System.schedulers_online() * 1000) do
+    case Req.get(url, headers: headers, pool_timeout: :infinity) do
       {:ok, %{status: 200} = r} ->
         clear_maintenance()
         {:ok, r.body, meta(r, url)}
