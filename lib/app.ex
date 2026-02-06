@@ -2,6 +2,7 @@ defmodule Marketmailer.Application do
   use Application
 
   @user_agent "lostcoastwizard > BEAM me up, Scotty!"
+
   @regions [
     10_000_001,
     10_000_002,
@@ -123,7 +124,9 @@ defmodule Marketmailer.Application do
 
   @impl true
   def start(_type, _args) do
+    # ETS for ETag and error-limit state
     :ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
+    :ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 
     children = [
       Marketmailer.Database,
@@ -265,6 +268,9 @@ defmodule Marketmailer.PageWorker do
         :work,
         %{manager: manager, region_id: region_id, page: page, errors: errors} = state
       ) do
+    # Respect global error-limit pause before each request
+    Marketmailer.ESI.wait_for_error_window()
+
     new_state =
       case Marketmailer.ESI.fetch(region_id, page) do
         {:ok, data, context} ->
@@ -324,16 +330,36 @@ defmodule Marketmailer.ESI do
   @error_limit_threshold 100
   @error_limit_pause_ms 61_000
 
+  @error_state_table :esi_error_state
+  @error_state_key :blocked_until
+
+  # Public API called by workers
+  def wait_for_error_window do
+    now = System.system_time(:millisecond)
+
+    case :ets.lookup(@error_state_table, @error_state_key) do
+      [{@error_state_key, blocked_until}] when blocked_until > now ->
+        sleep = blocked_until - now
+        Logger.warning("ESI error limit low, pausing all requests for #{div(sleep, 1000)}s")
+        Process.sleep(sleep)
+
+      _ ->
+        :ok
+    end
+  end
+
   def fetch(region_id, page \\ 1) do
     url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
     etag = Marketmailer.Database.get_etag(url)
-    headers = [
+
+    base_headers = [
       {"User-Agent", Marketmailer.Application.user_agent()}
     ]
 
     headers =
-      if etag, do: [{"If-None-Match", etag} | headers], else: headers
+      if etag, do: [{"If-None-Match", etag} | base_headers], else: base_headers
 
+    # Do not call wait_for_error_window here; workers already call it.
     case Req.get(url, headers: headers, pool_timeout: 69420) do
       {:ok, %{status: 200} = response} ->
         context = parse_metadata(response, url)
@@ -354,6 +380,8 @@ defmodule Marketmailer.ESI do
         {:not_modified, context}
 
       {:ok, response} ->
+        # Even on non-200/304, we still want error-limit headers to apply
+        _ = parse_metadata(response, url)
         Logger.warning("#{response.status} #{region_id} page #{page}\t#{url}")
         {:error, response.status}
 
@@ -366,32 +394,39 @@ defmodule Marketmailer.ESI do
   defp header_first(headers, key),
     do: headers |> Map.get(key, []) |> List.first()
 
-defp parse_metadata(response, url) do
-  raw_pages        = header_first(response.headers, "x-pages")
-  etag             = header_first(response.headers, "etag")
-  expires          = header_first(response.headers, "expires")
-  raw_error_remain = header_first(response.headers, "x-esi-error-limit-remain")
+  defp parse_metadata(response, url) do
+    raw_pages        = header_first(response.headers, "x-pages")
+    etag             = header_first(response.headers, "etag")
+    expires          = header_first(response.headers, "expires")
+    raw_error_remain = header_first(response.headers, "x-esi-error-limit-remain")
 
-  ttl_from_expires = calculate_ttl(expires)
+    ttl_from_expires = calculate_ttl(expires)
 
-  ttl =
-    case Integer.parse(raw_error_remain || "") do
-      {remain, _} when remain < @error_limit_threshold ->
-        # force everyone who uses this context to wait at least 61s
-        max(ttl_from_expires, @error_limit_pause_ms)
+    ttl =
+      case Integer.parse(raw_error_remain || "") do
+        {remain, _} when remain < @error_limit_threshold ->
+          # Force everyone using this context to wait at least 61s
+          enforce_error_pause()
+          max(ttl_from_expires, @error_limit_pause_ms)
 
-      _ ->
-        ttl_from_expires
-    end
+        _ ->
+          ttl_from_expires
+      end
 
-  %{
-    url: url,
-    etag: etag,
-    ttl: ttl,
-    pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1)
-  }
-end
+    %{
+      url: url,
+      etag: etag,
+      ttl: ttl,
+      pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1)
+    }
+  end
 
+  # Record a global "blocked until" timestamp in ETS
+  defp enforce_error_pause do
+    now = System.system_time(:millisecond)
+    blocked_until = now + @error_limit_pause_ms
+    :ets.insert(@error_state_table, {@error_state_key, blocked_until})
+  end
 
   defp calculate_ttl(nil), do: 60_000
 
