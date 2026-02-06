@@ -146,7 +146,6 @@ defmodule Marketmailer.PageWorker do
         Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
         Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
         notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
-        notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
         {:noreply, state}
 
       # ESI is down. We already set the ETS flag in fetch/2.
