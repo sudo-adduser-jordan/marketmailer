@@ -99,6 +99,8 @@ defmodule Marketmailer.PageWorker do
   use GenServer, restart: :transient
   require Logger
 
+  @ping_interval 10_000
+
   def start_link({mgr, id, page}),
     do:
       GenServer.start_link(__MODULE__, {mgr, id, page},
@@ -113,30 +115,68 @@ defmodule Marketmailer.PageWorker do
 
   @impl true
   def handle_info(:work, state) do
+    if Marketmailer.ESI.maintenance_active?() do
+      # Global maintenance is on. Try to extend the timer to "claim" the next 10s slot.
+      # If we successfully update the TS, we are the 'chosen' pinger.
+      if try_claim_ping() do
+        perform_fetch(state)
+      else
+        # Another worker is already the designated pinger or we're waiting
+        schedule_next(@ping_interval)
+        {:noreply, state}
+      end
+    else
+      perform_fetch(state)
+    end
+  end
+
+  defp perform_fetch(state) do
     %{mgr: mgr, id: id, page: page, errors: errs} = state
     Marketmailer.ESI.wait_for_error_window()
 
-    new_state =
-      case Marketmailer.ESI.fetch(id, page) do
-        {:ok, data, ctx} ->
-          Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-          Marketmailer.Database.upsert_orders(data)
-          Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
-          notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+    case Marketmailer.ESI.fetch(id, page) do
+      {:ok, data, ctx} ->
+        Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+        Marketmailer.Database.upsert_orders(data)
+        Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
+        notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+        {:noreply, state}
 
-        {:not_modified, ctx} ->
-          Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-          Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
-          notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+      {:not_modified, ctx} ->
+        Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+        Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
+        notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+        notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+        {:noreply, state}
 
-        {:error, reason} ->
-          delay = backoff_ms(errs)
-          Logger.warning("Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s")
-          schedule_next(delay)
-          %{state | errors: errs + 1}
-      end
+      # ESI is down. We already set the ETS flag in fetch/2.
+      {:error, :service_unavailable, ctx} ->
+        Logger.info("503 #{id}     \t #{ctx.url}")
+        schedule_next(@ping_interval)
+        {:noreply, state}
 
-    {:noreply, new_state}
+      {:error, reason} ->
+        delay = backoff_ms(errs)
+        schedule_next(delay)
+        Logger.warning("Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s")
+        {:noreply, %{state | errors: errs + 1}}
+    end
+  end
+
+  defp try_claim_ping do
+    # Use ets:update_counter or a simple insert with a logic check to ensure
+    # only one process 'wins' the right to ping during this 10s window.
+    now = System.system_time(:millisecond)
+    # Simple version: if current TS in ETS is still in future, we don't ping.
+    # If we are the one to "push" the TS further, we bought the right.
+    case :ets.lookup(:esi_error_state, :maintenance_mode) do
+      [{:maintenance_mode, t}] when t > now ->
+        false
+
+      _ ->
+        :ets.insert(:esi_error_state, {:maintenance_mode, now + @ping_interval})
+        true
+    end
   end
 
   defp notify_and_reschedule(mgr, count, ttl, state) do
@@ -162,6 +202,9 @@ end
 
 defmodule Marketmailer.ESI do
   require Logger
+
+  @maint_key :maintenance_mode
+  @maint_ping_ms 10_000
   @error_limit_threshold 100
   @pause_ms 61_000
   @table :esi_error_state
@@ -190,10 +233,16 @@ defmodule Marketmailer.ESI do
 
     case Req.get(url, headers: headers, pool_timeout: 69420) do
       {:ok, %{status: 200} = r} ->
+        clear_maintenance()
         {:ok, r.body, meta(r, url)}
 
       {:ok, %{status: 304} = r} ->
+        clear_maintenance()
         {:not_modified, meta(r, url)}
+
+      {:ok, %{status: 503} = r} ->
+        activate_maintenance()
+        {:error, :service_unavailable, meta(r, url)}
 
       {:ok, r} ->
         _ = meta(r, url)
@@ -202,6 +251,20 @@ defmodule Marketmailer.ESI do
       {:error, e} ->
         Logger.error("#{region}/#{page} HTTP error: #{inspect(e)}")
         {:error, e}
+    end
+  end
+
+  defp activate_maintenance do
+    # Set a timestamp 10s in the future
+    :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
+  end
+
+  defp clear_maintenance, do: :ets.delete(@table, @maint_key)
+
+  def maintenance_active? do
+    case :ets.lookup(@table, @maint_key) do
+      [{@maint_key, t}] -> t > System.system_time(:millisecond)
+      _ -> false
     end
   end
 
