@@ -123,7 +123,6 @@ defmodule Marketmailer.Application do
 
   @impl true
   def start(_type, _args) do
-    # Optional:  memory cache ETS in front of DB
     :ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
 
     children = [
@@ -174,7 +173,6 @@ defmodule Marketmailer.RegionManager do
 
   @impl true
   def init(id) do
-    # start page 1 immediately, pass our pid as manager
     {:ok, _} =
       DynamicSupervisor.start_child(
         Marketmailer.PageSup,
@@ -186,7 +184,6 @@ defmodule Marketmailer.RegionManager do
 
   @impl true
   def handle_info({:update_page_count, new_count}, %{id: id, page_count: current} = state) do
-    # Never drop below 1 page, even if ESI says 0
     new_count = max(new_count, 1)
 
     if new_count != current do
@@ -324,12 +321,12 @@ defmodule Marketmailer.ESI do
 
   @moduledoc false
 
+  @error_limit_threshold 100
+  @error_limit_pause_ms 61_000
+
   def fetch(region_id, page \\ 1) do
     url = "https://esi.evetech.net/v1/markets/#{region_id}/orders/?page=#{page}"
-
-    # Read ETag from DB-backed cache (optionally mirror to ETS)
     etag = Marketmailer.Database.get_etag(url)
-    # Add the User-Agent to your headers list
     headers = [
       {"User-Agent", Marketmailer.Application.user_agent()}
     ]
@@ -337,7 +334,7 @@ defmodule Marketmailer.ESI do
     headers =
       if etag, do: [{"If-None-Match", etag} | headers], else: headers
 
-    case Req.get(url, headers: headers, pool_timeout: :infinity) do
+    case Req.get(url, headers: headers, pool_timeout: 69420) do
       {:ok, %{status: 200} = response} ->
         context = parse_metadata(response, url)
 
@@ -369,18 +366,32 @@ defmodule Marketmailer.ESI do
   defp header_first(headers, key),
     do: headers |> Map.get(key, []) |> List.first()
 
-  defp parse_metadata(response, url) do
-    raw_pages = header_first(response.headers, "x-pages")
-    etag = header_first(response.headers, "etag")
-    expires = header_first(response.headers, "expires")
+defp parse_metadata(response, url) do
+  raw_pages        = header_first(response.headers, "x-pages")
+  etag             = header_first(response.headers, "etag")
+  expires          = header_first(response.headers, "expires")
+  raw_error_remain = header_first(response.headers, "x-esi-error-limit-remain")
 
-    %{
-      url: url,
-      etag: etag,
-      ttl: calculate_ttl(expires),
-      pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1)
-    }
-  end
+  ttl_from_expires = calculate_ttl(expires)
+
+  ttl =
+    case Integer.parse(raw_error_remain || "") do
+      {remain, _} when remain < @error_limit_threshold ->
+        # force everyone who uses this context to wait at least 61s
+        max(ttl_from_expires, @error_limit_pause_ms)
+
+      _ ->
+        ttl_from_expires
+    end
+
+  %{
+    url: url,
+    etag: etag,
+    ttl: ttl,
+    pages: if(raw_pages, do: String.to_integer(raw_pages), else: 1)
+  }
+end
+
 
   defp calculate_ttl(nil), do: 60_000
 
@@ -388,8 +399,7 @@ defmodule Marketmailer.ESI do
     with {{_, _, _}, {_, _, _}} = erl_dt <-
            :httpd_util.convert_request_date(String.to_charlist(expires)),
          datetime <- DateTime.from_naive!(NaiveDateTime.from_erl!(erl_dt), "Etc/UTC") do
-      # at least 5 seconds, in ms
-      max(DateTime.diff(datetime, DateTime.utc_now(), :millisecond), 5_000)
+      max(DateTime.diff(datetime, DateTime.utc_now(), :millisecond), 5_000) + 1000
     else
       _ ->
         60_000
@@ -460,7 +470,6 @@ defmodule Marketmailer.Database do
 
   ## ETag helpers
 
-  # For reads, optionally use ETS first for speed, then fall back to DB.
   def get_etag(url) do
     etag_from_ets =
       case :ets.lookup(:market_cache, url) do
@@ -484,7 +493,6 @@ defmodule Marketmailer.Database do
     end
   end
 
-  # Single-row per URL, older rows effectively removed/overwritten.
   def upsert_etag(nil, _etag), do: :ok
   def upsert_etag(_url, nil), do: :ok
 
@@ -505,7 +513,6 @@ defmodule Marketmailer.Database do
       conflict_target: :url
     )
 
-    # Keep ETS in sync as a write-through cache
     :ets.insert(:market_cache, {url, etag})
     :ok
   end
@@ -565,7 +572,6 @@ defmodule Marketmailer.EtagWarmup do
 
   @impl true
   def handle_info(:warmup, state) do
-    # Load all etags into ETS (if you expect millions, switch to streaming / limit)
     Marketmailer.Database.all(from e in Etag, select: {e.url, e.etag})
     |> Enum.each(fn {url, etag} ->
       :ets.insert(:market_cache, {url, etag})
