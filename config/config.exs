@@ -18,6 +18,6 @@ config :marketmailer, Marketmailer.Database,
   log: false
 
 
-config :marketmailer,
-  mail_from: System.get_env("MAIL_FROM"),
-  mail_to: System.get_env("MAIL_TO")
+config :marketmailer, Marketmailer.Mailer,
+  adapter: Swoosh.Adapters.Resend,
+  api_key: System.get_env("RESEND_TOKEN")

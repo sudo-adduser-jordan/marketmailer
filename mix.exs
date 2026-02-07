@@ -24,11 +24,8 @@ defmodule Marketmailer.MixProject do
       {:req, "~> 0.5.0"},
       {:ecto_sql, "~> 3.0"},
       {:postgrex, ">= 0.0.0"},
-      {:swoosh, "~> 1.19"},
-      {:gen_smtp, "~> 1.0"},
-      # required by Swoosh.Adapters.Gmail
-      {:mail, ">= 0.0.0"},
-      {:hackney, "~> 1.9"},
+      {:swoosh, "~> 1.21"},
+      {:hackney, "~> 1.9"}
     ]
   end
 

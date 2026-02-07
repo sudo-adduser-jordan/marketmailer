@@ -450,14 +450,14 @@ defmodule Marketmailer.MailWorker do
 
   @impl true
   def init(_) do
-    send_cheapest_order_email()
+    # send_cheapest_order_email()
     schedule_tick()
     {:ok, %{}}
   end
 
   @impl true
   def handle_info(:tick, state) do
-    send_cheapest_order_email()
+    # send_cheapest_order_email()
     schedule_tick()
     {:noreply, state}
   end
@@ -478,34 +478,47 @@ defmodule Marketmailer.MailWorker do
   end
 
   defp deliver_email(order) do
-    from = Application.fetch_env!(:marketmailer, :mail_from)
-    to = Application.fetch_env!(:marketmailer, :mail_to)
+    # IO.inspects(token)
 
-    email =
-      Swoosh.Email.new()
-      |> Swoosh.Email.from(from)
-      |> Swoosh.Email.to(to)
-      |> Swoosh.Email.subject("Cheapest market order")
-      |> Swoosh.Email.text_body("""
-      Cheapest order:
+    # from = Application.fetch_env!(:marketmailer, :mail_from)
+    # to = Application.fetch_env!(:marketmailer, :mail_to)
+    # from = "no-reply@localhost"
 
-      Order ID: #{order.order_id}
-      Price: #{order.price}
-      Type ID: #{order.type_id}
-      Volume: #{order.volume_remain}/#{order.volume_total}
-      Location: #{order.location_id}
-      """)
+    email = Swoosh.Email.new()
+    |> Swoosh.Email.from("onboarding@resend.dev")
+    |> Swoosh.Email.to("sudo.sendmail.jordan@gmail.com")
+    |> Swoosh.Email.subject("Hello!")
+    |> Swoosh.Email.html_body("<strong>Hello</strong>")
+    |> Swoosh.Email.put_provider_option(:tags, [%{name: "category", value: "confirm_email"}])
+    # |> Swoosh.Email.put_provider_option(:scheduled_at, "2024-08-05T11:52:01.858Z")
+    |> Swoosh.Email.put_provider_option(:idempotency_key, "some-unique-key-123")
+    |> Swoosh.Email.header("X-Custom-Header", "CustomValue")
 
-    # token = System.get_env("GMAIL_API_ACCESS_TOKEN")
-    # Logger.debug("Token length: #{String.length(token || "nil")}, starts with: #{String.slice(token || "nil", 0, 10)}")
-    # case Marketmailer.Mailer.deliver(email, access_token: token) do
 
-    case Marketmailer.Mailer.deliver(email) do
-      {:ok, meta} ->
-        Logger.info("Mail sent: #{inspect(meta)}")
 
-      {:error, reason} ->
-        Logger.error("Failed to send email: #{inspect(reason)}")
-    end
+    # email =
+    #   Swoosh.Email.new()
+    #   |> Swoosh.Email.from({"marketmailer", "no-reply@myapp.com"})
+    #   # |> Swoosh.Email.from(from)
+    #   # |> Swoosh.Email.to(to)
+    #   |> Swoosh.Email.to("sudo.sendmail.jordan@gmail.com")
+    #   |> Swoosh.Email.subject("Cheapest market order")
+    #   |> Swoosh.Email.text_body("""
+    #   Cheapest order:
+
+    #   Order ID: #{order.order_id}
+    #   Price: #{order.price}
+    #   Type ID: #{order.type_id}
+    #   Volume: #{order.volume_remain}/#{order.volume_total}
+    #   Location: #{order.location_id}
+    #   """)
+
+  case Marketmailer.Mailer.deliver(email) do
+    {:ok, response} ->
+      Logger.info("Email sent successfully: #{inspect(response)}")
+
+    {:error, reason} ->
+      Logger.error("Failed to send email: #{inspect(reason)}")
+  end
   end
 end
