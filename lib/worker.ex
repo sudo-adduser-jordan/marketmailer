@@ -90,7 +90,7 @@ defmodule Marketmailer.PageWorker do
 	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
 	defp backoff_ms(errors), do: (60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
 
-	defp format_ttl(ttl_ms) do
+	def format_ttl(ttl_ms) do
 		total_seconds = div(ttl_ms, 1_000)
 		minutes = div(total_seconds, 60)
 		seconds = rem(total_seconds, 60)
