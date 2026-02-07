@@ -1,524 +1,529 @@
 defmodule Marketmailer.Application do
-  use Application
+	use Application
 
-  @user_agent "lostcoastwizard > BEAM me up, Scotty!"
-  @regions Enum.concat([
-             10_000_001..10_000_070,
-             [10_001_000],
-             11_000_001..11_000_033,
-             12_000_001..12_000_005,
-             14_000_001..14_000_005,
-             [19_000_001]
-           ])
-           |> Enum.to_list()
+	@user_agent "lostcoastwizard > BEAM me up, Scotty!"
+	@regions [
+						 10_000_001..10_000_070,
+						 [10_001_000],
+						 11_000_001..11_000_033,
+						 12_000_001..12_000_005,
+						 14_000_001..14_000_005,
+						 [19_000_001]
+					 ]
+					 |> Enum.concat()
+					 |> Enum.to_list()
 
-  def user_agent, do: @user_agent
-  def regions, do: @regions
+	def user_agent, do: @user_agent
+	def regions, do: @regions
 
-  @impl true
-  def start(_type, _args) do
-    :ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
-    :ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
+	@impl true
+	def start(_type, _args) do
+		:ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
+		:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 
-    children = [
-      Marketmailer.Database,
-      {Registry, keys: :unique, name: Marketmailer.Registry},
-      {DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
-      {Task.Supervisor, name: Marketmailer.TaskSup},
-      Marketmailer.RegionManagerSupervisor,
-      Marketmailer.EtagWarmup,
-      Marketmailer.MailWorker
-    ]
+		children = [
+			Marketmailer.Database,
+			{Registry, keys: :unique, name: Marketmailer.Registry},
+			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
+			{Task.Supervisor, name: Marketmailer.TaskSup},
+			Marketmailer.RegionManagerSupervisor,
+			Marketmailer.EtagWarmup,
+			Marketmailer.MailWorker
+		]
 
-    opts = [
-      strategy: :one_for_one,
-      name: Marketmailer.Supervisor
-    ]
+		opts = [
+			strategy: :one_for_one,
+			name: Marketmailer.Supervisor
+		]
 
-    Supervisor.start_link(children, opts)
-  end
+		Supervisor.start_link(children, opts)
+	end
 end
 
 defmodule Marketmailer.RegionManagerSupervisor do
-  use Supervisor
-  def start_link(_), do: Supervisor.start_link(__MODULE__, [], name: __MODULE__)
+	use Supervisor
 
-  @impl true
-  def init(_) do
-    children =
-      for id <- Marketmailer.Application.regions(),
-          do: Supervisor.child_spec({Marketmailer.RegionManager, id}, id: {:region_manager, id})
+	def start_link(_), do: Supervisor.start_link(__MODULE__, [], name: __MODULE__)
 
-    Supervisor.init(children, strategy: :one_for_one)
-  end
+	@impl true
+	def init(_) do
+		children =
+			for id <- Marketmailer.Application.regions(),
+					do: Supervisor.child_spec({Marketmailer.RegionManager, id}, id: {:region_manager, id})
+
+		Supervisor.init(children, strategy: :one_for_one)
+	end
 end
 
 defmodule Marketmailer.RegionManager do
-  use GenServer, restart: :permanent
-  require Logger
+	@moduledoc false
+	use GenServer, restart: :permanent
 
-  def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
-  defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
+	require Logger
 
-  @impl true
-  def init(id) do
-    start_page(id, 1)
-    {:ok, %{id: id, page_count: 1}}
-  end
+	def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
+	defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
 
-  @impl true
-  def handle_info({:update_page_count, count}, %{id: id, page_count: old} = state) do
-    count = max(count, 1)
+	@impl true
+	def init(id) do
+		start_page(id, 1)
+		{:ok, %{id: id, page_count: 1}}
+	end
 
-    if count != old do
-      Logger.debug("Region #{id}: pages #{old} -> #{count}")
-      adjust_workers(id, old, count)
-      {:noreply, %{state | page_count: count}}
-    else
-      {:noreply, state}
-    end
-  end
+	@impl true
+	def handle_info({:update_page_count, count}, %{id: id, page_count: old} = state) do
+		count = max(count, 1)
 
-  defp adjust_workers(id, old, new) do
-    cond do
-      new > old -> Enum.each((old + 1)..new, &start_page(id, &1))
-      new < old -> Enum.each((new + 1)..old, &stop_page(id, &1))
-      true -> :ok
-    end
-  end
+		if count == old do
+			{:noreply, state}
+		else
+			Logger.debug("Region #{id}: pages #{old} -> #{count}")
+			adjust_workers(id, old, count)
+			{:noreply, %{state | page_count: count}}
+		end
+	end
 
-  defp start_page(id, p) do
-    case Registry.lookup(Marketmailer.Registry, {:page, id, p}) do
-      [] ->
-        DynamicSupervisor.start_child(
-          Marketmailer.PageSup,
-          {Marketmailer.PageWorker, {self(), id, p}}
-        )
+	defp adjust_workers(id, old, new) do
+		cond do
+			new > old -> Enum.each((old + 1)..new, &start_page(id, &1))
+			new < old -> Enum.each((new + 1)..old, &stop_page(id, &1))
+			true -> :ok
+		end
+	end
 
-      _ ->
-        :ok
-    end
-  end
+	defp start_page(id, p) do
+		case Registry.lookup(Marketmailer.Registry, {:page, id, p}) do
+			[] ->
+				DynamicSupervisor.start_child(
+					Marketmailer.PageSup,
+					{Marketmailer.PageWorker, {self(), id, p}}
+				)
 
-  defp stop_page(id, p) do
-    for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, id, p}),
-        do: GenServer.stop(pid, :normal)
-  end
+			_ ->
+				:ok
+		end
+	end
+
+	defp stop_page(id, p) do
+		for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, id, p}),
+				do: GenServer.stop(pid, :normal)
+	end
 end
 
 defmodule Marketmailer.PageWorker do
-  use GenServer, restart: :transient
-  require Logger
+	@moduledoc false
+	use GenServer, restart: :transient
 
-  @ping_interval 10_000
+	require Logger
 
-  def start_link({mgr, id, page}),
-    do:
-      GenServer.start_link(__MODULE__, {mgr, id, page},
-        name: {:via, Registry, {Marketmailer.Registry, {:page, id, page}}}
-      )
+	@ping_interval 10_000
 
-  @impl true
-  def init({mgr, id, page}) do
-    send(self(), :work)
-    {:ok, %{mgr: mgr, id: id, page: page, errors: 0}}
-  end
+	def start_link({mgr, id, page}),
+		do:
+			GenServer.start_link(__MODULE__, {mgr, id, page},
+				name: {:via, Registry, {Marketmailer.Registry, {:page, id, page}}}
+			)
 
-  @impl true
-  def handle_info(:work, state) do
-    if Marketmailer.ESI.maintenance_active?() do
-      # Global maintenance is on. Try to extend the timer to "claim" the next 10s slot.
-      if try_claim_ping() do
-        perform_fetch(state)
-      else
-        # Another worker is already the designated pinger or waiting
-        schedule_next(@ping_interval)
-        {:noreply, state}
-      end
-    else
-      perform_fetch(state)
-    end
-  end
+	@impl true
+	def init({mgr, id, page}) do
+		send(self(), :work)
+		{:ok, %{mgr: mgr, id: id, page: page, errors: 0}}
+	end
 
-  defp perform_fetch(state) do
-    %{mgr: mgr, id: id, page: page, errors: errs} = state
-    Marketmailer.ESI.wait_for_error_window()
+	@impl true
+	def handle_info(:work, state) do
+		if Marketmailer.ESI.maintenance_active?() do
+			# Global maintenance is on. Try to extend the timer to "claim" the next 10s slot.
+			if try_claim_ping() do
+				perform_fetch(state)
+			else
+				# Another worker is already the designated pinger or waiting
+				schedule_next(@ping_interval)
+				{:noreply, state}
+			end
+		else
+			perform_fetch(state)
+		end
+	end
 
-    case Marketmailer.ESI.fetch(id, page) do
-      {:ok, data, ctx} ->
-        # Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-        Marketmailer.Database.upsert_orders(data)
-        Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
-        new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
-        {:noreply, new_state}
+	defp perform_fetch(state) do
+		%{mgr: mgr, id: id, page: page, errors: errs} = state
+		Marketmailer.ESI.wait_for_error_window()
 
-      {:not_modified, ctx} ->
-        # Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-        Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
-        new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
-        {:noreply, new_state}
+		case Marketmailer.ESI.fetch(id, page) do
+			{:ok, data, ctx} ->
+				# Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+				Marketmailer.Database.upsert_orders(data)
+				Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
+				new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+				{:noreply, new_state}
 
-      {:error, :service_unavailable, ctx} ->
-        Logger.info("503 #{id}     \t #{ctx.url}")
-        schedule_next(@ping_interval)
-        {:noreply, state}
+			{:not_modified, ctx} ->
+				# Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+				Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
+				new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
+				{:noreply, new_state}
 
-      {:error, reason} ->
-        delay = backoff_ms(errs)
-        schedule_next(delay)
+			{:error, :service_unavailable, ctx} ->
+				Logger.info("503 #{id}     \t #{ctx.url}")
+				schedule_next(@ping_interval)
+				{:noreply, state}
 
-        Logger.warning("Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s")
+			{:error, reason} ->
+				delay = backoff_ms(errs)
+				schedule_next(delay)
 
-        {:noreply, %{state | errors: errs + 1}}
-    end
-  end
+				Logger.warning(
+					"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
+				)
 
-  defp try_claim_ping do
-    # only one process 'wins' the right to ping during this 10s window.
-    now = System.system_time(:millisecond)
+				{:noreply, %{state | errors: errs + 1}}
+		end
+	end
 
-    case :ets.lookup(:esi_error_state, :maintenance_mode) do
-      [{:maintenance_mode, t}] when t > now ->
-        false
+	defp try_claim_ping do
+		# only one process 'wins' the right to ping during this 10s window.
+		now = System.system_time(:millisecond)
 
-      _ ->
-        :ets.insert(:esi_error_state, {:maintenance_mode, now + @ping_interval})
-        true
-    end
-  end
+		case :ets.lookup(:esi_error_state, :maintenance_mode) do
+			[{:maintenance_mode, t}] when t > now ->
+				false
 
-  defp notify_and_reschedule(mgr, count, ttl, state) do
-    send(mgr, {:update_page_count, count})
-    schedule_next(ttl)
-    state
-  end
+			_ ->
+				:ets.insert(:esi_error_state, {:maintenance_mode, now + @ping_interval})
+				true
+		end
+	end
 
-  defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
+	defp notify_and_reschedule(mgr, count, ttl, state) do
+		send(mgr, {:update_page_count, count})
+		schedule_next(ttl)
+		state
+	end
 
-  defp backoff_ms(errors),
-    do: min((60_000 * :math.pow(2, errors)) |> round, 300_000)
+	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
+	defp backoff_ms(errors), do: (60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
 
-  defp format_ttl(ttl_ms) do
-    total_seconds = div(ttl_ms, 1_000)
-    minutes = div(total_seconds, 60)
-    seconds = rem(total_seconds, 60)
+	defp format_ttl(ttl_ms) do
+		total_seconds = div(ttl_ms, 1_000)
+		minutes = div(total_seconds, 60)
+		seconds = rem(total_seconds, 60)
 
-    min = String.pad_leading("#{minutes}", 2, "0")
-    sec = String.pad_leading("#{seconds}", 2, "0")
+		min = String.pad_leading("#{minutes}", 2, "0")
+		sec = String.pad_leading("#{seconds}", 2, "0")
 
-    "#{min}:#{sec}"
-  end
+		"#{min}:#{sec}"
+	end
 end
 
 defmodule Marketmailer.ESI do
-  require Logger
+	require Logger
 
-  @maint_key :maintenance_mode
-  @maint_ping_ms 10_000
-  @error_limit_threshold 100
-  @pause_ms 61_000
-  @table :esi_error_state
-  @key :blocked_until
+	@maint_key :maintenance_mode
+	@maint_ping_ms 10_000
+	@error_limit_threshold 100
+	@pause_ms 61_000
+	@table :esi_error_state
+	@key :blocked_until
 
-  def wait_for_error_window do
-    now = System.system_time(:millisecond)
+	def wait_for_error_window do
+		now = System.system_time(:millisecond)
 
-    case :ets.lookup(@table, @key) do
-      [{@key, t}] when t > now ->
-        sleep = t - now
-        Logger.warning("ESI limit low, pausing #{div(sleep, 1000)}s")
-        Process.sleep(sleep)
+		case :ets.lookup(@table, @key) do
+			[{@key, t}] when t > now ->
+				sleep = t - now
+				Logger.warning("ESI limit low, pausing #{div(sleep, 1000)}s")
+				Process.sleep(sleep)
 
-      _ ->
-        :ok
-    end
-  end
+			_ ->
+				:ok
+		end
+	end
 
-  def fetch(region, page \\ 1) do
-    url = "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
-    etag = Marketmailer.Database.get_etag(url)
+	def fetch(region, page \\ 1) do
+		url = "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
+		etag = Marketmailer.Database.get_etag(url)
 
-    headers =
-      [{"User-Agent", Marketmailer.Application.user_agent()}] ++ if etag, do: [{"If-None-Match", etag}], else: []
+		headers =
+			[{"User-Agent", Marketmailer.Application.user_agent()}] ++
+				if etag, do: [{"If-None-Match", etag}], else: []
 
-    case Req.get(url, headers: headers, pool_timeout: :infinity) do
-      {:ok, %{status: 200} = r} ->
-        clear_maintenance()
-        {:ok, r.body, meta(r, url)}
+		case Req.get(url, headers: headers, pool_timeout: :infinity) do
+			{:ok, %{status: 200} = r} ->
+				clear_maintenance()
+				{:ok, r.body, meta(r, url)}
 
-      {:ok, %{status: 304} = r} ->
-        clear_maintenance()
-        {:not_modified, meta(r, url)}
+			{:ok, %{status: 304} = r} ->
+				clear_maintenance()
+				{:not_modified, meta(r, url)}
 
-      {:ok, %{status: 503} = r} ->
-        activate_maintenance()
-        {:error, :service_unavailable, meta(r, url)}
+			{:ok, %{status: 503} = r} ->
+				activate_maintenance()
+				{:error, :service_unavailable, meta(r, url)}
 
-      {:ok, r} ->
-        _ = meta(r, url)
-        {:error, r.status}
+			{:ok, r} ->
+				_ = meta(r, url)
+				{:error, r.status}
 
-      {:error, e} ->
-        Logger.error("#{region}/#{page} HTTP error: #{inspect(e)}")
-        {:error, e}
-    end
-  end
+			{:error, e} ->
+				Logger.error("#{region}/#{page} HTTP error: #{inspect(e)}")
+				{:error, e}
+		end
+	end
 
-  # Set a timestamp 10s in the future
-  defp activate_maintenance, do: :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
+	# Set a timestamp 10s in the future
+	defp activate_maintenance,
+		do: :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
 
-  defp clear_maintenance, do: :ets.delete(@table, @maint_key)
+	defp clear_maintenance, do: :ets.delete(@table, @maint_key)
 
-  def maintenance_active? do
-    case :ets.lookup(@table, @maint_key) do
-      [{@maint_key, t}] -> t > System.system_time(:millisecond)
-      _ -> false
-    end
-  end
+	def maintenance_active? do
+		case :ets.lookup(@table, @maint_key) do
+			[{@maint_key, t}] -> t > System.system_time(:millisecond)
+			_ -> false
+		end
+	end
 
-  defp meta(r, url) do
-    error_rem = first(r.headers, "x-esi-error-limit-remain")
-    ttl = calc_ttl(first(r.headers, "expires"))
-    ttl = if remain(error_rem) < @error_limit_threshold, do: enforce_pause(ttl), else: ttl
+	defp meta(r, url) do
+		error_rem = first(r.headers, "x-esi-error-limit-remain")
+		ttl = calc_ttl(first(r.headers, "expires"))
+		ttl = if remain(error_rem) < @error_limit_threshold, do: enforce_pause(ttl), else: ttl
 
-    %{
-      url: url,
-      etag: first(r.headers, "etag"),
-      ttl: ttl,
-      pages: String.to_integer(first(r.headers, "x-pages") || "1")
-    }
-  end
+		%{
+			url: url,
+			etag: first(r.headers, "etag"),
+			ttl: ttl,
+			pages: String.to_integer(first(r.headers, "x-pages") || "1")
+		}
+	end
 
-  defp remain(nil), do: 999
-  defp remain(v), do: Integer.parse(v) |> elem(0)
-  defp first(h, k), do: Map.get(h, k, []) |> List.first()
+	defp remain(nil), do: 999
+	defp remain(v), do: v |> Integer.parse() |> elem(0)
+	defp first(h, k), do: h |> Map.get(k, []) |> List.first()
 
-  defp enforce_pause(ttl) do
-    now = System.system_time(:millisecond)
-    :ets.insert(@table, {@key, now + @pause_ms})
-    max(ttl, @pause_ms)
-  end
+	defp enforce_pause(ttl) do
+		now = System.system_time(:millisecond)
+		:ets.insert(@table, {@key, now + @pause_ms})
+		max(ttl, @pause_ms)
+	end
 
-  defp calc_ttl(nil), do: 60_000
+	defp calc_ttl(nil), do: 60_000
 
-  defp calc_ttl(exp) do
-    with {{_, _, _}, {_, _, _}} = erl <- :httpd_util.convert_request_date(to_charlist(exp)),
-         dt <- DateTime.from_naive!(NaiveDateTime.from_erl!(erl), "Etc/UTC") do
-      max(DateTime.diff(dt, DateTime.utc_now(), :millisecond), 5_000) + 1_000
-    else
-      _ -> 60_000
-    end
-  end
+	defp calc_ttl(exp) do
+		case :httpd_util.convert_request_date(to_charlist(exp)) do
+			{{_, _, _}, {_, _, _}} = erl ->
+				dt = DateTime.from_naive!(NaiveDateTime.from_erl!(erl), "Etc/UTC")
+				max(DateTime.diff(dt, DateTime.utc_now(), :millisecond), 5_000) + 1_000
+
+			_ ->
+				60_000
+		end
+	end
 end
 
 defmodule Marketmailer.Database do
-  use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
-  import Ecto.Query
+	@moduledoc false
+	use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
 
-  @fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
+	import Ecto.Query
 
-  def upsert_orders([]), do: :ok
+	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
 
-  def upsert_orders(orders) do
-    ts = NaiveDateTime.utc_now(:second)
+	def upsert_orders([]), do: :ok
 
-    rows =
-      for o <- orders do
-        base = for f <- @fields, into: %{}, do: {f, o[Atom.to_string(f)]}
-        Map.merge(base, %{inserted_at: ts, updated_at: ts})
-      end
+	def upsert_orders(orders) do
+		ts = NaiveDateTime.utc_now(:second)
 
-    insert_all(Market, rows, on_conflict: {:replace, @fields}, conflict_target: :order_id)
-  end
+		rows =
+			Enum.map(orders, fn o ->
+				@fields
+				|> Map.new(fn f -> {f, o[Atom.to_string(f)]} end)
+				|> Map.merge(%{inserted_at: ts, updated_at: ts})
+			end)
 
-  def get_etag(url) do
-    case :ets.lookup(:market_cache, url) do
-      [{^url, etag}] -> etag
-      _ -> fetch_etag(url)
-    end
-  end
+		insert_all(Market, rows, on_conflict: {:replace, @fields}, conflict_target: :order_id)
+	end
 
-  defp fetch_etag(url) do
-    case one(from e in Etag, where: e.url == ^url, select: e.etag) do
-      nil ->
-        nil
+	def get_etag(url) do
+		case :ets.lookup(:market_cache, url) do
+			[{^url, etag}] -> etag
+			_ -> fetch_etag(url)
+		end
+	end
 
-      etag ->
-        :ets.insert(:market_cache, {url, etag})
-        etag
-    end
-  end
+	defp fetch_etag(url) do
+		case one(from e in Etag, where: e.url == ^url, select: e.etag) do
+			nil ->
+				nil
 
-  def upsert_etag(nil, _), do: :ok
-  def upsert_etag(_, nil), do: :ok
+			etag ->
+				:ets.insert(:market_cache, {url, etag})
+				etag
+		end
+	end
 
-  def upsert_etag(url, etag) do
-    now = NaiveDateTime.utc_now(:second)
+	def upsert_etag(nil, _), do: :ok
+	def upsert_etag(_, nil), do: :ok
 
-    insert_all(Etag, [%{url: url, etag: etag, inserted_at: now, updated_at: now}],
-      on_conflict: {:replace, [:etag, :updated_at]},
-      conflict_target: :url
-    )
+	def upsert_etag(url, etag) do
+		now = NaiveDateTime.utc_now(:second)
 
-    :ets.insert(:market_cache, {url, etag})
-  end
+		insert_all(Etag, [%{url: url, etag: etag, inserted_at: now, updated_at: now}],
+			on_conflict: {:replace, [:etag, :updated_at]},
+			conflict_target: :url
+		)
 
-  def cheapest_order do
-    Market
-    |> order_by(asc: :price)
-    |> limit(1)
-    |> one()
-  end
+		:ets.insert(:market_cache, {url, etag})
+	end
 
-  def cheapest_order_for_type(type_id) do
-    Market
-    |> where([m], m.type_id == ^type_id)
-    |> order_by(asc: :price)
-    |> limit(1)
-    |> one()
-  end
+	def cheapest_order do
+		Market
+		|> order_by(asc: :price)
+		|> limit(1)
+		|> one()
+	end
+
+	def cheapest_order_for_type(type_id) do
+		Market
+		|> where([m], m.type_id == ^type_id)
+		|> order_by(asc: :price)
+		|> limit(1)
+		|> one()
+	end
 end
 
 defmodule Market do
-  use Ecto.Schema
+	@moduledoc false
+	use Ecto.Schema
 
-  @primary_key false
-  schema "market" do
-    field :order_id, :id, primary_key: true
-    field :duration, :integer
-    field :is_buy_order, :boolean
-    field :issued, :string
-    field :location_id, :integer
-    field :min_volume, :integer
-    field :price, :float
-    field :range, :string
-    field :system_id, :integer
-    field :type_id, :integer
-    field :volume_remain, :integer
-    field :volume_total, :integer
-    timestamps()
-  end
+	@primary_key false
+	schema "market" do
+		field :order_id, :id, primary_key: true
+		field :duration, :integer
+		field :is_buy_order, :boolean
+		field :issued, :string
+		field :location_id, :integer
+		field :min_volume, :integer
+		field :price, :float
+		field :range, :string
+		field :system_id, :integer
+		field :type_id, :integer
+		field :volume_remain, :integer
+		field :volume_total, :integer
+		timestamps()
+	end
 end
 
 defmodule Etag do
-  use Ecto.Schema
-  import Ecto.Changeset
+	@moduledoc false
+	use Ecto.Schema
 
-  schema "etags" do
-    field :etag, :string
-    field :url, :string
-    timestamps()
-  end
+	import Ecto.Changeset
 
-  def changeset(etag, attrs),
-    do: etag |> cast(attrs, [:url, :etag]) |> validate_required([:url, :etag]) |> unique_constraint(:url)
+	schema "etags" do
+		field :etag, :string
+		field :url, :string
+		timestamps()
+	end
+
+	def changeset(etag, attrs),
+		do:
+			etag
+			|> cast(attrs, [:url, :etag])
+			|> validate_required([:url, :etag])
+			|> unique_constraint(:url)
 end
 
 defmodule Marketmailer.EtagWarmup do
-  use GenServer
-  import Ecto.Query
+	@moduledoc false
+	use GenServer
 
-  def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
+	import Ecto.Query
 
-  @impl true
-  def init(_) do
-    send(self(), :warmup)
-    {:ok, %{}}
-  end
+	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
-  @impl true
-  def handle_info(:warmup, s) do
-    for {url, e} <- Marketmailer.Database.all(from e in Etag, select: {e.url, e.etag}),
-        do: :ets.insert(:market_cache, {url, e})
+	@impl true
+	def init(_) do
+		send(self(), :warmup)
+		{:ok, %{}}
+	end
 
-    {:noreply, s}
-  end
+	@impl true
+	def handle_info(:warmup, s) do
+		for {url, e} <- Marketmailer.Database.all(from e in Etag, select: {e.url, e.etag}),
+				do: :ets.insert(:market_cache, {url, e})
+
+		{:noreply, s}
+	end
 end
 
 defmodule Marketmailer.Mailer do
-  use Swoosh.Mailer, otp_app: :marketmailer
+	@moduledoc false
+	use Swoosh.Mailer, otp_app: :marketmailer
 end
 
 defmodule Marketmailer.MailWorker do
-  use GenServer
-  require Logger
+	@moduledoc false
+	use GenServer
 
-  @interval :timer.seconds(60)
+	require Logger
 
-  def start_link(_),
-    do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
+	@interval to_timeout(minute: 1)
 
-  @impl true
-  def init(_) do
-    # send_cheapest_order_email()
-    schedule_tick()
-    {:ok, %{}}
-  end
+	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
-  @impl true
-  def handle_info(:tick, state) do
-    # send_cheapest_order_email()
-    schedule_tick()
-    {:noreply, state}
-  end
+	@impl true
+	def init(_) do
+		send_cheapest_order_email()
+		schedule_tick()
+		{:ok, %{}}
+	end
 
-  defp schedule_tick do
-    Process.send_after(self(), :tick, @interval)
-  end
+	@impl true
+	def handle_info(:tick, state) do
+		# send_cheapest_order_email()
+		schedule_tick()
+		{:noreply, state}
+	end
 
-  defp send_cheapest_order_email do
-    case Marketmailer.Database.cheapest_order() do
-      nil ->
-        Logger.debug("No orders available; skipping mail")
+	defp schedule_tick do
+		Process.send_after(self(), :tick, @interval)
+	end
 
-      order ->
-        Logger.info("Sending mail for cheapest order #{order.order_id} at #{order.price}")
-        deliver_email(order)
-    end
-  end
+	defp send_cheapest_order_email do
+		case Marketmailer.Database.cheapest_order() do
+			nil ->
+				Logger.debug("No orders available; skipping mail")
 
-  defp deliver_email(order) do
-    # IO.inspects(token)
+			order ->
+				Logger.info("Sending mail for cheapest order #{order.order_id} at #{order.price}")
+				deliver_email(order)
+		end
+	end
 
-    # from = Application.fetch_env!(:marketmailer, :mail_from)
-    # to = Application.fetch_env!(:marketmailer, :mail_to)
-    # from = "no-reply@localhost"
+	defp deliver_email(order) do
+		email =
+			Swoosh.Email.new()
+			|> Swoosh.Email.from("no-reply@resend.dev")
+			|> Swoosh.Email.to(System.get_env("EMAIL"))
+			|> Swoosh.Email.subject("marketmailer")
+			# |> Swoosh.Email.html_body("<strong>Hello</strong>")
+			|> Swoosh.Email.text_body("""
+			Cheapest order:
 
-    email = Swoosh.Email.new()
-    |> Swoosh.Email.from("onboarding@resend.dev")
-    |> Swoosh.Email.to("sudo.sendmail.jordan@gmail.com")
-    |> Swoosh.Email.subject("Hello!")
-    |> Swoosh.Email.html_body("<strong>Hello</strong>")
-    |> Swoosh.Email.put_provider_option(:tags, [%{name: "category", value: "confirm_email"}])
-    # |> Swoosh.Email.put_provider_option(:scheduled_at, "2024-08-05T11:52:01.858Z")
-    |> Swoosh.Email.put_provider_option(:idempotency_key, "some-unique-key-123")
-    |> Swoosh.Email.header("X-Custom-Header", "CustomValue")
+			Order ID: #{order.order_id}
+			Price: #{order.price}
+			Type ID: #{order.type_id}
+			Volume: #{order.volume_remain}/#{order.volume_total}
+			Location: #{order.location_id}
+			""")
 
+		case Marketmailer.Mailer.deliver(email) do
+			{:ok, response} ->
+				Logger.info("Email sent successfully: #{inspect(response)}")
 
-
-    # email =
-    #   Swoosh.Email.new()
-    #   |> Swoosh.Email.from({"marketmailer", "no-reply@myapp.com"})
-    #   # |> Swoosh.Email.from(from)
-    #   # |> Swoosh.Email.to(to)
-    #   |> Swoosh.Email.to("sudo.sendmail.jordan@gmail.com")
-    #   |> Swoosh.Email.subject("Cheapest market order")
-    #   |> Swoosh.Email.text_body("""
-    #   Cheapest order:
-
-    #   Order ID: #{order.order_id}
-    #   Price: #{order.price}
-    #   Type ID: #{order.type_id}
-    #   Volume: #{order.volume_remain}/#{order.volume_total}
-    #   Location: #{order.location_id}
-    #   """)
-
-  case Marketmailer.Mailer.deliver(email) do
-    {:ok, response} ->
-      Logger.info("Email sent successfully: #{inspect(response)}")
-
-    {:error, reason} ->
-      Logger.error("Failed to send email: #{inspect(reason)}")
-  end
-  end
+			{:error, reason} ->
+				Logger.error("Failed to send email: #{inspect(reason)}")
+		end
+	end
 end
