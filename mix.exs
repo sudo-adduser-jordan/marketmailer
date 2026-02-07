@@ -6,6 +6,7 @@ defmodule Marketmailer.MixProject do
 			app: :marketmailer,
 			version: "0.0.1",
 			elixir: "~> 1.19",
+			elixirc_paths: elixirc_paths(Mix.env()),
 			start_permanent: Mix.env() == :prod,
 			deps: deps(),
 			aliases: aliases()
@@ -26,8 +27,14 @@ defmodule Marketmailer.MixProject do
 			{:postgrex, ">= 0.0.0"},
 			{:swoosh, "~> 1.21"},
 			{:hackney, "~> 1.9"},
-                {:quokka, "~> 2.11", only: [:dev, :test], runtime: false},
+			{:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
 		]
+	end
+
+	# Define which paths to include based on the environment
+	defp elixirc_paths(_env) do
+		# "." adds the root directory
+		["lib", "hendricks_formatter.ex"]
 	end
 
 	defp aliases do
