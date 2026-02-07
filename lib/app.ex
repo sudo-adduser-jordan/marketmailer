@@ -27,7 +27,7 @@ defmodule Marketmailer.Application do
       {Task.Supervisor, name: Marketmailer.TaskSup},
       Marketmailer.RegionManagerSupervisor,
       Marketmailer.EtagWarmup,
-      # Marketmailer.MailWorker
+      Marketmailer.MailWorker
     ]
 
     opts = [
@@ -146,14 +146,14 @@ defmodule Marketmailer.PageWorker do
 
     case Marketmailer.ESI.fetch(id, page) do
       {:ok, data, ctx} ->
-        Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+        # Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
         Marketmailer.Database.upsert_orders(data)
         Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
         new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
         {:noreply, new_state}
 
       {:not_modified, ctx} ->
-        Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+        # Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
         Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
         new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
         {:noreply, new_state}
@@ -382,13 +382,14 @@ end
 defmodule Market do
   use Ecto.Schema
 
+  @primary_key false
   schema "market" do
+    field :order_id, :id, primary_key: true
     field :duration, :integer
     field :is_buy_order, :boolean
     field :issued, :string
     field :location_id, :integer
     field :min_volume, :integer
-    field :order_id, :integer
     field :price, :float
     field :range, :string
     field :system_id, :integer
@@ -444,12 +445,12 @@ defmodule Marketmailer.MailWorker do
 
   @interval :timer.seconds(60)
 
-  # Public API
   def start_link(_),
     do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
   @impl true
   def init(_) do
+    send_cheapest_order_email()
     schedule_tick()
     {:ok, %{}}
   end
@@ -476,25 +477,35 @@ defmodule Marketmailer.MailWorker do
     end
   end
 
-defp deliver_email(order) do
-  from = Application.fetch_env!(:marketmailer, :mail_from)
-  to   = Application.fetch_env!(:marketmailer, :mail_to)
+  defp deliver_email(order) do
+    from = Application.fetch_env!(:marketmailer, :mail_from)
+    to = Application.fetch_env!(:marketmailer, :mail_to)
 
-  email =
-    Swoosh.Email.new()
-    |> Swoosh.Email.from(from)
-    |> Swoosh.Email.to(to)
-    |> Swoosh.Email.subject("Cheapest market order")
-    |> Swoosh.Email.text_body("""
-    Cheapest order:
+    email =
+      Swoosh.Email.new()
+      |> Swoosh.Email.from(from)
+      |> Swoosh.Email.to(to)
+      |> Swoosh.Email.subject("Cheapest market order")
+      |> Swoosh.Email.text_body("""
+      Cheapest order:
 
-    Order ID: #{order.order_id}
-    Price: #{order.price}
-    Type ID: #{order.type_id}
-    Volume: #{order.volume_remain}/#{order.volume_total}
-    Location: #{order.location_id}
-    """)
+      Order ID: #{order.order_id}
+      Price: #{order.price}
+      Type ID: #{order.type_id}
+      Volume: #{order.volume_remain}/#{order.volume_total}
+      Location: #{order.location_id}
+      """)
 
-  Marketmailer.Mailer.deliver(email)
-end
+    # token = System.get_env("GMAIL_API_ACCESS_TOKEN")
+    # Logger.debug("Token length: #{String.length(token || "nil")}, starts with: #{String.slice(token || "nil", 0, 10)}")
+    # case Marketmailer.Mailer.deliver(email, access_token: token) do
+
+    case Marketmailer.Mailer.deliver(email) do
+      {:ok, meta} ->
+        Logger.info("Mail sent: #{inspect(meta)}")
+
+      {:error, reason} ->
+        Logger.error("Failed to send email: #{inspect(reason)}")
+    end
+  end
 end

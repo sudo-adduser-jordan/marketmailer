@@ -17,17 +17,7 @@ config :marketmailer, Marketmailer.Database,
   # pool_size: System.schedulers_online() * 4,
   log: false
 
-config :marketmailer,
-  ecto_repos: [Marketmailer.Database]
-
-config :marketmailer, Marketmailer.Mailer, adapter: Swoosh.Adapters.Gmail
 
 config :marketmailer,
-  mail_from: "",
-  mail_to: ""
-
-# Swoosh dev mailbox preview (optional)
-# if Mix.env() == :dev do
-#   config :swoosh, :api_client, Swoosh.ApiClient.Hackney
-#   config :swoosh, serve_mailbox: true
-# end
+  mail_from: System.get_env("MAIL_FROM"),
+  mail_to: System.get_env("MAIL_TO")
