@@ -70,7 +70,6 @@ defmodule Marketmailer.Database do
 end
 
 defmodule Market do
-	@moduledoc false
 	use Ecto.Schema
 
 	@primary_key false
@@ -92,7 +91,6 @@ defmodule Market do
 end
 
 defmodule Etag do
-	@moduledoc false
 	use Ecto.Schema
 
 	import Ecto.Changeset
@@ -108,7 +106,6 @@ defmodule Etag do
 end
 
 defmodule Marketmailer.EtagWarmup do
-	@moduledoc false
 	use GenServer
 
 	import Ecto.Query
