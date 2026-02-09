@@ -1,10 +1,8 @@
 defmodule Marketmailer.Mailer do
-	@moduledoc false
 	use Swoosh.Mailer, otp_app: :marketmailer
 end
 
 defmodule Marketmailer.MailWorker do
-	@moduledoc false
 	use GenServer
 
 	require Logger
@@ -121,15 +119,16 @@ defmodule Marketmailer.MailWorker do
 				</body>
 			</html>
 			""")
-			|> Swoosh.Email.text_body("""
-			Cheapest order:
 
-			Order ID: #{order.order_id}
-			Price: #{order.price}
-			Type ID: #{order.type_id}
-			Volume: #{order.volume_remain}/#{order.volume_total}
-			Location: #{order.location_id}
-			""")
+		# |> Swoosh.Email.text_body("""
+		# Cheapest order:
+
+		# Order ID: #{order.order_id}
+		# Price: #{order.price}
+		# Type ID: #{order.type_id}
+		# Volume: #{order.volume_remain}/#{order.volume_total}
+		# Location: #{order.location_id}
+		# """)
 
 		case Marketmailer.Mailer.deliver(email) do
 			{:ok, response} ->

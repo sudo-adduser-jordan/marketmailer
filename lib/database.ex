@@ -60,12 +60,25 @@ defmodule Marketmailer.Database do
 		|> one()
 	end
 
-	def cheapest_order_for_type(type_id) do
-		Market
-		|> where([m], m.type_id == ^type_id)
-		|> order_by(asc: :price)
-		|> limit(1)
-		|> one()
+	def get_item_list do
+	end
+
+	def get_item_list_less_than_jita_sell do
+	end
+
+	def get_items_less_than_jita_buy do
+	end
+
+	def get_item do
+	end
+
+	def get_region do
+	end
+
+	def get_station do
+	end
+
+	def get_location do
 	end
 end
 
