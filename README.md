@@ -2,6 +2,14 @@
 
 **TODO: Add description**
 
+```sh
+sudo docker exec -it pgadmin  /bin/bash 
+clear; source .env; mix start
+sudo docker cp postgres-latest.dmp pgadmin:/postgres-latest.dmp
+sudo docker cp postgres-latest.dmp pgadmin:/var/lib/pgadmin/storage/postgres_postgres.com
+```
+
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
