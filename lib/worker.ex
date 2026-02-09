@@ -1,16 +1,15 @@
 defmodule Marketmailer.PageWorker do
-	@moduledoc false
 	use GenServer, restart: :transient
 
 	require Logger
 
 	@ping_interval 10_000
 
-	def start_link({mgr, id, page}),
-		do:
-			GenServer.start_link(__MODULE__, {mgr, id, page},
-				name: {:via, Registry, {Marketmailer.Registry, {:page, id, page}}}
-			)
+	def start_link({mgr, id, page}) do
+		GenServer.start_link(__MODULE__, {mgr, id, page},
+			name: {:via, Registry, {Marketmailer.Registry, {:page, id, page}}}
+		)
+	end
 
 	@impl true
 	def init({mgr, id, page}) do
