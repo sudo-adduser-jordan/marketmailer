@@ -6,8 +6,6 @@ defmodule Marketmailer.Database do
 
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
 
-	def upsert_orders([]), do: :ok
-
 	def upsert_orders(orders) do
 		ts = NaiveDateTime.utc_now(:second)
 
@@ -39,9 +37,6 @@ defmodule Marketmailer.Database do
 		end
 	end
 
-	def upsert_etag(nil, _), do: :ok
-	def upsert_etag(_, nil), do: :ok
-
 	def upsert_etag(url, etag) do
 		now = NaiveDateTime.utc_now(:second)
 
@@ -59,26 +54,29 @@ defmodule Marketmailer.Database do
 		|> limit(1)
 		|> one()
 	end
+end
 
-	def get_item_list do
+defmodule Constellations do
+	use Ecto.Schema
+
+	@primary_key false
+	schema "mapConstellations" do
 	end
+end
 
-	def get_item_list_less_than_jita_sell do
+defmodule Regions do
+	use Ecto.Schema
+
+	@primary_key false
+	schema "mapRegions" do
 	end
+end
 
-	def get_items_less_than_jita_buy do
-	end
+defmodule Stations do
+	use Ecto.Schema
 
-	def get_item do
-	end
-
-	def get_region do
-	end
-
-	def get_station do
-	end
-
-	def get_location do
+	@primary_key false
+	schema "staStations" do
 	end
 end
 

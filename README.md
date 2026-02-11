@@ -7,6 +7,8 @@ sudo docker exec -it pgadmin  /bin/bash
 clear; source .env; mix start
 sudo docker cp postgres-latest.dmp pgadmin:/postgres-latest.dmp
 sudo docker cp postgres-latest.dmp pgadmin:/var/lib/pgadmin/storage/postgres_postgres.com
+
+https://developers.eveonline.com/static-data/eve-online-static-data-latest-jsonl.zip
 ```
 
 
