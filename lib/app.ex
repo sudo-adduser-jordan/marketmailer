@@ -21,6 +21,12 @@ defmodule Marketmailer.Application do
 				:ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
 				:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 
+				bot_options = %{
+						consumer: ExampleConsumer,
+						intents: [:direct_messages, :guild_messages, :message_content],
+						wrapped_token: fn -> System.fetch_env!("BOT_TOKEN") end
+				}
+
 				children = [
 						Marketmailer.Database,
 						{Registry, keys: :unique, name: Marketmailer.Registry},
@@ -29,6 +35,7 @@ defmodule Marketmailer.Application do
 						Marketmailer.RegionManagerSupervisor,
 						Marketmailer.EtagWarmup,
 						Marketmailer.MailWorker
+						# {Nostrum.Bot, bot_options}
 				]
 
 				opts = [
