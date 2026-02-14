@@ -61,15 +61,15 @@ defmodule Marketmailer.Database do
 		#         select: %{id: s.solar_system_id, name: s.solar_system_name, sec: s.security}
 		# Repo.all(query)
 
-		# -- SELECT s.*
-		# -- FROM public."marketView" s
-		# -- JOIN public."marketView" b
-		# --   ON s."item_name" = b."item_name"
-		# --   AND s."system_name" = 'Jita'
-		# --   AND b."system_name" != 'Jita'
-		# --   AND s."order_type" = 'sell'
-		# --   AND b."order_type" = 'buy'
-		# -- WHERE s."price" < b."price";
+		# SELECT s.*
+		# FROM public."marketView" s
+		# JOIN public."marketView" b
+		#   ON s."item_name" = b."item_name"
+		#   AND s."system_name" = 'Jita'
+		#   AND b."system_name" != 'Jita'
+		#   AND s."order_type" = 'SELL'
+		#   AND b."order_type" = 'BUY'
+		# WHERE s."price" < b."price";
 	end
 
 	def get_list_less_than_jita_buy do
