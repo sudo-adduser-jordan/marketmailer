@@ -66,31 +66,26 @@
 
     <div class="order-row">
       <span class="label">Order ID:</span>
-      <span class="value"><%= order.order_id %></span>
     </div>
     <div class="order-row">
       <span class="label">Price:</span>
-      <span class="value"><%= order.price %></span>
     </div>
     <div class="order-row">
       <span class="label">Type ID:</span>
-      <span class="value"><%= order.type_id %></span>
     </div>
     <div class="order-row">
       <span class="label">Volume:</span>
-      <span class="value"><%= order.volume_remain %>/<%= order.volume_total %></span>
     </div>
     <div class="order-row">
       <span class="label">Location:</span>
-      <span class="value"><%= order.location_id %></span>
     </div>
 
     <h2>Items Below Jita Buy</h2>
     <div class="items">
       <%= for item <- items do %>
         <div class="item">
-          <span class="label"><%= item.name %></span>
-          <span class="value"><%= item.price %> ISK</span>
+          <span class="label"><%= item.item %></span>
+          <span class="value"><%= item.margin %> ISK</span>
         </div>
       <% end %>
     </div>

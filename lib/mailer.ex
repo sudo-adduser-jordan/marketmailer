@@ -32,21 +32,23 @@ defmodule Marketmailer.MailWorker do
 	end
 
 	defp send_cheapest_order_email do
-		case Database.cheapest_order() do
-			nil ->
-				Logger.debug("No orders available; skipping mail")
-
-			order ->
-				Logger.info("Sending mail for cheapest order #{order.order_id} at #{order.price}")
-				deliver_email(order)
-		end
+		deliver_email()
 	end
 
-	defp deliver_email(order) do
-		items = Database.get_items_less_than_jita_buy() |> Enum.take(100)
-		template_path = Path.join(:code.priv_dir(:marketmailer), "lib/email.eex")
+	defp deliver_email do
+		Logger.info("Fetching mail...")
+		items = Database.get_items_less_than_jita_buy()
+		# %{
+		#   item: "Void S",
+		#   buy_price: 35.01,
+		#   sell_price: 35.0,
+		#   margin: 0.00999999999999801
+		# }
+
+		Logger.info("Building mail...")
+		template_path = Path.join(__DIR__, "email.eex")
 		html_content = EEx.eval_file(template_path, items: items)
-		email = new_email(order, html_content)
+		email = new_email(html_content)
 
 		case Marketmailer.Mailer.deliver(email) do
 			{:ok, response} ->
@@ -57,7 +59,7 @@ defmodule Marketmailer.MailWorker do
 		end
 	end
 
-	defp new_email(_order, html_content) do
+	defp new_email(html_content) do
 		Swoosh.Email.new()
 		|> Swoosh.Email.from("no-reply@resend.dev")
 		|> Swoosh.Email.to(System.get_env("EMAIL"))

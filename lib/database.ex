@@ -72,20 +72,21 @@ defmodule Marketmailer.Database do
 					margin: fragment("? - ?", b.price, s.price)
 				},
 				# Repeat the subtraction logic here
-				order_by: [asc: fragment("? - ?", b.price, s.price)]
+				order_by: [asc: fragment("? - ?", b.price, s.price)],
+				limit: 100
 
 		# Repo.all(query)
 		__MODULE__.all(query)
 
-		all(query)
-		|> Enum.each(fn row ->
-			IO.puts("""
-			Item:   #{String.pad_trailing(row.item, 20)}
-			Margin: #{:erlang.float_to_binary(row.margin, decimals: 2)} ISK
-			Buy:    #{row.buy_price} | Sell: #{row.sell_price}
-			--------------------------------------------------
-			""")
-		end)
+		# all(query)
+		# |> Enum.each(fn row ->
+		# 	IO.puts("""
+		# 	Item:   #{String.pad_trailing(row.item, 20)}
+		# 	Margin: #{:erlang.float_to_binary(row.margin, decimals: 2)} ISK
+		# 	Buy:    #{row.buy_price} | Sell: #{row.sell_price}
+		# 	--------------------------------------------------
+		# 	""")
+		# end)
 	end
 
 	def get_list_less_than_jita_buy do
