@@ -13,10 +13,8 @@ defmodule Marketmailer.MailWorker do
 
 	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
-	# Callbacks
 	@impl true
 	def init(state) do
-		# Logger.info("Marketmailer.MailWorker started")
 		send_cheapest_order_email()
 		schedule_tick()
 		{:ok, state}
@@ -45,8 +43,8 @@ defmodule Marketmailer.MailWorker do
 	end
 
 	defp deliver_email(order) do
-		items = Database.get_items_less_than_jita_buy()
-		template_path = Path.join(:code.priv_dir(:marketmailer), "templates/market_report.html.eex")
+		items = Database.get_items_less_than_jita_buy() |> Enum.take(100)
+		template_path = Path.join(:code.priv_dir(:marketmailer), "lib/email.eex")
 		html_content = EEx.eval_file(template_path, items: items)
 		email = new_email(order, html_content)
 
@@ -62,7 +60,7 @@ defmodule Marketmailer.MailWorker do
 	defp new_email(_order, html_content) do
 		Swoosh.Email.new()
 		|> Swoosh.Email.from("no-reply@resend.dev")
-		|> Swoosh.Email.to(System.get_env("EMAIL") || "default@example.com")
+		|> Swoosh.Email.to(System.get_env("EMAIL"))
 		|> Swoosh.Email.subject("Market Report")
 		|> Swoosh.Email.html_body(html_content)
 	end
