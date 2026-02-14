@@ -48,35 +48,28 @@ defmodule Marketmailer.Database do
 		:ets.insert(:market_cache, {url, etag})
 	end
 
+	def load_postgres_dmp do
+	end
+
+	def create_market_view do
+	end
+
+	def get_items_less_than_jita_buy do
+		# import Ecto.Query
+		# # Querying without a Schema module
+		# query = from s in "solar_systems",
+		#         select: %{id: s.solar_system_id, name: s.solar_system_name, sec: s.security}
+		# Repo.all(query)
+	end
+
+	def get_list_less_than_jita_buy do
+	end
+
 	def cheapest_order do
 		Market
 		|> order_by(asc: :price)
 		|> limit(1)
 		|> one()
-	end
-end
-
-defmodule Constellations do
-	use Ecto.Schema
-
-	@primary_key false
-	schema "mapConstellations" do
-	end
-end
-
-defmodule Regions do
-	use Ecto.Schema
-
-	@primary_key false
-	schema "mapRegions" do
-	end
-end
-
-defmodule Stations do
-	use Ecto.Schema
-
-	@primary_key false
-	schema "staStations" do
 	end
 end
 
