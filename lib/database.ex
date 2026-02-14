@@ -55,22 +55,37 @@ defmodule Marketmailer.Database do
 	end
 
 	def get_items_less_than_jita_buy do
-		# import Ecto.Query
-		# # Querying without a Schema module
-		# query = from s in "solar_systems",
-		#         select: %{id: s.solar_system_id, name: s.solar_system_name, sec: s.security}
-		# Repo.all(query)
+		query =
+			from s in fragment("public.\"marketView\""),
+				join: b in fragment("public.\"marketView\""),
+				on:
+					s.item_name == b.item_name and
+						s.system_name != "Jita" and
+						b.system_name == "Jita" and
+						s.order_type == "SELL" and
+						b.order_type == "BUY",
+				where: s.price < b.price,
+				select: %{
+					item: s.item_name,
+					buy_price: b.price,
+					sell_price: s.price,
+					margin: fragment("? - ?", b.price, s.price)
+				},
+				# Repeat the subtraction logic here
+				order_by: [asc: fragment("? - ?", b.price, s.price)]
 
-		# SELECT s.*, (b."price" - s."price") AS margin
-		# FROM public."marketView" s
-		# JOIN public."marketView" b
-		#   ON s."item_name" = b."item_name"
-		#   AND s."system_name" != 'Jita'
-		#   AND b."system_name" = 'Jita'
-		#   AND s."order_type" = 'SELL'
-		#   AND b."order_type" = 'BUY'
-		# WHERE s."price" < b."price"
-		# ORDER BY margin DESC;
+		# Repo.all(query)
+		__MODULE__.all(query)
+
+		all(query)
+		|> Enum.each(fn row ->
+			IO.puts("""
+			Item:   #{String.pad_trailing(row.item, 20)}
+			Margin: #{:erlang.float_to_binary(row.margin, decimals: 2)} ISK
+			Buy:    #{row.buy_price} | Sell: #{row.sell_price}
+			--------------------------------------------------
+			""")
+		end)
 	end
 
 	def get_list_less_than_jita_buy do
