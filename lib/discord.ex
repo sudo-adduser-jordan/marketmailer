@@ -1,4 +1,4 @@
-defmodule ItemPriceScheduler do
+defmodule DiscordBot do
 	use GenServer
 
 	alias Nostrum.Api, as: API
