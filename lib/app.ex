@@ -22,9 +22,13 @@ defmodule Marketmailer.Application do
 				:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 
 				bot_options = %{
-						consumer: ExampleConsumer,
-						intents: [:direct_messages, :guild_messages, :message_content],
-						wrapped_token: fn -> System.fetch_env!("BOT_TOKEN") end
+						wrapped_token: fn -> System.fetch_env!("BOT_TOKEN") end,
+						consumer: DiscordConsumer,
+						intents: [
+								:direct_messages,
+								:guild_messages,
+								:message_content
+						]
 				}
 
 				children = [

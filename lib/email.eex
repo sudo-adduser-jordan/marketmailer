@@ -7,10 +7,13 @@
       background-color: #f4f4f5;
       padding: 24px;
       color: #111827;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
     .container {
-      max-width: 600px;
+      width: 90%;
       margin: 0 auto;
       background-color: #ffffff;
       border-radius: 8px;
@@ -62,25 +65,29 @@
 
 <body>
   <div class="container">
-    <h1>Cheapest Order Summary</h1>
+    <h1>Best Order</h1>
 
     <div class="order-row">
-      <span class="label">Order ID:</span>
+      <span class="label">Name</span>
     </div>
     <div class="order-row">
-      <span class="label">Price:</span>
+      <span class="label">Margin</span>
     </div>
     <div class="order-row">
-      <span class="label">Type ID:</span>
+      <span class="label">Security Station System Region</span>
     </div>
     <div class="order-row">
-      <span class="label">Volume:</span>
+      <span class="label">Volume</span>
     </div>
     <div class="order-row">
-      <span class="label">Location:</span>
+      <span class="label">Location</span>
     </div>
 
-    <h2>Items Below Jita Buy</h2>
+    <small>Report generated automatically by Marketmailer</small>
+  </div>
+
+  <div class="container">
+    <h2>Top 100</h2>
     <div class="items">
       <%= for item <- items do %>
         <div class="item">
