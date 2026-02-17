@@ -27,7 +27,8 @@ defmodule Marketmailer.MixProject do
 			{:postgrex, ">= 0.0.0"},
 			{:swoosh, "~> 1.21"},
 			{:hackney, "~> 1.9"},
-			{:nostrum, "~> 0.10"},
+			# {:nostrum, "~> 0.10"},
+			{:nostrum, github: "Kraigie/nostrum"},
 			{:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
 		]
 	end

@@ -1,5 +1,5 @@
-defmodule DiscordBot do
-	use Nostrum.Consumer
+defmodule Discord.Consumer do
+	@behaviour Nostrum.Consumer
 
 	alias Nostrum.Api
 	alias Nostrum.Struct.Embed
