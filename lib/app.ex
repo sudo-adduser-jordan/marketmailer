@@ -35,17 +35,13 @@ defmodule Marketmailer.Application do
 			wrapped_token: fn -> System.fetch_env!("DISCORD_TOKEN") end
 		}
 
-		# children = [
-		# 	{Nostrum.Bot, bot_options}
-		# ]
-
 		children = [
 			Database,
+			Marketmailer.EtagWarmup,
 			{Registry, keys: :unique, name: Marketmailer.Registry},
 			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
 			{Task.Supervisor, name: Marketmailer.TaskSup},
 			# Marketmailer.RegionManagerSupervisor,
-			Marketmailer.EtagWarmup,
 			# Marketmailer.MailWorker,
 			{Nostrum.Bot, bot_options}
 		]
