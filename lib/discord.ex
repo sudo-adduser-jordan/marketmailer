@@ -1,7 +1,6 @@
 defmodule DiscordBot do
 	use Nostrum.Consumer
 
-	alias Discord.Database
 	alias Nostrum.Api
 	alias Nostrum.Struct.Embed
 	alias Nostrum.Struct.Interaction
@@ -19,7 +18,7 @@ defmodule DiscordBot do
 	def handle_event({:INTERACTION_CREATE, %Interaction{} = interaction, _ws_state}) do
 		case interaction.data.name do
 			"add_channel" ->
-				Database.upsert(interaction.guild_id, interaction.channel_id)
+				Discord.Database.upsert(interaction.guild_id, interaction.channel_id)
 
 				Api.Interaction.create_response(interaction, %{
 					type: 4,
@@ -27,7 +26,7 @@ defmodule DiscordBot do
 				})
 
 			"remove_channel" ->
-				Database.delete(interaction.guild_id)
+				Discord.Database.delete(interaction.guild_id)
 
 				Api.Interaction.create_response(interaction, %{
 					type: 4,
@@ -36,7 +35,7 @@ defmodule DiscordBot do
 
 			"list_channels" ->
 				msg =
-					case Database.get(interaction.guild_id) do
+					case Discord.Database.get(interaction.guild_id) do
 						%{channel_id: chan_id} -> "📋 Monitoring channel: <##{chan_id}>"
 						nil -> "❌ No channel registered."
 					end
@@ -50,7 +49,7 @@ defmodule DiscordBot do
 				Api.Interaction.create_response(interaction, %{type: 5})
 
 				items =
-					Marketmailer.Database.get_items_less_than_jita_buy()
+					Database.get_items_less_than_jita_buy()
 					|> Enum.take(10)
 
 				Api.Interaction.edit_response(interaction, %{
@@ -68,13 +67,13 @@ defmodule DiscordBot do
 
 	def handle_info(:broadcast_market_updates, state) do
 		items =
-			Marketmailer.Database.get_items_less_than_jita_buy()
+			Database.get_items_less_than_jita_buy()
 			|> Enum.take(10)
 
 		if items != [] do
 			embed = build_best_order_message(items)
 
-			Database.all()
+			Discord.Database.all()
 			|> Enum.each(fn record ->
 				Api.Message.create(record.channel_id, embeds: [embed])
 			end)
@@ -117,7 +116,7 @@ defmodule DiscordBot do
 			}
 		]
 
-		Api.ApplicationCommand.bulk_overwrite_global(commands)
+		Api.ApplicationCommand.bulk_overwrite_global_commands(commands)
 	end
 
 	def build_best_order_message(items) do
@@ -148,8 +147,6 @@ defmodule Discord.Database do
 
 	import Ecto.Changeset
 
-	alias Marketmailer.Repo
-
 	@primary_key {:guild_id, :integer, autogenerate: false}
 	schema "registered_channels" do
 		field :channel_id, :integer
@@ -163,19 +160,19 @@ defmodule Discord.Database do
 		|> unique_constraint(:guild_id)
 	end
 
-	def get(guild_id), do: Repo.get(__MODULE__, guild_id)
-	def all, do: Repo.all(__MODULE__)
+	def get(guild_id), do: Database.get(__MODULE__, guild_id)
+	def all, do: Database.all(__MODULE__)
 
 	def upsert(guild_id, channel_id) do
 		%__MODULE__{guild_id: guild_id}
 		|> changeset(%{channel_id: channel_id})
-		|> Repo.insert(on_conflict: [set: [channel_id: channel_id]], conflict_target: :guild_id)
+		|> Database.insert(on_conflict: [set: [channel_id: channel_id]], conflict_target: :guild_id)
 	end
 
 	def delete(guild_id) do
-		case Repo.get(__MODULE__, guild_id) do
+		case Database.get(__MODULE__, guild_id) do
 			nil -> :ok
-			struct -> Repo.delete(struct)
+			struct -> Database.delete(struct)
 		end
 	end
 end
