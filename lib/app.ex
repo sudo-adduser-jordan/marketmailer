@@ -22,10 +22,10 @@ defmodule Marketmailer.Application do
 				:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 
 				bot_options = %{
-						wrapped_token: fn -> System.fetch_env!("BOT_TOKEN") end,
+						wrapped_token: fn -> System.fetch_env!("DISCORD_TOKEN") end,
 						consumer: DiscordConsumer,
 						intents: [
-								:direct_messages,
+								# :direct_messages,
 								:guild_messages,
 								:message_content
 						]

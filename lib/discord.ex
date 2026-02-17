@@ -1,6 +1,13 @@
 defmodule DiscordBot do
 	use GenServer
 
+	# commands
+	#   add channel
+	#   list channels
+	#   remove channel
+	#   give access to memeber
+	#   remove access from member
+
 	alias Nostrum.Api, as: API
 	alias Nostrum.Struct.Embed
 
@@ -30,7 +37,7 @@ defmodule DiscordBot do
 		if items != [] do
 			embed = build_best_order_message(items)
 			# embed = build_top_100_message(items)
-			API.create_message!(YOUR_CHANNEL_ID, embed: embed)
+			# API.create_message!(YOUR_CHANNEL_ID, embed: embed)
 		end
 	end
 
