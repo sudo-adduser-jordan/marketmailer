@@ -28,9 +28,9 @@ defmodule Marketmailer.Application do
 				# :guild_bans,
 				# :guild_members,
 				# :guild_message_reactions,
-				:guild_messages,
+				:guild_messages
 				# :guilds,
-				:message_content
+				# :message_content
 			],
 			wrapped_token: fn -> System.fetch_env!("DISCORD_TOKEN") end
 		}

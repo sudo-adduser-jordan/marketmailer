@@ -18,20 +18,36 @@ defmodule Discord.Consumer do
 	def handle_event({:INTERACTION_CREATE, %Interaction{} = interaction, _ws_state}) do
 		case interaction.data.name do
 			"add_channel" ->
-				Discord.Database.upsert(interaction.guild_id, interaction.channel_id)
+				[subcommand] = interaction.data.options
 
-				Api.Interaction.create_response(interaction, %{
-					type: 4,
-					data: %{content: "✅ <##{interaction.channel_id}> registered for alerts."}
-				})
+				case subcommand.name do
+					"subcommand" ->
+						option = Enum.find(subcommand.options, fn opt -> opt.name == "required_option" end)
+						value = option.value
+
+						Api.Interaction.create_response(interaction, %{
+							type: 4,
+							data: %{content: "✅ <##{interaction.channel_id}> registered for alerts."}
+						})
+
+						Discord.Database.upsert(interaction.guild_id, interaction.channel_id)
+				end
 
 			"remove_channel" ->
-				Discord.Database.delete(interaction.guild_id)
+				[subcommand] = interaction.data.options
 
-				Api.Interaction.create_response(interaction, %{
-					type: 4,
-					data: %{content: "🗑️ Market alerts disabled for this server."}
-				})
+				case subcommand.name do
+					"subcommand" ->
+						option = Enum.find(subcommand.options, fn opt -> opt.name == "required_option" end)
+						value = option.value
+
+						Api.Interaction.create_response(interaction, %{
+							type: 4,
+							data: %{content: "🗑️ Market alerts disabled for this server."}
+						})
+
+						Discord.Database.delete(interaction.guild_id)
+				end
 
 			"list_channels" ->
 				msg =
@@ -97,13 +113,43 @@ defmodule Discord.Consumer do
 				name: "add_channel",
 				description: "Set the current channel for market updates",
 				default_member_permissions: @admin_only,
-				dm_permission: false
+				dm_permission: false,
+				options: [
+					%{
+						type: 1,
+						name: "subcommand",
+						description: "Subcommand description",
+						options: [
+							%{
+								type: 3,
+								name: "required_option",
+								description: "Description of your option",
+								required: true
+							}
+						]
+					}
+				]
 			},
 			%{
 				name: "remove_channel",
 				description: "Stop market updates for this server",
 				default_member_permissions: @admin_only,
-				dm_permission: false
+				dm_permission: false,
+				options: [
+					%{
+						type: 1,
+						name: "subcommand",
+						description: "Subcommand description",
+						options: [
+							%{
+								type: 3,
+								name: "required_option",
+								description: "Description of your option",
+								required: true
+							}
+						]
+					}
+				]
 			},
 			%{
 				name: "list_channels",
