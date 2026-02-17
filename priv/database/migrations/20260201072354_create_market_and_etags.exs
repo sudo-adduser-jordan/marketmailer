@@ -1,5 +1,5 @@
 
-defmodule Marketmailer.Database.Migrations.CreateMarketAndEtags do
+defmodule Database.Migrations.CreateMarketAndEtags do
   use Ecto.Migration
 
   def change do

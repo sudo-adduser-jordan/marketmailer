@@ -24,7 +24,7 @@ defmodule Marketmailer.ESI do
 
 	def fetch(region, page \\ 1) do
 		url = "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
-		etag = Marketmailer.Database.get_etag(url)
+		etag = Database.get_etag(url)
 
 		headers =
 			[{"User-Agent", Marketmailer.Application.user_agent()}] ++

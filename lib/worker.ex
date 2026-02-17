@@ -40,14 +40,14 @@ defmodule Marketmailer.PageWorker do
 		case Marketmailer.ESI.fetch(id, page) do
 			{:ok, data, ctx} ->
 				# Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-				Marketmailer.Database.upsert_orders(data)
-				Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
+				Database.upsert_orders(data)
+				Database.upsert_etag(ctx.url, ctx.etag)
 				new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 
 			{:not_modified, ctx} ->
 				# Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-				Marketmailer.Database.upsert_etag(ctx.url, ctx.etag)
+				Database.upsert_etag(ctx.url, ctx.etag)
 				new_state = notify_and_reschedule(mgr, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 

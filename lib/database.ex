@@ -1,4 +1,4 @@
-defmodule Marketmailer.Database do
+defmodule Database do
 	@moduledoc false
 	use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
 
@@ -151,7 +151,7 @@ defmodule Marketmailer.EtagWarmup do
 
 	@impl true
 	def handle_info(:warmup, s) do
-		for {url, e} <- Marketmailer.Database.all(from e in Etag, select: {e.url, e.etag}),
+		for {url, e} <- Database.all(from e in Etag, select: {e.url, e.etag}),
 				do: :ets.insert(:market_cache, {url, e})
 
 		{:noreply, s}

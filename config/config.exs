@@ -4,7 +4,7 @@ config :logger, :console,
 	format: "$message\n",
 	metadata: []
 
-config :marketmailer, Marketmailer.Database,
+config :marketmailer, Database,
 	username: "postgres",
 	password: "postgres",
 	database: "eve",
@@ -19,4 +19,4 @@ config :marketmailer, Marketmailer.Mailer,
 	adapter: Swoosh.Adapters.Resend,
 	api_key: System.get_env("RESEND_TOKEN")
 
-config :marketmailer, ecto_repos: [Marketmailer.Database]
+config :marketmailer, ecto_repos: [Database]

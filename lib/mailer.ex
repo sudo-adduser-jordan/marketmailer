@@ -5,7 +5,7 @@ end
 defmodule Marketmailer.MailWorker do
 	use GenServer
 
-	alias Marketmailer.Database
+	alias Database
 
 	require Logger
 
