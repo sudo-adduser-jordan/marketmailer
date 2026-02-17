@@ -1,4 +1,4 @@
-defmodule Discord do
+defmodule DiscordBot do
 	use Nostrum.Consumer
 
 	alias Discord.Database
@@ -37,7 +37,7 @@ defmodule Discord do
 			"list_channels" ->
 				msg =
 					case Database.get(interaction.guild_id) do
-						%Database{channel_id: chan_id} -> "📋 Monitoring channel: <##{chan_id}>"
+						%{channel_id: chan_id} -> "📋 Monitoring channel: <##{chan_id}>"
 						nil -> "❌ No channel registered."
 					end
 
@@ -49,7 +49,6 @@ defmodule Discord do
 			"check_market" ->
 				Api.Interaction.create_response(interaction, %{type: 5})
 
-				# Ensure Marketmailer.Database is defined in your project
 				items =
 					Marketmailer.Database.get_items_less_than_jita_buy()
 					|> Enum.take(10)
@@ -165,15 +164,8 @@ defmodule Discord.Database do
 		|> unique_constraint(:guild_id)
 	end
 
-	# --- Database Actions ---
-
-	def get(guild_id) do
-		Repo.get(__MODULE__, guild_id)
-	end
-
-	def all do
-		Repo.all(__MODULE__)
-	end
+	def get(guild_id), do: Repo.get(__MODULE__, guild_id)
+	def all, do: Repo.all(__MODULE__)
 
 	def upsert(guild_id, channel_id) do
 		%__MODULE__{guild_id: guild_id}
