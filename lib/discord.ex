@@ -1,97 +1,110 @@
 defmodule DiscordBot do
-	use GenServer
+	use Nostrum.Consumer
 
-	# commands
-	#   add channel
-	#   list channels
-	#   remove channel
-	#   give access to memeber
-	#   remove access from member
-
-	alias Nostrum.Api, as: API
+	alias Nostrum.Api
 	alias Nostrum.Struct.Embed
+	alias Nostrum.Struct.Interaction
 
-	def start_link(_opts) do
-		GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+	@admin_only "16"
+
+	def handle_event({:READY, _data, _ws_state}) do
+		if :ets.whereis(:guild_channels) == :undefined do
+			:ets.new(:guild_channels, [:set, :public, :named_table])
+		end
+
+		register_commands()
 	end
 
-	def init(state) do
-		send_discord_message()
-		schedule_message()
-		{:ok, state}
-	end
+	def handle_event({:INTERACTION_CREATE, %Interaction{} = interaction, _ws_state}) do
+		case interaction.data.name do
+			"add_channel" ->
+				:ets.insert(:guild_channels, {interaction.guild_id, interaction.channel_id})
 
-	def handle_info(:check_items, state) do
-		send_discord_message()
-		schedule_message()
-		{:noreply, state}
-	end
+				Api.create_interaction_response(interaction, %{
+					type: 4,
+					data: %{content: "✅ <##{interaction.channel_id}> registered for alerts."}
+				})
 
-	defp schedule_message do
-		Process.send_after(self(), :check_items, 30 * 60 * 1000)
-	end
+			"remove_channel" ->
+				:ets.delete(:guild_channels, interaction.guild_id)
 
-	defp send_discord_message do
-		items = Marketmailer.Database.get_items_less_than_jita_buy() |> Enum.take(10)
+				Api.create_interaction_response(interaction, %{
+					type: 4,
+					data: %{content: "🗑️ Market alerts disabled for this server."}
+				})
 
-		if items != [] do
-			embed = build_best_order_message(items)
-			# embed = build_top_100_message(items)
-			# API.create_message!(YOUR_CHANNEL_ID, embed: embed)
+			"list_channels" ->
+				msg =
+					case :ets.lookup(:guild_channels, interaction.guild_id) do
+						[{_guild, chan}] -> "📋 Monitoring channel: <##{chan}>"
+						[] -> "❌ No channel registered."
+					end
+
+				Api.create_interaction_response(interaction, %{
+					type: 4,
+					data: %{content: msg}
+				})
+
+			"check_market" ->
+				Api.create_interaction_response(interaction, %{type: 5})
+				items = Marketmailer.Database.get_items_less_than_jita_buy() |> Enum.take(10)
+				Api.edit_interaction_response(interaction, %{embeds: [build_best_order_message(items)]})
+
+			_ ->
+				:ok
 		end
 	end
+
+	def handle_event(_event), do: :ok
+
+	# --- Registration ---
+
+	defp register_commands do
+		commands = [
+			%{
+				name: "add_channel",
+				description: "Set the current channel for market updates",
+				default_member_permissions: @admin_only,
+				dm_permission: false
+			},
+			%{
+				name: "remove_channel",
+				description: "Stop market updates for this server",
+				default_member_permissions: @admin_only,
+				dm_permission: false
+			},
+			%{
+				name: "list_channels",
+				description: "Show the registered update channel",
+				dm_permission: false
+			},
+			%{
+				name: "check_market",
+				description: "Manually scan for Jita deals"
+			}
+		]
+
+		Api.bulk_overwrite_global_commands(commands)
+	end
+
+	# --- Helpers ---
 
 	def build_best_order_message(items) do
 		%Embed{
 			title: "🛒 Items Below Jita Buy Price",
-			# Green
 			color: 0x00FF00,
 			fields:
 				Enum.map(items, fn item ->
 					%{
 						name: item.item,
-						value: """
-						**Buy:** #{item.buy_price |> format_price()}
-						**Sell:** #{item.sell_price |> format_price()}
-						**Margin:** #{format_margin(item.margin)}
-						""",
+						value:
+							"**Buy:** #{format_price(item.buy_price)}\n**Sell:** #{format_price(item.sell_price)}\n**Margin:** #{format_margin(item.margin)}",
 						inline: true
 					}
-				end),
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+				end)
 		}
 	end
 
-	def build_top_100_message(items) do
-		%Embed{
-			title: "🛒 Items Below Jita Buy Price",
-			# Green
-			color: 0x00FF00,
-			fields:
-				Enum.map(items, fn item ->
-					%{
-						name: item.item,
-						value: """
-						**Buy:** #{item.buy_price |> format_price()}
-						**Sell:** #{item.sell_price |> format_price()}
-						**Margin:** #{format_margin(item.margin)}
-						""",
-						inline: true
-					}
-				end),
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
-		}
-	end
-
-	defp format_price(price) do
-		:io_lib.format("~.2f ISK", [price])
-		|> to_string()
-	end
-
-	defp format_margin(margin) do
-		pct = margin * 100
-
-		:io_lib.format("~.2f%", [pct])
-		|> to_string()
-	end
+	defp format_price(p), do: :erlang.float_to_binary(p, decimals: 2) <> " ISK"
+	defp format_margin(m), do: :erlang.float_to_binary(m * 100, decimals: 2) <> "%"
 end
