@@ -38,8 +38,8 @@ defmodule Marketmailer.Application do
 						{Task.Supervisor, name: Marketmailer.TaskSup},
 						Marketmailer.RegionManagerSupervisor,
 						Marketmailer.EtagWarmup,
-						Marketmailer.MailWorker
-						# {Nostrum.Bot, bot_options}
+						Marketmailer.MailWorker,
+						{Discord, bot_options}
 				]
 
 				opts = [

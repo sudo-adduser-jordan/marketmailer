@@ -1,4 +1,4 @@
-defmodule DiscordBot do
+defmodule Discord do
 	use Nostrum.Consumer
 
 	alias Discord.Database
@@ -9,24 +9,75 @@ defmodule DiscordBot do
 	@admin_only "16"
 	@interval 15 * 60 * 1000
 
-	# --- Lifecycle ---
+	# --- Lifecycle & Events ---
 
 	def handle_event({:READY, _data, _ws_state}) do
 		register_commands()
 		schedule_broadcast()
 	end
 
+	def handle_event({:INTERACTION_CREATE, %Interaction{} = interaction, _ws_state}) do
+		case interaction.data.name do
+			"add_channel" ->
+				Database.upsert(interaction.guild_id, interaction.channel_id)
+
+				Api.Interaction.create_response(interaction, %{
+					type: 4,
+					data: %{content: "✅ <##{interaction.channel_id}> registered for alerts."}
+				})
+
+			"remove_channel" ->
+				Database.delete(interaction.guild_id)
+
+				Api.Interaction.create_response(interaction, %{
+					type: 4,
+					data: %{content: "🗑️ Market alerts disabled for this server."}
+				})
+
+			"list_channels" ->
+				msg =
+					case Database.get(interaction.guild_id) do
+						%Database{channel_id: chan_id} -> "📋 Monitoring channel: <##{chan_id}>"
+						nil -> "❌ No channel registered."
+					end
+
+				Api.Interaction.create_response(interaction, %{
+					type: 4,
+					data: %{content: msg}
+				})
+
+			"check_market" ->
+				Api.Interaction.create_response(interaction, %{type: 5})
+
+				# Ensure Marketmailer.Database is defined in your project
+				items =
+					Marketmailer.Database.get_items_less_than_jita_buy()
+					|> Enum.take(10)
+
+				Api.Interaction.edit_response(interaction, %{
+					embeds: [build_best_order_message(items)]
+				})
+
+			_ ->
+				:ok
+		end
+	end
+
+	def handle_event(_event), do: :ok
+
 	# --- Recurring Logic ---
 
 	def handle_info(:broadcast_market_updates, state) do
-		items = Marketmailer.Database.get_items_less_than_jita_buy() |> Enum.take(10)
+		items =
+			Marketmailer.Database.get_items_less_than_jita_buy()
+			|> Enum.take(10)
 
 		if items != [] do
 			embed = build_best_order_message(items)
 
-			Marketmailer.Repo.all(Database)
+			Database.all()
 			|> Enum.each(fn record ->
-				Api.create_message(record.channel_id, embeds: [embed])
+				Api.Message.create(record.channel_id, embeds: [embed])
 			end)
 		end
 
@@ -39,50 +90,6 @@ defmodule DiscordBot do
 	defp schedule_broadcast do
 		Process.send_after(self(), :broadcast_market_updates, @interval)
 	end
-
-	# --- Interaction Handling ---
-
-	def handle_event({:INTERACTION_CREATE, %Interaction{} = interaction, _ws_state}) do
-		case interaction.data.name do
-			"add_channel" ->
-				Database.upsert(interaction.guild_id, interaction.channel_id)
-
-				Api.create_interaction_response(interaction, %{
-					type: 4,
-					data: %{content: "✅ <##{interaction.channel_id}> registered for alerts."}
-				})
-
-			"remove_channel" ->
-				Discord.Database.delete(interaction.guild_id)
-
-				Api.create_interaction_response(interaction, %{
-					type: 4,
-					data: %{content: "🗑️ Market alerts disabled for this server."}
-				})
-
-			"list_channels" ->
-				msg =
-					case Marketmailer.Repo.get(Discord.Database, interaction.guild_id) do
-						%{channel_id: chan_id} -> "📋 Monitoring channel: <##{chan_id}>"
-						nil -> "❌ No channel registered."
-					end
-
-				Api.create_interaction_response(interaction, %{
-					type: 4,
-					data: %{content: msg}
-				})
-
-			"check_market" ->
-				Api.create_interaction_response(interaction, %{type: 5})
-				items = Marketmailer.Database.get_items_less_than_jita_buy() |> Enum.take(10)
-				Api.edit_interaction_response(interaction, %{embeds: [build_best_order_message(items)]})
-
-			_ ->
-				:ok
-		end
-	end
-
-	def handle_event(_event), do: :ok
 
 	# --- Registration & Helpers ---
 
@@ -111,7 +118,7 @@ defmodule DiscordBot do
 			}
 		]
 
-		Api.bulk_overwrite_global_commands(commands)
+		Api.ApplicationCommand.bulk_overwrite_global(commands)
 	end
 
 	def build_best_order_message(items) do
@@ -151,7 +158,6 @@ defmodule Discord.Database do
 		timestamps()
 	end
 
-	@doc "Changeset for upserting channel records."
 	def changeset(struct, params \\ %{}) do
 		struct
 		|> cast(params, [:guild_id, :channel_id])
@@ -159,14 +165,22 @@ defmodule Discord.Database do
 		|> unique_constraint(:guild_id)
 	end
 
-	@doc "Saves or updates a channel for a guild."
+	# --- Database Actions ---
+
+	def get(guild_id) do
+		Repo.get(__MODULE__, guild_id)
+	end
+
+	def all do
+		Repo.all(__MODULE__)
+	end
+
 	def upsert(guild_id, channel_id) do
 		%__MODULE__{guild_id: guild_id}
 		|> changeset(%{channel_id: channel_id})
 		|> Repo.insert(on_conflict: [set: [channel_id: channel_id]], conflict_target: :guild_id)
 	end
 
-	@doc "Removes a guild from the database."
 	def delete(guild_id) do
 		case Repo.get(__MODULE__, guild_id) do
 			nil -> :ok
@@ -174,15 +188,3 @@ defmodule Discord.Database do
 		end
 	end
 end
-
-# defmodule Marketmailer.Repo.Migrations.CreateRegisteredChannels do
-# 	use Ecto.Migration
-
-# 	def change do
-# 		create table(:registered_channels, primary_key: false) do
-# 			add :guild_id, :bigint, primary_key: true
-# 			add :channel_id, :bigint, null: false
-# 			timestamps()
-# 		end
-# 	end
-# end
