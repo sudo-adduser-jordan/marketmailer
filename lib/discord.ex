@@ -18,11 +18,11 @@ defmodule Discord.Consumer do
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = intr, _}) do
 		case name do
 			"add_channel" ->
-				Discord.Database.upsert(intr.guild_id, intr.channel_id)
+				# Discord.Database.upsert(intr.guild_id, intr.channel_id)
 				respond(intr, Messages.channel_registered(intr.channel_id))
 
 			"remove_channel" ->
-				Discord.Database.delete(intr.guild_id)
+				# Discord.Database.delete(intr.guild_id)
 				respond(intr, Messages.channel_removed())
 
 			"list_channel" ->
@@ -45,7 +45,12 @@ defmodule Discord.Consumer do
 
 	# --- Helpers ---
 
-	defp respond(intr, text), do: Api.Interaction.create_response(intr, %{type: 4, data: %{content: text}})
+	defp respond(intr, %Nostrum.Struct.Embed{} = embed) do
+		Api.Interaction.create_response(intr, %{
+			type: 4,
+			data: %{embeds: [embed]}
+		})
+	end
 
 	def handle_info(:broadcast, state) do
 		items = Database.get_items_less_than_jita_buy() |> Enum.take(10)
@@ -105,26 +110,37 @@ end
 defmodule Discord.Messages do
 	alias Nostrum.Struct.Embed
 
-	# --- Success & Error Wrappers ---
+	@color_success 0x43B581
+	@color_error 0xF04747
+	@color_info 0x7289DA
 
-	def success(text), do: "✅ **Success:** #{text}"
-	def error(text), do: "❌ **Error:** #{text}"
+	# --- Base Wrappers ---
 
-	# --- Specific Command Responses ---
+	def success(text), do: %Embed{description: "✅ #{text}", color: @color_success}
+	def error(text), do: %Embed{description: "❌ #{text}", color: @color_error}
+
+	# --- Command Specifics ---
 
 	def channel_registered(id), do: success("<##{id}> is now registered for market alerts.")
 	def channel_removed, do: success("Market alerts have been disabled for this server.")
+
 	def list_channel(nil), do: error("No channel registered. Use `/add_channel` to start.")
-	def list_channel(id), do: "📋 **Monitoring Channel:** <##{id}>"
+
+	def list_channel(id) do
+		%Embed{
+			description: "📋 Monitoring alerts in <##{id}>",
+			color: @color_info
+		}
+	end
 
 	# --- Market Embed ---
 
-	def market_embed([]), do: %Embed{description: "No items currently found below Jita Buy.", color: 0xFF0000}
+	def market_embed([]), do: error("No items currently found below Jita Buy.")
 
 	def market_embed(items) do
 		%Embed{
 			title: "🛒 Items Below Jita Buy",
-			color: 0x00FF00,
+			color: @color_success,
 			fields:
 				Enum.map(items, fn i ->
 					%{
