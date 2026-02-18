@@ -1,4 +1,48 @@
-defmodule Database do
+
+defmodule Etag.Database do
+end
+
+defmodule Discord.Database do
+  use Ecto.Schema
+
+  # Alias your Repo for easier calls
+  alias Market.Database, as: Repo
+
+  @primary_key {:guild_id, :integer, autogenerate: false}
+  schema "registered_channels" do
+    field :channel_id, :integer
+    timestamps()
+  end
+
+  def get(guild_id), do: Repo.get(__MODULE__, guild_id)
+
+  def all, do: Repo.all(__MODULE__)
+
+  def upsert(guild_id, channel_id) do
+    now = NaiveDateTime.utc_now(:second)
+    Repo.insert_all(
+      __MODULE__,
+      [%{
+        guild_id: guild_id,
+        channel_id: channel_id,
+        inserted_at: now,
+        updated_at: now
+      }],
+      on_conflict: {:replace, [:channel_id, :updated_at]},
+      conflict_target: :guild_id
+    )
+  end
+
+  @doc "Deletes a guild registration if it exists."
+  def delete(guild_id) do
+    case get(guild_id) do
+      nil -> :ok
+      struct -> Repo.delete(struct)
+    end
+  end
+end
+
+defmodule Market.Database do
 	use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
 
 	import Ecto.Query
@@ -84,26 +128,5 @@ defmodule Database do
 		|> order_by(asc: :price)
 		|> limit(1)
 		|> one()
-	end
-end
-
-defmodule Market do
-	use Ecto.Schema
-
-	@primary_key false
-	schema "market" do
-		field :order_id, :id, primary_key: true
-		field :duration, :integer
-		field :is_buy_order, :boolean
-		field :issued, :string
-		field :location_id, :integer
-		field :min_volume, :integer
-		field :price, :float
-		field :range, :string
-		field :system_id, :integer
-		field :type_id, :integer
-		field :volume_remain, :integer
-		field :volume_total, :integer
-		timestamps()
 	end
 end

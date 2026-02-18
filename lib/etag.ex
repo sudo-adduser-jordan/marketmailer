@@ -19,18 +19,3 @@ defmodule EtagCache do
 		{:noreply, state}
 	end
 end
-
-defmodule Etag do
-	use Ecto.Schema
-
-	import Ecto.Changeset
-
-	schema "etags" do
-		field :etag, :string
-		field :url, :string
-		timestamps()
-	end
-
-	def changeset(etag, attrs),
-		do: etag |> cast(attrs, [:url, :etag]) |> validate_required([:url, :etag]) |> unique_constraint(:url)
-end
