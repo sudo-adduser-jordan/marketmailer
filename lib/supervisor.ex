@@ -16,8 +16,9 @@ defmodule Marketmailer.RegionManagerSupervisor do
 		@impl true
 		def init(_) do
 				children =
-						for id <- @regions,
-										do: Supervisor.child_spec({Marketmailer.RegionManager, id}, id: {:region_manager, id})
+						for id <- @regions do
+								Supervisor.child_spec({Marketmailer.RegionManager, id}, id: {:region_manager, id})
+						end
 
 				Supervisor.init(children, strategy: :one_for_one)
 		end
