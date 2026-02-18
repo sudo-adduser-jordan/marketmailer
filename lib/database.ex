@@ -34,14 +34,6 @@ defmodule Etag.Database do
 end
 
 defmodule Discord.Database do
-	use Ecto.Schema
-
-	@primary_key {:guild_id, :integer, autogenerate: false}
-	schema "registered_channels" do
-		field :channel_id, :integer
-		timestamps()
-	end
-
 	def get(guild_id), do: Market.Database.get(__MODULE__, guild_id)
 
 	def all, do: Market.Database.all(__MODULE__)
