@@ -41,13 +41,13 @@ defmodule Marketmailer.PageWorker do
 			{:ok, data, ctx} ->
 				# Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
 				Market.Database.upsert_orders(data)
-				Market.Database.upsert_etag(ctx.url, ctx.etag)
+				Etag.Database.upsert_etag(ctx.url, ctx.etag)
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 
 			{:not_modified, ctx} ->
 				# Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-				Market.Database.upsert_etag(ctx.url, ctx.etag)
+				Etag.Database.upsert_etag(ctx.url, ctx.etag)
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 

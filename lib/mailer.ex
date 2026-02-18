@@ -37,7 +37,7 @@ defmodule Marketmailer.MailWorker do
 
 	defp deliver_email do
 		Logger.info("Fetching mail...")
-		items = Database.get_items_less_than_jita_buy()
+		items = Market.Database.get_items_less_than_jita_buy()
 		# %{
 		#   item: "Void S",
 		#   buy_price: 35.01,

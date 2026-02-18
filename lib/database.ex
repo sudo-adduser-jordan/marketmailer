@@ -1,66 +1,7 @@
-
 defmodule Etag.Database do
-end
-
-defmodule Discord.Database do
-  use Ecto.Schema
-
-  # Alias your Repo for easier calls
-  alias Market.Database, as: Repo
-
-  @primary_key {:guild_id, :integer, autogenerate: false}
-  schema "registered_channels" do
-    field :channel_id, :integer
-    timestamps()
-  end
-
-  def get(guild_id), do: Repo.get(__MODULE__, guild_id)
-
-  def all, do: Repo.all(__MODULE__)
-
-  def upsert(guild_id, channel_id) do
-    now = NaiveDateTime.utc_now(:second)
-    Repo.insert_all(
-      __MODULE__,
-      [%{
-        guild_id: guild_id,
-        channel_id: channel_id,
-        inserted_at: now,
-        updated_at: now
-      }],
-      on_conflict: {:replace, [:channel_id, :updated_at]},
-      conflict_target: :guild_id
-    )
-  end
-
-  @doc "Deletes a guild registration if it exists."
-  def delete(guild_id) do
-    case get(guild_id) do
-      nil -> :ok
-      struct -> Repo.delete(struct)
-    end
-  end
-end
-
-defmodule Market.Database do
 	use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
 
 	import Ecto.Query
-
-	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
-
-	def upsert_orders(orders) do
-		timestamp = NaiveDateTime.utc_now(:second)
-
-		rows =
-			Enum.map(orders, fn order ->
-				@fields
-				|> Map.new(fn val -> {val, order[Atom.to_string(val)]} end)
-				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
-			end)
-
-		insert_all(Market, rows, on_conflict: {:replace, @fields}, conflict_target: :order_id)
-	end
 
 	def get_etag(url) do
 		case :ets.lookup(:market_cache, url) do
@@ -89,6 +30,67 @@ defmodule Market.Database do
 		)
 
 		:ets.insert(:market_cache, {url, etag})
+	end
+end
+
+defmodule Discord.Database do
+	use Ecto.Schema
+
+	@primary_key {:guild_id, :integer, autogenerate: false}
+	schema "registered_channels" do
+		field :channel_id, :integer
+		timestamps()
+	end
+
+	def get(guild_id), do: Market.Database.get(__MODULE__, guild_id)
+
+	def all, do: Market.Database.all(__MODULE__)
+
+	def upsert(guild_id, channel_id) do
+		now = NaiveDateTime.utc_now(:second)
+
+		Market.Database.insert_all(
+			__MODULE__,
+			[
+				%{
+					guild_id: guild_id,
+					channel_id: channel_id,
+					inserted_at: now,
+					updated_at: now
+				}
+			],
+			on_conflict: {:replace, [:channel_id, :updated_at]},
+			conflict_target: :guild_id
+		)
+	end
+
+	@doc "Deletes a guild registration if it exists."
+	def delete(guild_id) do
+		case get(guild_id) do
+			nil -> :ok
+			struct -> Market.Database.delete(struct)
+		end
+	end
+end
+
+defmodule Market.Database do
+	use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
+
+	import Ecto.Query
+
+	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
+
+	def upsert_orders(orders) do
+		timestamp = NaiveDateTime.utc_now(:second)
+
+		rows =
+			Enum.map(orders, fn order ->
+				@fields
+				|> Map.new(fn val -> {val, order[Atom.to_string(val)]} end)
+				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
+			end)
+
+		insert_all(Market, rows, on_conflict: {:replace, @fields}, conflict_target: :order_id)
 	end
 
 	def load_postgres_dmp do
