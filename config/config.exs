@@ -19,4 +19,10 @@ config :marketmailer, Marketmailer.Mailer,
 	adapter: Swoosh.Adapters.Resend,
 	api_key: System.get_env("RESEND_TOKEN")
 
+config :marketmailer, :bot_options, %{
+	consumer: Discord.Consumer,
+	intents: [:guild_messages],
+	wrapped_token: fn -> System.fetch_env!("DISCORD_TOKEN") end
+}
+
 config :marketmailer, ecto_repos: [Database]

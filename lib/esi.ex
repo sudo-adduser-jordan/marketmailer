@@ -1,6 +1,7 @@
 defmodule Marketmailer.ESI do
 	require Logger
 
+	@user_agent "lostcoastwizard > BEAM me up, Scotty!"
 	@maint_key :maintenance_mode
 	@maint_ping_ms 10_000
 	@error_limit_threshold 100
@@ -27,7 +28,7 @@ defmodule Marketmailer.ESI do
 		etag = Database.get_etag(url)
 
 		headers =
-			[{"User-Agent", Marketmailer.Application.user_agent()}] ++
+			[{"User-Agent", @user_agent}] ++
 				if etag, do: [{"If-None-Match", etag}], else: []
 
 		case Req.get(url, headers: headers, pool_timeout: :infinity) do
