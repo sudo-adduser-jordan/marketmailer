@@ -25,5 +25,11 @@ defmodule Database.Migrations.CreateMarketAndEtags do
       timestamps()
     end
 
+    create table(:registered_channels, primary_key: false) do
+        add :guild_id, :bigint, primary_key: true
+        add :channel_id, :bigint, null: false
+        timestamps()
+    end
+
   end
 end

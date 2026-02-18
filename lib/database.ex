@@ -1,5 +1,5 @@
-# database connection
-defmodule Marketmailer.Repo do
+defmodule Database do
+	# database connection
 	use Ecto.Repo,
 		otp_app: :marketmailer,
 		adapter: Ecto.Adapters.Postgres
@@ -7,8 +7,6 @@ end
 
 defmodule Etag.Database do
 	import Ecto.Query
-
-	alias Marketmailer.Repo
 
 	def get_etag(url) do
 		case :ets.lookup(:market_cache, url) do
@@ -20,7 +18,7 @@ defmodule Etag.Database do
 	defp fetch_etag(url) do
 		query = from(tag in "etags", where: tag.url == ^url, select: tag.etag)
 
-		case Repo.one(query) do
+		case Database.one(query) do
 			nil ->
 				nil
 
@@ -33,7 +31,7 @@ defmodule Etag.Database do
 	def upsert_etag(url, etag) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Repo.insert_all(
+		Database.insert_all(
 			"etags",
 			[%{url: url, etag: etag, inserted_at: now, updated_at: now}],
 			on_conflict: {:replace, [:etag, :updated_at]},
@@ -47,18 +45,16 @@ end
 defmodule Discord.Database do
 	import Ecto.Query
 
-	alias Marketmailer.Repo
-
 	@table "discord_channels"
 
-	def get(guild_id), do: Repo.get_by(@table, guild_id: guild_id)
+	def get(guild_id), do: Database.get_by(@table, guild_id: guild_id)
 
-	def all, do: Repo.all(from(d in @table, select: d))
+	def all, do: Database.all(from(d in @table, select: d))
 
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Repo.insert_all(
+		Database.insert_all(
 			@table,
 			[
 				%{
@@ -76,7 +72,7 @@ defmodule Discord.Database do
 	def delete(guild_id) do
 		case get(guild_id) do
 			nil -> :ok
-			record -> Repo.delete(record)
+			record -> Database.delete(record)
 		end
 	end
 end
@@ -84,10 +80,8 @@ end
 defmodule Market.Database do
 	import Ecto.Query
 
-	alias Marketmailer.Repo
-
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
-	@table "markets"
+	@table "market"
 
 	def upsert_orders(orders) do
 		timestamp = NaiveDateTime.utc_now(:second)
@@ -99,8 +93,7 @@ defmodule Market.Database do
 				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
 			end)
 
-		# We include :updated_at in the replace list so we know when data last changed
-		Repo.insert_all(@table, rows,
+		Database.insert_all(@table, rows,
 			on_conflict: {:replace, @fields ++ [:updated_at]},
 			conflict_target: :order_id
 		)
@@ -126,12 +119,12 @@ defmodule Market.Database do
 				order_by: [asc: fragment("? - ?", table_two.price, table_one.price)],
 				limit: 100
 
-		Repo.all(query)
+		Database.all(query)
 	end
 
 	def cheapest_order do
 		query = from(m in @table, order_by: [asc: m.price], limit: 1)
-		Repo.one(query)
+		Database.one(query)
 	end
 
 	def load_postgres_dmp, do: :ok
