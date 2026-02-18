@@ -1,7 +1,14 @@
-defmodule Etag.Database do
-	use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
+# database connection
+defmodule Marketmailer.Repo do
+	use Ecto.Repo,
+		otp_app: :marketmailer,
+		adapter: Ecto.Adapters.Postgres
+end
 
+defmodule Etag.Database do
 	import Ecto.Query
+
+	alias Marketmailer.Repo
 
 	def get_etag(url) do
 		case :ets.lookup(:market_cache, url) do
@@ -11,7 +18,9 @@ defmodule Etag.Database do
 	end
 
 	defp fetch_etag(url) do
-		case one(from tag in Etag, where: tag.url == ^url, select: tag.etag) do
+		query = from(tag in "etags", where: tag.url == ^url, select: tag.etag)
+
+		case Repo.one(query) do
 			nil ->
 				nil
 
@@ -24,7 +33,9 @@ defmodule Etag.Database do
 	def upsert_etag(url, etag) do
 		now = NaiveDateTime.utc_now(:second)
 
-		insert_all(Etag, [%{url: url, etag: etag, inserted_at: now, updated_at: now}],
+		Repo.insert_all(
+			"etags",
+			[%{url: url, etag: etag, inserted_at: now, updated_at: now}],
 			on_conflict: {:replace, [:etag, :updated_at]},
 			conflict_target: :url
 		)
@@ -34,15 +45,21 @@ defmodule Etag.Database do
 end
 
 defmodule Discord.Database do
-	def get(guild_id), do: Market.Database.get(__MODULE__, guild_id)
+	import Ecto.Query
 
-	def all, do: Market.Database.all(__MODULE__)
+	alias Marketmailer.Repo
+
+	@table "discord_channels"
+
+	def get(guild_id), do: Repo.get_by(@table, guild_id: guild_id)
+
+	def all, do: Repo.all(from(d in @table, select: d))
 
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Market.Database.insert_all(
-			__MODULE__,
+		Repo.insert_all(
+			@table,
 			[
 				%{
 					guild_id: guild_id,
@@ -56,21 +73,21 @@ defmodule Discord.Database do
 		)
 	end
 
-	@doc "Deletes a guild registration if it exists."
 	def delete(guild_id) do
 		case get(guild_id) do
 			nil -> :ok
-			struct -> Market.Database.delete(struct)
+			record -> Repo.delete(record)
 		end
 	end
 end
 
-defmodule Market.Database do
-	use Ecto.Repo, otp_app: :marketmailer, adapter: Ecto.Adapters.Postgres
-
+defmodule Marketmailer.Database do
 	import Ecto.Query
 
-	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
+	alias Marketmailer.Repo
+
+	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
+	@table "markets"
 
 	def upsert_orders(orders) do
 		timestamp = NaiveDateTime.utc_now(:second)
@@ -78,17 +95,15 @@ defmodule Market.Database do
 		rows =
 			Enum.map(orders, fn order ->
 				@fields
-				|> Map.new(fn val -> {val, order[Atom.to_string(val)]} end)
+				|> Map.new(fn field -> {field, order[Atom.to_string(field)]} end)
 				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
 			end)
 
-		insert_all(Market, rows, on_conflict: {:replace, @fields}, conflict_target: :order_id)
-	end
-
-	def load_postgres_dmp do
-	end
-
-	def create_market_view do
+		# We include :updated_at in the replace list so we know when data last changed
+		Repo.insert_all(@table, rows,
+			on_conflict: {:replace, @fields ++ [:updated_at]},
+			conflict_target: :order_id
+		)
 	end
 
 	def get_items_less_than_jita_buy do
@@ -111,16 +126,15 @@ defmodule Market.Database do
 				order_by: [asc: fragment("? - ?", table_two.price, table_one.price)],
 				limit: 100
 
-		__MODULE__.all(query)
-	end
-
-	def get_list_less_than_jita_buy do
+		Repo.all(query)
 	end
 
 	def cheapest_order do
-		Market
-		|> order_by(asc: :price)
-		|> limit(1)
-		|> one()
+		query = from(m in @table, order_by: [asc: m.price], limit: 1)
+		Repo.one(query)
 	end
+
+	def load_postgres_dmp, do: :ok
+	def create_market_view, do: :ok
+	def get_list_less_than_jita_buy, do: []
 end
