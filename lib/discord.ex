@@ -191,32 +191,23 @@ end
 defmodule Discord.Database do
 	use Ecto.Schema
 
-	import Ecto.Changeset
-
 	@primary_key {:guild_id, :integer, autogenerate: false}
+
 	schema "registered_channels" do
 		field :channel_id, :integer
 		timestamps()
-	end
-
-	def changeset(struct, params \\ %{}) do
-		struct
-		|> cast(params, [:guild_id, :channel_id])
-		|> validate_required([:guild_id, :channel_id])
-		|> unique_constraint(:guild_id)
 	end
 
 	def get(guild_id), do: Database.get(__MODULE__, guild_id)
 	def all, do: Database.all(__MODULE__)
 
 	def upsert(guild_id, channel_id) do
-		%__MODULE__{guild_id: guild_id}
-		|> changeset(%{channel_id: channel_id})
+		%__MODULE__{guild_id: guild_id, channel_id: channel_id}
 		|> Database.insert(on_conflict: [set: [channel_id: channel_id]], conflict_target: :guild_id)
 	end
 
 	def delete(guild_id) do
-		case Database.get(__MODULE__, guild_id) do
+		case get(guild_id) do
 			nil -> :ok
 			struct -> Database.delete(struct)
 		end
