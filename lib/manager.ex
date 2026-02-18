@@ -34,12 +34,12 @@ defmodule Marketmailer.RegionManager do
 		end
 	end
 
-	defp start_page(id, p) do
-		case Registry.lookup(Marketmailer.Registry, {:page, id, p}) do
+	defp start_page(id, page) do
+		case Registry.lookup(Marketmailer.Registry, {:page, id, page}) do
 			[] ->
 				DynamicSupervisor.start_child(
 					Marketmailer.PageSup,
-					{Marketmailer.PageWorker, {self(), id, p}}
+					{Marketmailer.PageWorker, {self(), id, page}}
 				)
 
 			_ ->
@@ -47,8 +47,8 @@ defmodule Marketmailer.RegionManager do
 		end
 	end
 
-	defp stop_page(id, p) do
-		for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, id, p}),
+	defp stop_page(id, page) do
+		for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, id, page}),
 				do: GenServer.stop(pid, :normal)
 	end
 end

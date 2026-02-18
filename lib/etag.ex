@@ -1,4 +1,4 @@
-defmodule Marketmailer.EtagWarmup do
+defmodule Etag do
 	use GenServer
 
 	import Ecto.Query
@@ -12,10 +12,25 @@ defmodule Marketmailer.EtagWarmup do
 	end
 
 	@impl true
-	def handle_info(:warmup, s) do
-		for {url, e} <- Database.all(from e in Etag, select: {e.url, e.etag}),
-				do: :ets.insert(:market_cache, {url, e})
+	def handle_info(:warmup, state) do
+		for {url, etag} <- Database.all(from tag in Etag, select: {tag.url, tag.etag}),
+				do: :ets.insert(:market_cache, {url, etag})
 
-		{:noreply, s}
+		{:noreply, state}
 	end
+end
+
+defmodule Etag do
+	use Ecto.Schema
+
+	import Ecto.Changeset
+
+	schema "etags" do
+		field :etag, :string
+		field :url, :string
+		timestamps()
+	end
+
+	def changeset(etag, attrs),
+		do: etag |> cast(attrs, [:url, :etag]) |> validate_required([:url, :etag]) |> unique_constraint(:url)
 end

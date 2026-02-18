@@ -6,13 +6,13 @@ defmodule Database do
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
 
 	def upsert_orders(orders) do
-		ts = NaiveDateTime.utc_now(:second)
+		timestamp = NaiveDateTime.utc_now(:second)
 
 		rows =
-			Enum.map(orders, fn o ->
+			Enum.map(orders, fn order ->
 				@fields
-				|> Map.new(fn f -> {f, o[Atom.to_string(f)]} end)
-				|> Map.merge(%{inserted_at: ts, updated_at: ts})
+				|> Map.new(fn val -> {val, order[Atom.to_string(val)]} end)
+				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
 			end)
 
 		insert_all(Market, rows, on_conflict: {:replace, @fields}, conflict_target: :order_id)
@@ -26,7 +26,7 @@ defmodule Database do
 	end
 
 	defp fetch_etag(url) do
-		case one(from e in Etag, where: e.url == ^url, select: e.etag) do
+		case one(from tag in Etag, where: tag.url == ^url, select: tag.etag) do
 			nil ->
 				nil
 
@@ -55,22 +55,22 @@ defmodule Database do
 
 	def get_items_less_than_jita_buy do
 		query =
-			from s in fragment("public.\"marketView\""),
-				join: b in fragment("public.\"marketView\""),
+			from table_one in fragment("public.\"marketView\""),
+				join: table_two in fragment("public.\"marketView\""),
 				on:
-					s.item_name == b.item_name and
-						s.system_name != "Jita" and
-						b.system_name == "Jita" and
-						s.order_type == "SELL" and
-						b.order_type == "BUY",
-				where: s.price < b.price,
+					table_one.item_name == table_two.item_name and
+						table_one.system_name != "Jita" and
+						table_two.system_name == "Jita" and
+						table_one.order_type == "SELL" and
+						table_two.order_type == "BUY",
+				where: table_one.price < table_two.price,
 				select: %{
-					item: s.item_name,
-					buy_price: b.price,
-					sell_price: s.price,
-					margin: fragment("? - ?", b.price, s.price)
+					item: table_one.item_name,
+					buy_price: table_two.price,
+					sell_price: table_one.price,
+					margin: fragment("? - ?", table_two.price, table_one.price)
 				},
-				order_by: [asc: fragment("? - ?", b.price, s.price)],
+				order_by: [asc: fragment("? - ?", table_two.price, table_one.price)],
 				limit: 100
 
 		__MODULE__.all(query)
@@ -106,19 +106,4 @@ defmodule Market do
 		field :volume_total, :integer
 		timestamps()
 	end
-end
-
-defmodule Etag do
-	use Ecto.Schema
-
-	import Ecto.Changeset
-
-	schema "etags" do
-		field :etag, :string
-		field :url, :string
-		timestamps()
-	end
-
-	def changeset(etag, attrs),
-		do: etag |> cast(attrs, [:url, :etag]) |> validate_required([:url, :etag]) |> unique_constraint(:url)
 end

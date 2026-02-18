@@ -5,3 +5,4 @@ docker compose down -v
 print during disconnect
 
 
+# try functions without defintion queries

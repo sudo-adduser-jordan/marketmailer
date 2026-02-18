@@ -1,4 +1,4 @@
-defmodule Marketmailer.ESI do
+defmodule ESI do
 	require Logger
 
 	@user_agent "lostcoastwizard > BEAM me up, Scotty!"
@@ -31,26 +31,27 @@ defmodule Marketmailer.ESI do
 			[{"User-Agent", @user_agent}] ++
 				if etag, do: [{"If-None-Match", etag}], else: []
 
+		# review
 		case Req.get(url, headers: headers, pool_timeout: :infinity) do
-			{:ok, %{status: 200} = r} ->
+			{:ok, %{status: 200} = response} ->
 				clear_maintenance()
-				{:ok, r.body, meta(r, url)}
+				{:ok, response.body, meta(response, url)}
 
-			{:ok, %{status: 304} = r} ->
+			{:ok, %{status: 304} = response} ->
 				clear_maintenance()
-				{:not_modified, meta(r, url)}
+				{:not_modified, meta(response, url)}
 
-			{:ok, %{status: 503} = r} ->
+			{:ok, %{status: 503} = response} ->
 				activate_maintenance()
-				{:error, :service_unavailable, meta(r, url)}
+				{:error, :service_unavailable, meta(response, url)}
 
-			{:ok, r} ->
-				_ = meta(r, url)
-				{:error, r.status}
+			{:ok, response} ->
+				_ = meta(response, url)
+				{:error, response.status}
 
-			{:error, e} ->
-				Logger.error("#{region}/#{page} HTTP error: #{inspect(e)}")
-				{:error, e}
+			{:error, error} ->
+				Logger.error("#{region}/#{page} HTTP error: #{inspect(error)}")
+				{:error, error}
 		end
 	end
 
@@ -66,22 +67,22 @@ defmodule Marketmailer.ESI do
 		end
 	end
 
-	defp meta(r, url) do
-		error_rem = first(r.headers, "x-esi-error-limit-remain")
-		ttl = calc_ttl(first(r.headers, "expires"))
+	defp meta(response, url) do
+		error_rem = first(response.headers, "x-esi-error-limit-remain")
+		ttl = calc_ttl(first(response.headers, "expires"))
 		ttl = if remain(error_rem) < @error_limit_threshold, do: enforce_pause(ttl), else: ttl
 
 		%{
 			url: url,
-			etag: first(r.headers, "etag"),
+			etag: first(response.headers, "etag"),
 			ttl: ttl,
-			pages: String.to_integer(first(r.headers, "x-pages") || "1")
+			pages: String.to_integer(first(response.headers, "x-pages") || "1")
 		}
 	end
 
 	defp remain(nil), do: 999
-	defp remain(v), do: v |> Integer.parse() |> elem(0)
-	defp first(h, k), do: h |> Map.get(k, []) |> List.first()
+	defp remain(value), do: value |> Integer.parse() |> elem(0)
+	defp first(val, key), do: val |> Map.get(key, []) |> List.first()
 
 	defp enforce_pause(ttl) do
 		now = System.system_time(:millisecond)
@@ -94,8 +95,8 @@ defmodule Marketmailer.ESI do
 	defp calc_ttl(exp) do
 		case :httpd_util.convert_request_date(to_charlist(exp)) do
 			{{_, _, _}, {_, _, _}} = erl ->
-				dt = DateTime.from_naive!(NaiveDateTime.from_erl!(erl), "Etc/UTC")
-				max(DateTime.diff(dt, DateTime.utc_now(), :millisecond), 5_000) + 1_000
+				datetime = DateTime.from_naive!(NaiveDateTime.from_erl!(erl), "Etc/UTC")
+				max(DateTime.diff(datetime, DateTime.utc_now(), :millisecond), 5_000) + 1_000
 
 			_ ->
 				60_000
