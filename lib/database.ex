@@ -81,7 +81,7 @@ defmodule Discord.Database do
 	end
 end
 
-defmodule Marketmailer.Database do
+defmodule Market.Database do
 	import Ecto.Query
 
 	alias Marketmailer.Repo

@@ -13,7 +13,7 @@ defmodule EtagCache do
 
 	@impl true
 	def handle_info(:warmup, state) do
-		for {url, etag} <- Etag.Database.all(from tag in Etag, select: {tag.url, tag.etag}),
+		for {url, etag} <- Marketmailer.Repo.all(from tag in Etag, select: {tag.url, tag.etag}),
 				do: :ets.insert(:market_cache, {url, etag})
 
 		{:noreply, state}
