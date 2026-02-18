@@ -1,4 +1,4 @@
-defmodule Etag do
+defmodule EtagCache do
 	use GenServer
 
 	import Ecto.Query

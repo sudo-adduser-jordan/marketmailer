@@ -8,7 +8,7 @@ defmodule Marketmailer.Application do
 
 		children = [
 			Database,
-			Etag,
+			EtagCache,
 			{Registry, keys: :unique, name: Marketmailer.Registry},
 			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
 			{Task.Supervisor, name: Marketmailer.TaskSup},
