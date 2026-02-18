@@ -2,190 +2,89 @@ defmodule Discord.Consumer do
 	@behaviour Nostrum.Consumer
 
 	alias Nostrum.Api
-	alias Nostrum.Struct.Embed
-	alias Nostrum.Struct.Interaction
+	alias Nostrum.Struct.{Embed, Interaction}
 
+	# MANAGE_GUILD
 	@admin_only "16"
 	@interval 15 * 60 * 1000
 
-	# --- Lifecycle & Events ---
+	def handle_event({:READY, _, _}),
+		do:
+			(
+				register_commands()
+				schedule_broadcast()
+			)
 
-	def handle_event({:READY, _data, _ws_state}) do
-		register_commands()
-		schedule_broadcast()
-	end
-
-	def handle_event({:INTERACTION_CREATE, %Interaction{} = interaction, _ws_state}) do
-		case interaction.data.name do
+	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = intr, _}) do
+		case name do
 			"add_channel" ->
-				[subcommand] = interaction.data.options
-
-				case subcommand.name do
-					"subcommand" ->
-						option = Enum.find(subcommand.options, fn opt -> opt.name == "required_option" end)
-						value = option.value
-
-						Api.Interaction.create_response(interaction, %{
-							type: 4,
-							data: %{content: "✅ <##{interaction.channel_id}> registered for alerts."}
-						})
-
-						Discord.Database.upsert(interaction.guild_id, interaction.channel_id)
-				end
+				Discord.Database.upsert(intr.guild_id, intr.channel_id)
+				respond(intr, "✅ <##{intr.channel_id}> registered for market alerts.")
 
 			"remove_channel" ->
-				[subcommand] = interaction.data.options
+				Discord.Database.delete(intr.guild_id)
+				respond(intr, "🗑️ Market alerts disabled.")
 
-				case subcommand.name do
-					"subcommand" ->
-						option = Enum.find(subcommand.options, fn opt -> opt.name == "required_option" end)
-						value = option.value
-
-						Api.Interaction.create_response(interaction, %{
-							type: 4,
-							data: %{content: "🗑️ Market alerts disabled for this server."}
-						})
-
-						Discord.Database.delete(interaction.guild_id)
-				end
-
-			"list_channels" ->
+			"list_channel" ->
 				msg =
-					case Discord.Database.get(interaction.guild_id) do
-						%{channel_id: chan_id} -> "📋 Monitoring channel: <##{chan_id}>"
-						nil -> "❌ No channel registered."
+					case Discord.Database.get(intr.guild_id) do
+						%{channel_id: id} -> "📋 Monitoring: <##{id}>"
+						_ -> "❌ No channel registered."
 					end
 
-				Api.Interaction.create_response(interaction, %{
-					type: 4,
-					data: %{content: msg}
-				})
+				respond(intr, msg)
 
 			"check_market" ->
-				Api.Interaction.create_response(interaction, %{type: 5})
-
-				items =
-					Database.get_items_less_than_jita_buy()
-					|> Enum.take(10)
-
-				Api.Interaction.edit_response(interaction, %{
-					embeds: [build_best_order_message(items)]
-				})
-
-			_ ->
-				:ok
+				# Deferred
+				Api.Interaction.create_response(intr, %{type: 5})
+				items = Database.get_items_less_than_jita_buy() |> Enum.take(10)
+				Api.Interaction.edit_response(intr, %{embeds: [build_embed(items)]})
 		end
 	end
 
-	def handle_event(_event), do: :ok
+	def handle_event(_), do: :ok
 
-	# --- Recurring Logic ---
+	# --- Helpers ---
 
-	def handle_info(:broadcast_market_updates, state) do
-		items =
-			Database.get_items_less_than_jita_buy()
-			|> Enum.take(10)
+	defp respond(intr, text), do: Api.Interaction.create_response(intr, %{type: 4, data: %{content: text}})
 
-		if items != [] do
-			embed = build_best_order_message(items)
+	def handle_info(:broadcast, state) do
+		items = Database.get_items_less_than_jita_buy() |> Enum.take(10)
 
-			Discord.Database.all()
-			|> Enum.each(fn record ->
-				Api.Message.create(record.channel_id, embeds: [embed])
-			end)
-		end
+		if items != [],
+			do:
+				(
+					embed = build_embed(items)
+					Enum.each(Discord.Database.all(), &Api.Message.create(&1.channel_id, embeds: [embed]))
+				)
 
 		schedule_broadcast()
 		{:noreply, state}
 	end
 
-	def handle_info(_msg, state), do: {:noreply, state}
-
-	defp schedule_broadcast do
-		Process.send_after(self(), :broadcast_market_updates, @interval)
-	end
-
-	# --- Registration & Helpers ---
+	defp schedule_broadcast, do: Process.send_after(self(), :broadcast, @interval)
 
 	defp register_commands do
 		commands = [
-			%{
-				name: "add_channel",
-				description: "Set the current channel for market updates",
-				default_member_permissions: @admin_only,
-				dm_permission: false,
-				options: [
-					%{
-						type: 1,
-						name: "subcommand",
-						description: "Subcommand description",
-						options: [
-							%{
-								type: 3,
-								name: "required_option",
-								description: "Description of your option",
-								required: true
-							}
-						]
-					}
-				]
-			},
-			%{
-				name: "remove_channel",
-				description: "Stop market updates for this server",
-				default_member_permissions: @admin_only,
-				dm_permission: false,
-				options: [
-					%{
-						type: 1,
-						name: "subcommand",
-						description: "Subcommand description",
-						options: [
-							%{
-								type: 3,
-								name: "required_option",
-								description: "Description of your option",
-								required: true
-							}
-						]
-					}
-				]
-			},
-			%{
-				name: "list_channels",
-				description: "Show the registered update channel",
-				dm_permission: false
-			},
-			%{
-				name: "check_market",
-				description: "Manually scan for Jita deals"
-			}
+			%{name: "add_channel", description: "Set current channel for alerts", default_member_permissions: @admin_only},
+			%{name: "remove_channel", description: "Stop alerts", default_member_permissions: @admin_only},
+			%{name: "list_channel", description: "Show registered channel"},
+			%{name: "check_market", description: "Scan for Jita deals"}
 		]
 
 		Api.ApplicationCommand.bulk_overwrite_global_commands(commands)
 	end
 
-	def build_best_order_message(items) do
+	defp build_embed(items) do
 		%Embed{
-			title: "🛒 Items Below Jita Buy Price",
+			title: "🛒 Items Below Jita Buy",
 			color: 0x00FF00,
 			fields:
-				Enum.map(items, fn item ->
-					%{
-						name: item.item,
-						value:
-							"**Buy:** #{format_price(item.buy_price)}\n" <>
-								"**Sell:** #{format_price(item.sell_price)}\n" <>
-								"**Margin:** #{format_margin(item.margin)}",
-						inline: true
-					}
-				end),
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+				Enum.map(items, fn i ->
+					%{name: i.item, value: "B: #{i.buy_price} | S: #{i.sell_price}\nMargin: #{i.margin * 100}%", inline: true}
+				end)
 		}
 	end
-
-	defp format_price(p), do: :erlang.float_to_binary(p, decimals: 2) <> " ISK"
-	defp format_margin(m), do: :erlang.float_to_binary(m * 100, decimals: 2) <> "%"
 end
 
 defmodule Discord.Database do
