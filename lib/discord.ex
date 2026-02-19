@@ -5,22 +5,94 @@ defmodule Discord.Messages do
 	@color_error 0xF04747
 	@color_info 0x7289DA
 
+	@icon_success "https://i.imgur.com/vHq4V9n.png"
+	@icon_error "https://i.imgur.com/6F6O7Wv.png"
+	@icon_market "https://images.evetech.net/types/34/icon?size=64"
+
+	def full_spec_embed do
+		%Embed{
+			# Main Content
+			title: "🚀 Full Spec Embed Title",
+			description: "This is the main body text. Supports **Markdown** and [Hyperlinks](https://discord.com).",
+			# Makes the Title a clickable link
+			url: "https://google.com",
+			# Hex integer (Blurple)
+			color: 0x7289DA,
+			# ISO8601 string
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+
+			# Author Section (Top of embed)
+			author: %Embed.Author{
+				name: "Gemini AI Assistant",
+				url: "https://discord.com",
+				icon_url: "https://i.imgur.com/vHq4V9n.png"
+			},
+
+			# Thumbnail (Small image in top-right corner)
+			thumbnail: %Embed.Thumbnail{
+				url: "https://images.evetech.net/types/34/icon?size=64"
+			},
+
+			# Main Image (Large image at the bottom)
+			image: %Embed.Image{
+				url: "https://i.imgur.com/W9vU0xX.png"
+			},
+
+			# Fields (Up to 25 per embed)
+			fields: [
+				%Embed.Field{
+					name: "Field 1 (Inline)",
+					value: "Max 1024 characters.",
+					inline: true
+				},
+				%Embed.Field{
+					name: "Field 2 (Inline)",
+					value: "I sit next to Field 1.",
+					inline: true
+				},
+				%Embed.Field{
+					name: "Field 3 (Standard)",
+					value: "I take up the full width because inline is false.",
+					inline: false
+				}
+			],
+
+			# Footer Section (Very bottom)
+			footer: %Embed.Footer{
+				text: "Sent via Elixir • Nostrum",
+				icon_url: "https://i.imgur.com/vHq4V9n.png"
+			}
+		}
+	end
+
 	def channel_registered(id) do
-		%Embed{description: "✅ Channel <##{id}> is now registered for market alerts.", color: @color_success}
+		%Embed{
+			description: "✅ Channel <##{id}> is now registered for market alerts.",
+			color: @color_success,
+			thumbnail: %Embed.Thumbnail{url: @icon_success}
+		}
 	end
 
 	def channel_removed(id) do
-		%Embed{description: "🗑️ Market alerts have been disabled for Channel <##{id}>.", color: @color_error}
+		%Embed{
+			description: "🗑️ Market alerts have been disabled for Channel <##{id}>.",
+			color: @color_error,
+			thumbnail: %Embed.Thumbnail{url: @icon_error}
+		}
 	end
 
 	def list_channel(nil) do
-		%Embed{description: "❌ Error: No channel registered. Use `/add_channel` to start.", color: @color_error}
+		%Embed{
+			description: "❌ Error: No channel registered. Use `/add_channel` to start.",
+			color: @color_error
+		}
 	end
 
 	def list_channel(id) do
 		%Embed{
 			description: "📋 Monitoring alerts in <##{id}>",
-			color: @color_info
+			color: @color_info,
+			author: %Embed.Author{name: "Settings", icon_url: @icon_success}
 		}
 	end
 
@@ -30,6 +102,7 @@ defmodule Discord.Messages do
 		%Embed{
 			title: "🛒 Items Below Jita Buy",
 			color: @color_success,
+			thumbnail: %Embed.Thumbnail{url: @icon_market},
 			fields:
 				Enum.map(items, fn item ->
 					%{
@@ -39,7 +112,10 @@ defmodule Discord.Messages do
 						inline: true
 					}
 				end),
-			footer: %{text: "EVE Market Scan • #{DateTime.utc_now() |> DateTime.to_date()}"}
+			footer: %Embed.Footer{
+				text: "EVE Market Scan • #{DateTime.utc_now() |> DateTime.to_date()}",
+				icon_url: @icon_market
+			}
 		}
 	end
 end
@@ -72,7 +148,8 @@ defmodule Discord.Consumer do
 		case name do
 			"add_channel" ->
 				# Discord.Database.upsert(intr.guild_id, intr.channel_id)
-				respond(intr, Messages.channel_registered(intr.channel_id))
+				# respond(intr, Messages.channel_registered(intr.channel_id))
+				respond(intr, Messages.full_spec_embed())
 
 			"remove_channel" ->
 				# Discord.Database.delete(intr.guild_id)
