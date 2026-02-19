@@ -82,10 +82,10 @@ defmodule Discord.Consumer do
 				respond(intr, Messages.list_channel(nil))
 
 			"check_market" ->
-				respond(intr, Messages.market_embed([]))
 				# Api.Interaction.create_response(intr, %{type: 5})
 				# items = Market.Database.get_items_less_than_jita_buy() |> Enum.take(10)
 				# Api.Interaction.edit_response(intr, %{embeds: [Messages.market_embed(items)]})
+				respond(intr, Messages.market_embed([]))
 		end
 	end
 
