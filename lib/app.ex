@@ -12,7 +12,7 @@ defmodule Marketmailer.Application do
 			{Registry, keys: :unique, name: Marketmailer.Registry},
 			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
 			{Task.Supervisor, name: Marketmailer.TaskSup},
-			Marketmailer.RegionManagerSupervisor,
+			# Marketmailer.RegionManagerSupervisor,
 			# Marketmailer.MailWorker,
 			{Nostrum.Bot, Application.fetch_env!(:marketmailer, :bot_options)}
 		]

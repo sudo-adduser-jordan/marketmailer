@@ -5,17 +5,16 @@ defmodule Discord.Messages do
 	@color_error 0xF04747
 	@color_info 0x7289DA
 
-	# --- Base Wrappers ---
+	def channel_registered(id) do
+		%Embed{description: "✅ Channel <##{id}> is now registered for market alerts.", color: @color_success}
+	end
 
-	def success(text), do: %Embed{description: "✅ #{text}", color: @color_success}
-	def error(text), do: %Embed{description: "❌ #{text}", color: @color_error}
+	def channel_removed(id) do
+		%Embed{description: "🗑️ Market alerts have been disabled for Channel <##{id}>.", color: @color_error}
+	end
 
-	# --- Command Specifics ---
-
-	def channel_registered(id), do: success("<##{id}> is now registered for market alerts.")
-	def channel_removed, do: success("Market alerts have been disabled for this server.")
-
-	def list_channel(nil), do: error("No channel registered. Use `/add_channel` to start.")
+	def list_channel(nil),
+		do: %Embed{description: "❌ Error: No channel registered. Use `/add_channel` to start.", color: @color_error}
 
 	def list_channel(id) do
 		%Embed{
@@ -24,19 +23,18 @@ defmodule Discord.Messages do
 		}
 	end
 
-	# --- Market Embed ---
-
-	def market_embed([]), do: error("No items currently found below Jita Buy.")
+	def market_embed([]), do: %Embed{description: "❌ Error: Unable to check market database.", color: @color_error}
 
 	def market_embed(items) do
 		%Embed{
 			title: "🛒 Items Below Jita Buy",
 			color: @color_success,
 			fields:
-				Enum.map(items, fn i ->
+				Enum.map(items, fn item ->
 					%{
-						name: i.item,
-						value: "💰 **B:** #{i.buy_price} | **S:** #{i.sell_price}\n📈 **Margin:** #{Float.round(i.margin * 100, 2)}%",
+						name: item.item,
+						value:
+							"💰 **B:** #{item.buy_price} | **S:** #{item.sell_price}\n📈 **Margin:** #{Float.round(item.margin * 100, 2)}%",
 						inline: true
 					}
 				end),
@@ -70,16 +68,16 @@ defmodule Discord.Consumer do
 
 			"remove_channel" ->
 				# Discord.Database.delete(intr.guild_id)
-				respond(intr, Messages.channel_removed())
+				respond(intr, Messages.channel_removed(intr.channel_id))
 
 			"list_channel" ->
-				chan_id =
-					case Discord.Database.get(intr.guild_id) do
-						%{channel_id: id} -> id
-						_ -> nil
-					end
+				case Discord.Database.get(intr.guild_id) do
+					%{channel_id: id} ->
+						respond(intr, Messages.list_channel(id))
 
-				respond(intr, Messages.list_channel(chan_id))
+					_ ->
+						respond(intr, Messages.list_channel(nil))
+				end
 
 			"check_market" ->
 				Api.Interaction.create_response(intr, %{type: 5})
@@ -125,5 +123,6 @@ defmodule Discord.Consumer do
 		]
 
 		Api.ApplicationCommand.bulk_overwrite_global_commands(commands)
+		:ok
 	end
 end
