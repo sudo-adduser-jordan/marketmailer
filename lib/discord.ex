@@ -6,14 +6,21 @@ defmodule Discord.Messages do
 	@color_error 0xF04747
 	@color_info 0x7289DA
 
-	@icon_success "https://i.imgur.com/vHq4V9n.png"
-	@icon_error "https://i.imgur.com/6F6O7Wv.png"
-	@icon_market "https://images.evetech.net/types/34/icon?size=64"
-	@icon_elixir ""
+	# https://images.evetech.net/{category}/{id}/{variation}
+
+	@icon_ ""
+	@icon_market "https://images.evetech.net/types/30752/relic?size=64"
+	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/elixir.png"
+
+	@icon_info ""
+	@icon_error ""
+	@icon_success ""
+
 	# @icon_ ""
 	# @icon_ ""
 	# @icon_ ""
 	# @icon_ ""
+
 	def market_embed do
 		%Embed{
 			title: "🚀 Full Spec Embed Title",
@@ -64,7 +71,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_market
 			},
 			title: "Channel Registiration",
-			description: "Channel <##{id}> is now registered for market alerts.",
+			description: "<##{id}> is now registered for market alerts.",
 			url: "https://google.com",
 			color: @color_success,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -86,7 +93,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_market
 			},
 			title: "Channel Registiration",
-			description: "Channel <##{id}> has been removed.",
+			description: "<##{id}> will no longer recieve market alerts.",
 			url: "https://google.com",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -108,7 +115,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_market
 			},
 			title: "Channel Registiration",
-			description: "Channel <##{id}> is the currently registered.",
+			description: "<##{id}> is the currently registered.",
 			url: "https://google.com",
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -158,6 +165,7 @@ defmodule Discord.Consumer do
 				respond(intr, Messages.channel_removed(intr.channel_id))
 
 			"list_channel" ->
+				# Discord.Database.get(intr.guild_id)
 				respond(intr, Messages.list_channel(nil))
 
 			"check_market" ->
