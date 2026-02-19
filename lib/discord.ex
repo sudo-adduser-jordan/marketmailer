@@ -54,12 +54,19 @@ defmodule Discord.Consumer do
 	@admin_only "16"
 	@interval 15 * 60 * 1000
 
-	def handle_event({:READY, _, _}),
-		do:
-			(
-				register_commands()
-				schedule_broadcast()
-			)
+	defp schedule_broadcast, do: Process.send_after(self(), :broadcast, @interval)
+
+	def handle_event({:READY, _, _}) do
+		commands = [
+			%{name: "add_channel", description: "Set current channel for alerts", default_member_permissions: @admin_only},
+			%{name: "remove_channel", description: "Remove alerts from this server", default_member_permissions: @admin_only},
+			%{name: "list_channel", description: "Show the current update channel"},
+			%{name: "check_market", description: "Scan the market immediately"}
+		]
+
+		Api.ApplicationCommand.bulk_overwrite_global_commands(commands)
+		schedule_broadcast()
+	end
 
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = intr, _}) do
 		case name do
@@ -72,18 +79,13 @@ defmodule Discord.Consumer do
 				respond(intr, Messages.channel_removed(intr.channel_id))
 
 			"list_channel" ->
-				case Discord.Database.get(intr.guild_id) do
-					%{channel_id: id} ->
-						respond(intr, Messages.list_channel(id))
-
-					_ ->
-						respond(intr, Messages.list_channel(nil))
-				end
+				respond(intr, Messages.list_channel(nil))
 
 			"check_market" ->
-				Api.Interaction.create_response(intr, %{type: 5})
-				items = Market.Database.get_items_less_than_jita_buy() |> Enum.take(10)
-				Api.Interaction.edit_response(intr, %{embeds: [Messages.market_embed(items)]})
+				respond(intr, Messages.market_embed([]))
+				# Api.Interaction.create_response(intr, %{type: 5})
+				# items = Market.Database.get_items_less_than_jita_buy() |> Enum.take(10)
+				# Api.Interaction.edit_response(intr, %{embeds: [Messages.market_embed(items)]})
 		end
 	end
 
@@ -111,19 +113,5 @@ defmodule Discord.Consumer do
 
 		schedule_broadcast()
 		{:noreply, state}
-	end
-
-	defp schedule_broadcast, do: Process.send_after(self(), :broadcast, @interval)
-
-	defp register_commands do
-		commands = [
-			%{name: "add_channel", description: "Set current channel for alerts", default_member_permissions: @admin_only},
-			%{name: "remove_channel", description: "Remove alerts from this server", default_member_permissions: @admin_only},
-			%{name: "list_channel", description: "Show the current update channel"},
-			%{name: "check_market", description: "Scan the market immediately"}
-		]
-
-		Api.ApplicationCommand.bulk_overwrite_global_commands(commands)
-		:ok
 	end
 end
