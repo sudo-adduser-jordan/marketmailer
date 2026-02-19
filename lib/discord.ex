@@ -13,8 +13,9 @@ defmodule Discord.Messages do
 		%Embed{description: "🗑️ Market alerts have been disabled for Channel <##{id}>.", color: @color_error}
 	end
 
-	def list_channel(nil),
-		do: %Embed{description: "❌ Error: No channel registered. Use `/add_channel` to start.", color: @color_error}
+	def list_channel(nil) do
+		%Embed{description: "❌ Error: No channel registered. Use `/add_channel` to start.", color: @color_error}
+	end
 
 	def list_channel(id) do
 		%Embed{
