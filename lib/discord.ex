@@ -9,7 +9,11 @@ defmodule Discord.Messages do
 	@icon_success "https://i.imgur.com/vHq4V9n.png"
 	@icon_error "https://i.imgur.com/6F6O7Wv.png"
 	@icon_market "https://images.evetech.net/types/34/icon?size=64"
-
+	@icon_elixir ""
+	# @icon_ ""
+	# @icon_ ""
+	# @icon_ ""
+	# @icon_ ""
 	def market_embed do
 		%Embed{
 			title: "🚀 Full Spec Embed Title",
