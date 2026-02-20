@@ -15,8 +15,7 @@ defmodule Discord.Messages do
 	# @icon_ "https://images.evetech.net/types/52996/relic?size=64"
 	# @icon_corporation "https://images.evetech.net/corporations/98666181/logo?size=64"
 	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/elixir.png"
-	@icon_market "https://cdn.cgmagonline.com/wp-content/uploads/2025/10/latest-expansion-eve-online-catalyst-announced-by-ccp-games-2025-10-20-667140.jpg"
-
+	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/background.png"
 	@icon_info ""
 	@icon_error ""
 	@icon_success ""
@@ -28,15 +27,9 @@ defmodule Discord.Messages do
 
 	def market_embed do
 		%Embed{
-			title: "Best Order",
-			description: "
-						[Hyperlinks](https://discord.com)
-						[Hyperlinks](https://discord.com)
-						[Hyperlinks](https://discord.com)
-						[Hyperlinks](https://discord.com)
-						[Hyperlinks](https://discord.com)
-						",
-			url: "https://discord.com",
+			title: "The Best Order",
+			description: " [Hyperlinks](https://discord.com) [Hyperlinks](https://discord.com) ",
+			# url: "https://discord.com",
 			color: 0x7289DA,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
@@ -48,7 +41,7 @@ defmodule Discord.Messages do
 				url: @icon_elixir
 			},
 			image: %Embed.Image{
-				url: ""
+				url: @icon_market
 			},
 			fields: [
 				%Embed.Field{
@@ -60,11 +53,6 @@ defmodule Discord.Messages do
 					name: "The Forge",
 					value: "1.0 Jita",
 					inline: true
-				},
-				%Embed.Field{
-					name: "Field 3 (Standard)",
-					value: "I take up the full width because inline is false.",
-					inline: false
 				}
 			],
 			footer: %Embed.Footer{
