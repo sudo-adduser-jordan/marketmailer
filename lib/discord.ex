@@ -1,5 +1,8 @@
 defmodule Discord.Messages do
+	# alias Nostrum.Cache.GuildCache
 	alias Nostrum.Struct.Embed
+	# alias Nostrum.Struct.Guild
+	alias Nostrum.Struct.Interaction
 
 	@color_blurple 0x7289DA
 	@color_success 0x43B581
@@ -8,8 +11,9 @@ defmodule Discord.Messages do
 
 	# https://images.evetech.net/{category}/{id}/{variation}
 
-	@icon_ ""
-	@icon_market "https://images.evetech.net/types/30752/relic?size=64"
+	# @icon_ "https://pic.vsixhub.com/e5/91/cweijan.vscode-myssql-client2-logo-20251008.webp"
+	# @icon_ "https://images.evetech.net/types/52996/relic?size=64"
+	# @icon_corporation "https://images.evetech.net/corporations/98666181/logo?size=64"
 	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/elixir.png"
 
 	@icon_info ""
@@ -23,21 +27,21 @@ defmodule Discord.Messages do
 
 	def market_embed do
 		%Embed{
-			title: "🚀 Full Spec Embed Title",
+			title: "🚀 Title",
 			description: "This is the main body text. Supports **Markdown** and [Hyperlinks](https://discord.com).",
-			url: "https://google.com",
+			url: "https://discord.com",
 			color: 0x7289DA,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
-				name: "Gemini AI Assistant",
+				name: "Marketmailer",
 				url: "https://discord.com",
-				icon_url: "https://i.imgur.com/vHq4V9n.png"
+				icon_url: @icon_elixir
 			},
 			thumbnail: %Embed.Thumbnail{
-				url: "https://images.evetech.net/types/34/icon?size=64"
+				url: @icon_elixir
 			},
 			image: %Embed.Image{
-				url: "https://i.imgur.com/W9vU0xX.png"
+				url: @icon_elixir
 			},
 			fields: [
 				%Embed.Field{
@@ -58,25 +62,25 @@ defmodule Discord.Messages do
 			],
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
-				icon_url: "https://i.imgur.com/vHq4V9n.png"
+				icon_url: @icon_elixir
 			}
 		}
 	end
 
-	def channel_registered(id) do
+	def channel_registered(interaction) do
 		%Embed{
 			author: %Embed.Author{
 				name: "Marketmailer",
 				url: "https://discord.com",
-				icon_url: @icon_market
+				icon_url: @icon_elixir
 			},
 			title: "Channel Registiration",
-			description: "<##{id}> is now registered for market alerts.",
-			url: "https://google.com",
+			description: "<##{interaction.id}> is now registered for market alerts.",
+			url: "https://discord.com",
 			color: @color_success,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_market
+				url: @icon_elixir
 			},
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
@@ -85,20 +89,20 @@ defmodule Discord.Messages do
 		}
 	end
 
-	def channel_removed(id) do
+	def channel_removed(interaction) do
 		%Embed{
 			author: %Embed.Author{
 				name: "Marketmailer",
 				url: "https://discord.com",
-				icon_url: @icon_market
+				icon_url: @icon_elixir
 			},
 			title: "Channel Registiration",
-			description: "<##{id}> will no longer recieve market alerts.",
-			url: "https://google.com",
+			description: "<##{interaction.id}> will no longer recieve market alerts.",
+			url: "https://discord.com",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_market
+				url: @icon_elixir
 			},
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
@@ -107,20 +111,20 @@ defmodule Discord.Messages do
 		}
 	end
 
-	def list_channel(id) do
+	def list_channel(interaction) do
 		%Embed{
 			author: %Embed.Author{
 				name: "Marketmailer",
 				url: "https://discord.com",
-				icon_url: @icon_market
+				icon_url: @icon_elixir
 			},
 			title: "Channel Registiration",
-			description: "<##{id}> is the currently registered.",
-			url: "https://google.com",
+			description: "<##{interaction.id}> is registered to recieve market alerts.",
+			url: "https://discord.com",
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_market
+				url: @icon_elixir
 			},
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
@@ -154,25 +158,25 @@ defmodule Discord.Consumer do
 		schedule_broadcast()
 	end
 
-	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = intr, _}) do
+	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
 		case name do
 			"add_channel" ->
-				# Discord.Database.upsert(intr.guild_id, intr.channel_id)
-				respond(intr, Messages.channel_registered(intr.channel_id))
+				# Discord.Database.upsert(interaction.guild_id, interaction)
+				respond(interaction, Messages.channel_registered(interaction))
 
 			"remove_channel" ->
-				# Discord.Database.delete(intr.guild_id)
-				respond(intr, Messages.channel_removed(intr.channel_id))
+				# Discord.Database.delete(interaction.guild_id)
+				respond(interaction, Messages.channel_removed(interaction))
 
 			"list_channel" ->
-				# Discord.Database.get(intr.guild_id)
-				respond(intr, Messages.list_channel(nil))
+				# Discord.Database.get(interaction.guild_id)
+				respond(interaction, Messages.list_channel(interaction))
 
 			"check_market" ->
-				# Api.Interaction.create_response(intr, %{type: 5})
+				# Api.Interaction.create_response(interaction, %{type: 5})
 				# items = Market.Database.get_items_less_than_jita_buy() |> Enum.take(10)
-				# Api.Interaction.edit_response(intr, %{embeds: [Messages.market_embed(items)]})
-				respond(intr, Messages.market_embed())
+				# Api.Interaction.edit_response(interaction, %{embeds: [Messages.market_embed(items)]})
+				respond(interaction, Messages.market_embed())
 		end
 	end
 
