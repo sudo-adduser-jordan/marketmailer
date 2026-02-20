@@ -29,5 +29,31 @@ defmodule Database.Migrations.Database do
 			add :channel_id, :bigint, null: false
 			timestamps()
 		end
+
+		execute(fn ->
+			dump_path = "/home/user1/Documents/GitHub/marketmailer/postgres-latest.dmp"
+
+			host = System.get_env("PGHOST") || "127.0.0.1"
+			port = System.get_env("PGPORT") || "5432"
+			user = System.get_env("PGUSER") || "postgres"
+			db = System.get_env("PGDATABASE") || "eve"
+			pass = System.get_env("PGPASSWORD") || "postgres"
+
+			command =
+				"pg_restore --verbose --clean --no-acl --no-owner " <>
+					"-h #{host} -p #{port} -U #{user} -d #{db} #{dump_path}"
+
+			System.cmd("sh", ["-c", command],
+				env: [
+					{"PGPASSWORD", pass},
+					{"PGHOST", host},
+					{"PGPORT", port},
+					{"PGUSER", user},
+					{"PGDATABASE", db}
+				]
+			)
+
+			IO.puts("Restore complete.")
+		end)
 	end
 end
