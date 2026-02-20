@@ -4,7 +4,7 @@ defmodule Discord.Messages do
 	# alias Nostrum.Struct.Guild
 	alias Nostrum.Struct.Interaction
 
-	@color_blurple 0x7289DA
+	# @color_blurple 0x7289DA
 	@color_success 0x43B581
 	@color_error 0xF04747
 	@color_info 0x7289DA
@@ -16,9 +16,9 @@ defmodule Discord.Messages do
 	# @icon_corporation "https://images.evetech.net/corporations/98666181/logo?size=64"
 	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/elixir.png"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/background.png"
-	@icon_info ""
-	@icon_error ""
-	@icon_success ""
+	# @icon_info ""
+	# @icon_error ""
+	# @icon_success ""
 
 	# @icon_ ""
 	# @icon_ ""
@@ -156,11 +156,11 @@ defmodule Discord.Consumer do
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
 		case name do
 			"add_channel" ->
-				# Discord.Database.upsert(interaction.guild_id, interaction)
+				Discord.Database.upsert(interaction.guild_id, interaction)
 				respond(interaction, Messages.channel_registered(interaction))
 
 			"remove_channel" ->
-				# Discord.Database.delete(interaction.guild_id)
+				Discord.Database.delete(interaction.guild_id)
 				respond(interaction, Messages.channel_removed(interaction))
 
 			"list_channel" ->

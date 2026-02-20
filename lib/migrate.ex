@@ -1,4 +1,4 @@
-# defmodule Database.Migrations.CreateMarketAndEtags do
+# defmodule Database.Migrations.Database do
 # 	use Ecto.Migration
 
 # 	def change do
@@ -24,7 +24,7 @@
 # 			timestamps()
 # 		end
 
-# 		create table(:registered_channels, primary_key: false) do
+# 		create table(:discord, primary_key: false) do
 # 			add :guild_id, :bigint, primary_key: true
 # 			add :channel_id, :bigint, null: false
 # 			timestamps()

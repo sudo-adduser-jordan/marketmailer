@@ -45,7 +45,7 @@ end
 defmodule Discord.Database do
 	import Ecto.Query
 
-	@table "discord_channels"
+	@table "discord"
 
 	def get(guild_id), do: Database.get_by(@table, guild_id: guild_id)
 
