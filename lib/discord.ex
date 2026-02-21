@@ -63,9 +63,8 @@ defmodule Discord.Messages do
 	end
 
 	def market_embed(item) do
-		# _market_context = Market.Database.get_best_order()
-		market_url = "https://janice.e-351.com/i/81008/market/2"
-		reference_url = "https://everef.net/types/81008"
+		market_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
+		reference_url = "https://everef.net/types/#{item.type_id}"
 
 		%Embed{
 			title: "Squall",
@@ -89,12 +88,12 @@ defmodule Discord.Messages do
 			fields: [
 				%Embed.Field{
 					name: "The Forge",
-					value: "1.0 Jita",
+					value: "{security} #{item.system_name}",
 					inline: true
 				},
 				%Embed.Field{
-					name: "69%",
-					value: "69 420 ISK",
+					name: "#{item.price}%",
+					value: "#{item.price} ISK",
 					inline: true
 				}
 			],
@@ -221,8 +220,15 @@ defmodule Discord.Consumer do
 				respond(interaction, Messages.list_channel(channel_id))
 
 			"check_market" ->
-				item = Market.Database.get_best_order()
-				respond(interaction, Messages.market_embed(item))
+				item = Market.Database.get_best_order() |> List.first()
+
+				if item do
+					respond(interaction, Messages.market_embed(item))
+				else
+					IO.puts("check market error")
+					# add error messages
+					respond(interaction, Messages.add_channel(interaction))
+				end
 
 			"list_market" ->
 				_items = Market.Database.get_items_less_than_jita_buy()

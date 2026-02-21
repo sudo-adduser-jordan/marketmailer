@@ -101,10 +101,8 @@ defmodule Market.Database do
 	# sql_path = Path.join([:code.priv_dir(:marketmailer), "queries", "getItemsLessThan.sql"])
 	# sql_path = "/home/user1/Documents/GitHub/marketmailer/lib/getItemsLessThan.sql"
 	def get_items_less_than_jita_buy do
-		# Ensure you use the correct path to the file
 		{:ok, %{rows: rows, columns: cols}} = Database.query(File.read!("./lib/getItemsLessThan.sql"))
 
-		# Change to_existing_atom to to_atom
 		column_atoms = Enum.map(cols, &String.to_atom/1)
 
 		Enum.map(rows, fn row ->
@@ -117,8 +115,17 @@ defmodule Market.Database do
 	end
 
 	def get_best_order do
-		query = from(m in @table, order_by: [asc: m.price], limit: 1)
-		Database.one(query)
+		{:ok, %{rows: rows, columns: cols}} = Database.query(File.read!("./lib/getBestOrder.sql"))
+
+		column_atoms = Enum.map(cols, &String.to_atom/1)
+
+		Enum.map(rows, fn row ->
+			Ecto.Repo.Schema.load(
+				Ecto.Adapters.Postgres,
+				MarketView,
+				Enum.zip(column_atoms, row) |> Map.new()
+			)
+		end)
 	end
 
 	def get_list_less_than_jita_buy, do: []

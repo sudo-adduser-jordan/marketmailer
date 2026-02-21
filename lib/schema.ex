@@ -50,6 +50,7 @@ defmodule MarketView do
 
 	schema "marketView" do
 		field :issued, :string
+		field :type_id, :integer
 		field :item_name, :string
 		field :system_name, :string
 		field :location_name, :string

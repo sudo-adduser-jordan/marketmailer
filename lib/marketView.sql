@@ -1,6 +1,7 @@
 CREATE OR REPLACE VIEW "marketView" AS
 SELECT 
     m.order_id,
+    m.type_id,
     m.issued,
     t."typeName" AS item_name,
     s."solarSystemName" AS system_name,
