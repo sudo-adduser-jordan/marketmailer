@@ -97,35 +97,29 @@ defmodule Market.Database do
 		)
 	end
 
+	# It's better to use a path relative to the app root or priv for production safety
+	# sql_path = Path.join([:code.priv_dir(:marketmailer), "queries", "getItemsLessThan.sql"])
+	# sql_path = "/home/user1/Documents/GitHub/marketmailer/lib/getItemsLessThan.sql"
 	def get_items_less_than_jita_buy do
-		query =
-			from table_one in fragment("public.\"marketView\""),
-				join: table_two in fragment("public.\"marketView\""),
-				on:
-					table_one.item_name == table_two.item_name and
-						table_one.system_name != "Jita" and
-						table_two.system_name == "Jita" and
-						table_one.order_type == "SELL" and
-						table_two.order_type == "BUY",
-				where: table_one.price < table_two.price,
-				select: %{
-					item: table_one.item_name,
-					buy_price: table_two.price,
-					sell_price: table_one.price,
-					margin: fragment("? - ?", table_two.price, table_one.price)
-				},
-				order_by: [asc: fragment("? - ?", table_two.price, table_one.price)],
-				limit: 100
+		# Ensure you use the correct path to the file
+		{:ok, %{rows: rows, columns: cols}} = Database.query(File.read!("./lib/getItemsLessThan.sql"))
 
-		Database.all(query)
+		# Change to_existing_atom to to_atom
+		column_atoms = Enum.map(cols, &String.to_atom/1)
+
+		Enum.map(rows, fn row ->
+			Ecto.Repo.Schema.load(
+				Ecto.Adapters.Postgres,
+				MarketView,
+				Enum.zip(column_atoms, row) |> Map.new()
+			)
+		end)
 	end
 
-	def cheapest_order do
+	def get_best_order do
 		query = from(m in @table, order_by: [asc: m.price], limit: 1)
 		Database.one(query)
 	end
 
-	def load_postgres_dmp, do: :ok
-	def create_market_view, do: :ok
 	def get_list_less_than_jita_buy, do: []
 end

@@ -44,3 +44,21 @@ defmodule Market do
 		timestamps()
 	end
 end
+
+defmodule MarketView do
+	use Ecto.Schema
+
+	schema "marketView" do
+		field :issued, :string
+		field :item_name, :string
+		field :system_name, :string
+		field :location_name, :string
+		field :price, :float
+		field :volume_remain, :integer
+		field :volume_total, :integer
+		field :order_type, :string
+		field :duration, :integer
+		field :range, :string
+		timestamps()
+	end
+end

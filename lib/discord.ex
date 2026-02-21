@@ -1,8 +1,8 @@
 defmodule Discord.Messages do
-	# alias Nostrum.Cache.GuildCache
 	alias Nostrum.Struct.Embed
-	# alias Nostrum.Struct.Guild
 	alias Nostrum.Struct.Interaction
+	# alias Nostrum.Struct.Guild
+	# alias Nostrum.Cache.GuildCache
 
 	@color_success 0x43B581
 	@color_error 0xF04747
@@ -16,7 +16,7 @@ defmodule Discord.Messages do
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
 
 	@icon_info "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
-	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
+	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/error.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
 	def market_list_embed do
@@ -62,8 +62,8 @@ defmodule Discord.Messages do
 		}
 	end
 
-	def market_embed do
-		# _market_context = Market.Database.cheapest_order() # get row
+	def market_embed(item) do
+		# _market_context = Market.Database.get_best_order()
 		market_url = "https://janice.e-351.com/i/81008/market/2"
 		reference_url = "https://everef.net/types/81008"
 
@@ -186,6 +186,7 @@ defmodule Discord.Consumer do
 
 	alias Discord.Messages
 	alias Nostrum.Api
+	alias Nostrum.Api.Message
 	alias Nostrum.Struct.Interaction
 
 	@admin_only "16"
@@ -220,7 +221,12 @@ defmodule Discord.Consumer do
 				respond(interaction, Messages.list_channel(channel_id))
 
 			"check_market" ->
-				respond(interaction, Messages.market_embed())
+				item = Market.Database.get_best_order()
+				respond(interaction, Messages.market_embed(item))
+
+			"list_market" ->
+				_items = Market.Database.get_items_less_than_jita_buy()
+				respond(interaction, Messages.market_list_embed())
 		end
 	end
 
@@ -236,16 +242,6 @@ defmodule Discord.Consumer do
 	end
 
 	def handle_info(:broadcast, state) do
-		# items = Market.Database.get_items_less_than_jita_buy() |> Enum.take(10)
-
-		# if items != [] do
-		# 	embed = Messages.market_embed(items)
-
-		# 	Enum.each(Discord.Database.all(), fn record ->
-		# 		Api.Message.create(record.channel_id, embeds: [embed])
-		# 	end)
-		# end
-
 		schedule_broadcast()
 		{:noreply, state}
 	end
