@@ -70,7 +70,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_elixir
 			},
 			title: "Channel Registiration",
-			description: "<##{interaction.id}> is now registered for market alerts.",
+			description: "<##{interaction.channel_id}> is now registered for market alerts.",
 			url: "https://discord.com",
 			color: @color_success,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -92,7 +92,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_elixir
 			},
 			title: "Channel Registiration",
-			description: "<##{interaction.id}> will no longer recieve market alerts.",
+			description: "<##{interaction.channel_id}> will no longer recieve market alerts.",
 			url: "https://discord.com",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),

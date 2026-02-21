@@ -47,9 +47,7 @@ defmodule Discord.Database do
 
 	@table "discord"
 
-	def get(guild_id), do: Database.get(@table, guild_id)
-
-	def all, do: Database.all(@table)
+	def get(guild_id), do: Database.get(Discord, guild_id)
 
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
