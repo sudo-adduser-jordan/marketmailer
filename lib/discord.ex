@@ -4,54 +4,54 @@ defmodule Discord.Messages do
 	# alias Nostrum.Struct.Guild
 	alias Nostrum.Struct.Interaction
 
-	# @color_blurple 0x7289DA
 	@color_success 0x43B581
 	@color_error 0xF04747
 	@color_info 0x7289DA
 
-	# https://images.evetech.net/{category}/{id}/{variation}
-
-	# @icon_ "https://pic.vsixhub.com/e5/91/cweijan.vscode-myssql-client2-logo-20251008.webp"
 	# @icon_ "https://images.evetech.net/types/52996/relic?size=64"
 	# @icon_corporation "https://images.evetech.net/corporations/98666181/logo?size=64"
-	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/elixir.png"
-	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/background.png"
-	# @icon_info ""
-	# @icon_error ""
-	# @icon_success ""
 
-	# @icon_ ""
-	# @icon_ ""
-	# @icon_ ""
-	# @icon_ ""
+	@icon_ "https://images.evetech.net/types/81008/icon?size=64"
+	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/elixir.png"
+	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
+
+	@icon_info "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
+	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
+	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
 	def market_embed do
+		# _market_context = Market.Database.cheapest_order() # get row
+		market_url = "https://janice.e-351.com/i/81008/market/2"
+		reference_url = "https://everef.net/types/81008"
+
 		%Embed{
-			title: "The Best Order",
-			description: " [Hyperlinks](https://discord.com) [Hyperlinks](https://discord.com) ",
+			title: "Squall",
+			description: "
+						[Market](#{market_url}) [Reference](#{reference_url})
+						",
 			# url: "https://discord.com",
 			color: 0x7289DA,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
-				name: "Marketmailer",
+				name: "Marketmailer - Best Order",
 				url: "https://discord.com",
-				icon_url: @icon_elixir
+				icon_url: @icon_success
 			},
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_elixir
+				url: @icon_
 			},
 			image: %Embed.Image{
 				url: @icon_market
 			},
 			fields: [
 				%Embed.Field{
-					name: "69%",
-					value: "69 420 ISK",
+					name: "The Forge",
+					value: "1.0 Jita",
 					inline: true
 				},
 				%Embed.Field{
-					name: "The Forge",
-					value: "1.0 Jita",
+					name: "69%",
+					value: "69 420 ISK",
 					inline: true
 				}
 			],
