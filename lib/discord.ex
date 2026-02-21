@@ -19,6 +19,28 @@ defmodule Discord.Messages do
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/error.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
+	def error do
+		%Embed{
+			title: "Error",
+			description: "Error",
+			# url: "https://discord.com",
+			color: @color_error,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: %Embed.Author{
+				name: "Marketmailer - Error",
+				url: "https://discord.com",
+				icon_url: @icon_error
+			},
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			},
+			footer: %Embed.Footer{
+				text: "Sent with Elixir",
+				icon_url: @icon_elixir
+			}
+		}
+	end
+
 	def market_list_embed do
 		# _market_context = Market.Database.cheapest_order() # get row
 		market_url = "https://janice.e-351.com/i/81008/market/2"
@@ -185,7 +207,6 @@ defmodule Discord.Consumer do
 
 	alias Discord.Messages
 	alias Nostrum.Api
-	alias Nostrum.Api.Message
 	alias Nostrum.Struct.Interaction
 
 	@admin_only "16"
