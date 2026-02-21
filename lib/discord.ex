@@ -15,11 +15,11 @@ defmodule Discord.Messages do
 	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/elixir.png"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
 
-	@icon_info "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
-	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/error.png"
+	# @icon_info "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
+	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
-	def error do
+	def error(_interaction) do
 		%Embed{
 			title: "Error",
 			description: "Error",
@@ -246,9 +246,7 @@ defmodule Discord.Consumer do
 				if item do
 					respond(interaction, Messages.market_embed(item))
 				else
-					IO.puts("check market error")
-					# add error messages
-					respond(interaction, Messages.add_channel(interaction))
+					respond(interaction, Messages.error(interaction))
 				end
 
 			"list_market" ->

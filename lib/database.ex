@@ -43,8 +43,6 @@ defmodule Etag.Database do
 end
 
 defmodule Discord.Database do
-	import Ecto.Query
-
 	@table "discord"
 
 	def get(guild_id), do: Database.get(Discord, guild_id)
@@ -76,8 +74,6 @@ defmodule Discord.Database do
 end
 
 defmodule Market.Database do
-	import Ecto.Query
-
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
 	@table "market"
 
