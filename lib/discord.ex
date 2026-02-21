@@ -4,6 +4,8 @@ defmodule Discord.Messages do
 	# alias Nostrum.Struct.Guild
 	# alias Nostrum.Cache.GuildCache
 
+	# use playwright to snap canvas images, it wont be that many
+
 	@color_success 0x43B581
 	@color_error 0xF04747
 	@color_info 0x7289DA
@@ -95,7 +97,7 @@ defmodule Discord.Messages do
 						[Market](#{market_url}) [Reference](#{reference_url})
 						",
 			# url: "https://discord.com",
-			color: 0x7289DA,
+			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
 				name: "Marketmailer - Best Order",
@@ -110,8 +112,8 @@ defmodule Discord.Messages do
 			},
 			fields: [
 				%Embed.Field{
-					name: "The Forge",
-					value: "{security} #{item.system_name}",
+					name: "#{item.system_name}",
+					value: "#{item.security_status || "0.0"} #{item.system_name}",
 					inline: true
 				},
 				%Embed.Field{
