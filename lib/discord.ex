@@ -19,6 +19,49 @@ defmodule Discord.Messages do
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
+	def market_list_embed do
+		# _market_context = Market.Database.cheapest_order() # get row
+		market_url = "https://janice.e-351.com/i/81008/market/2"
+		reference_url = "https://everef.net/types/81008"
+
+		%Embed{
+			title: "Squall",
+			description: "
+						[Market](#{market_url}) [Reference](#{reference_url})
+						",
+			# url: "https://discord.com",
+			color: 0x7289DA,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: %Embed.Author{
+				name: "Marketmailer - Best Order",
+				url: "https://discord.com",
+				icon_url: @icon_success
+			},
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			},
+			image: %Embed.Image{
+				url: @icon_market
+			},
+			fields: [
+				%Embed.Field{
+					name: "The Forge",
+					value: "1.0 Jita",
+					inline: true
+				},
+				%Embed.Field{
+					name: "69%",
+					value: "69 420 ISK",
+					inline: true
+				}
+			],
+			footer: %Embed.Footer{
+				text: "Sent with Elixir",
+				icon_url: @icon_elixir
+			}
+		}
+	end
+
 	def market_embed do
 		# _market_context = Market.Database.cheapest_order() # get row
 		market_url = "https://janice.e-351.com/i/81008/market/2"
