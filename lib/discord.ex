@@ -177,9 +177,6 @@ defmodule Discord.Consumer do
 				respond(interaction, Messages.list_channel(channel_id))
 
 			"check_market" ->
-				# Api.Interaction.create_response(interaction, %{type: 5})
-				# items = Market.Database.get_items_less_than_jita_buy() |> Enum.take(10)
-				# Api.Interaction.edit_response(interaction, %{embeds: [Messages.market_embed(items)]})
 				respond(interaction, Messages.market_embed())
 		end
 	end
