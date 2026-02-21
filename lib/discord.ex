@@ -62,7 +62,7 @@ defmodule Discord.Messages do
 		}
 	end
 
-	def channel_registered(interaction) do
+	def add_channel(interaction) do
 		%Embed{
 			author: %Embed.Author{
 				name: "Marketmailer",
@@ -106,7 +106,16 @@ defmodule Discord.Messages do
 		}
 	end
 
-	def list_channel(interaction) do
+	def list_channel(record) do
+		channel_id = if record, do: record.channel_id
+
+		description =
+			if channel_id do
+				"<##{channel_id}> is registered to receive market alerts."
+			else
+				"No channel has been registered for this server yet."
+			end
+
 		%Embed{
 			author: %Embed.Author{
 				name: "Marketmailer",
@@ -114,7 +123,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_elixir
 			},
 			title: "Channel Registiration",
-			description: "<##{interaction.id}> is registered to recieve market alerts.",
+			description: description,
 			url: "https://discord.com",
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -156,16 +165,16 @@ defmodule Discord.Consumer do
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
 		case name do
 			"add_channel" ->
-				Discord.Database.upsert(interaction.guild_id, interaction)
-				respond(interaction, Messages.channel_registered(interaction))
+				Discord.Database.upsert(interaction.guild_id, interaction.channel_id)
+				respond(interaction, Messages.add_channel(interaction))
 
 			"remove_channel" ->
 				Discord.Database.delete(interaction.guild_id)
 				respond(interaction, Messages.channel_removed(interaction))
 
 			"list_channel" ->
-				# Discord.Database.get(interaction.guild_id)
-				respond(interaction, Messages.list_channel(interaction))
+				channel_id = Discord.Database.get(interaction.guild_id)
+				respond(interaction, Messages.list_channel(channel_id))
 
 			"check_market" ->
 				# Api.Interaction.create_response(interaction, %{type: 5})
