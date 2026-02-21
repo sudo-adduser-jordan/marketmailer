@@ -14,6 +14,7 @@ defmodule Discord.Messages do
 	@icon_ "https://images.evetech.net/types/81008/icon?size=64"
 	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/elixir.png"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
+	@icon_database "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/database.png"
 
 	# @icon_info "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
@@ -131,15 +132,14 @@ defmodule Discord.Messages do
 			author: %Embed.Author{
 				name: "Marketmailer",
 				url: "https://discord.com",
-				icon_url: @icon_elixir
+				icon_url: @icon_success
 			},
 			title: "Channel Registiration",
 			description: "<##{interaction.channel_id}> is now registered for market alerts.",
-			url: "https://discord.com",
 			color: @color_success,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_elixir
+				url: @icon_database
 			},
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
@@ -153,15 +153,14 @@ defmodule Discord.Messages do
 			author: %Embed.Author{
 				name: "Marketmailer",
 				url: "https://discord.com",
-				icon_url: @icon_elixir
+				icon_url: @icon_success
 			},
 			title: "Channel Registiration",
 			description: "<##{interaction.channel_id}> will no longer recieve market alerts.",
-			url: "https://discord.com",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_elixir
+				url: @icon_database
 			},
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
@@ -184,15 +183,14 @@ defmodule Discord.Messages do
 			author: %Embed.Author{
 				name: "Marketmailer",
 				url: "https://discord.com",
-				icon_url: @icon_elixir
+				icon_url: @icon_success
 			},
 			title: "Channel Registiration",
 			description: description,
-			url: "https://discord.com",
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_elixir
+				url: @icon_database
 			},
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
