@@ -116,11 +116,9 @@ defmodule Market.Database do
 		column_atoms = Enum.map(cols, &String.to_atom/1)
 
 		Enum.map(rows, fn row ->
-			Ecto.Repo.Schema.load(
-				Ecto.Adapters.Postgres,
-				MarketView,
-				Enum.zip(column_atoms, row) |> Map.new()
-			)
+			data = Enum.zip(column_atoms, row) |> Map.new()
+			struct = Ecto.Repo.Schema.load(Ecto.Adapters.Postgres, MarketView, data)
+			Map.put(struct, :instant_sell_profit, data[:instant_sell_profit])
 		end)
 	end
 

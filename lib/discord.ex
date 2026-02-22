@@ -112,12 +112,12 @@ defmodule Discord.Messages do
 			},
 			fields: [
 				%Embed.Field{
-					name: "#{item.system_name}",
-					value: "#{item.security_status || "0.0"} #{item.system_name}",
+					name: "#{item.region_name}",
+					value: "#{item.security_status} #{item.system_name}",
 					inline: true
 				},
 				%Embed.Field{
-					name: "#{item.price}%",
+					name: "#{item.instant_sell_profit} %",
 					value: "#{item.price} ISK",
 					inline: true
 				}
