@@ -22,6 +22,15 @@ defmodule Discord.Messages do
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
+	def format_margin do
+	end
+
+	def format_price do
+	end
+
+	def format_security_status do
+	end
+
 	def error(_interaction) do
 		%Embed{
 			title: "Error",
@@ -113,7 +122,7 @@ defmodule Discord.Messages do
 			fields: [
 				%Embed.Field{
 					name: "#{item.region_name}",
-					value: "#{item.security_status} #{item.system_name}",
+					value: "#{abs(Float.round(item.security_status, 1))} #{item.system_name}",
 					inline: true
 				},
 				%Embed.Field{
