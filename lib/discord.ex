@@ -22,6 +22,12 @@ defmodule Discord.Messages do
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
+	def get_canvas_graph do
+		# canvas = Playwright.Page.query_selector(page, "canvas#my-canvas-id")
+		# _png_binary = Playwright.ElementHandle.screenshot(canvas, %{type: "png"})
+		# File.write!("captured_canvas.png", png_binary)
+	end
+
 	def format_margin do
 	end
 
