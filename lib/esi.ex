@@ -24,7 +24,7 @@ defmodule ESI do
 	end
 
 	def fetch(region, page \\ 1) do
-		url = "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
+		url = "https://esi.evetech.net/latest/markets/#{region}/orders/?page=#{page}"
 		etag = Etag.Database.get_etag(url)
 
 		headers =
