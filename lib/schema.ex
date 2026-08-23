@@ -49,7 +49,7 @@ defmodule MarketView do
 	use Ecto.Schema
 
 	schema "marketView" do
-		field :instant_sell_profit, :decimal, virtual: true
+		field :instant_sell_profit, :float, virtual: true
 
 		field :issued, :string
 		field :type_id, :integer
@@ -58,6 +58,9 @@ defmodule MarketView do
 		field :system_name, :string
 		field :security_status, :float
 		field :location_name, :string
+		field :system_id, :integer
+		field :location_id, :integer
+		field :min_volume, :integer
 		field :price, :float
 		field :volume_remain, :integer
 		field :volume_total, :integer

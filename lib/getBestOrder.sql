@@ -1,39 +1,42 @@
+-- Best remote sell order that can be instantly flipped into the Jita buy wall.
+-- 30000142 is the Jita solarSystemID.
 WITH JitaBestBuy AS (
-    -- Get the absolute best buy price for every item in Jita
-    -- 30000142 is the Jita solarSystemID
+    -- Absolute best buy price for every item in Jita
     SELECT 
         type_id, 
         MAX(price) AS jita_buy_price,
         SUM(volume_remain) AS jita_total_demand
     FROM market
     WHERE system_id = 30000142 
-      AND is_buy_order = true
+      AND is_buy_order = 1
     GROUP BY type_id
 )
 SELECT 
-    v.order_id,
-    v.issued,
-    v.type_id,
-    v.item_name,
-    v.region_name,
-    v.system_name,
-    v.security_status,
-    v.location_name,
-    v.price,
-    v.volume_remain,
-    v.volume_total,
-    v.order_type,
-    v.duration,
-    v.range,
-    v.updated_at,
-    -- Profit metrics added to the end
-    -- (jb.jita_buy_price - v.price) AS profit_per_unit,
-    ((jb.jita_buy_price - v.price) * LEAST(v.volume_remain, jb.jita_total_demand)) AS instant_sell_profit
-FROM "marketView" v
-JOIN JitaBestBuy jb ON v.type_id = jb.type_id
-WHERE v.order_type = 'SELL' 
-  AND v.system_name != 'Jita'
-  AND v.price < jb.jita_buy_price
+    m.order_id,
+    m.issued,
+    m.type_id,
+    tn.name AS item_name,
+    sy.region_name,
+    sy.name AS system_name,
+    sy.security_status,
+    ln.name AS location_name,
+    m.system_id,
+    m.location_id,
+    m.price,
+    m.volume_remain,
+    m.volume_total,
+    m.min_volume,
+    'SELL' AS order_type,
+    m.duration,
+    m."range",
+    ((jb.jita_buy_price - m.price) * MIN(COALESCE(m.volume_remain, 0), COALESCE(jb.jita_total_demand, 0))) AS instant_sell_profit
+FROM market m
+JOIN JitaBestBuy jb ON m.type_id = jb.type_id
+LEFT JOIN names tn ON tn.id = m.type_id
+LEFT JOIN names ln ON ln.id = m.location_id
+LEFT JOIN systems sy ON sy.system_id = m.system_id
+WHERE m.is_buy_order = 0 
+  AND sy.name IS NOT 'Jita'
+  AND m.price < jb.jita_buy_price
 ORDER BY instant_sell_profit DESC
 LIMIT 1;
--- LIMIT 99;

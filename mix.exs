@@ -24,7 +24,7 @@ defmodule Marketmailer.MixProject do
 		[
 			{:req, "~> 0.5.0"},
 			{:ecto_sql, "~> 3.0"},
-			{:postgrex, ">= 0.0.0"},
+			{:ecto_sqlite3, "~> 0.18"},
 			{:swoosh, "~> 1.21"},
 			{:hackney, "~> 1.9"},
 			# {:nostrum, "~> 0.10"},
@@ -47,8 +47,7 @@ defmodule Marketmailer.MixProject do
 			],
 			"ecto.setup": [
 				"ecto.create",
-				"ecto.migrate",
-				"run priv/repo/seeds.exs"
+				"ecto.migrate"
 			],
 			"ecto.reset": [
 				"ecto.drop",

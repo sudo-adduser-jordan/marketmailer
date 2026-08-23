@@ -47,7 +47,7 @@ defmodule Marketmailer.PageWorker do
 
 			{:not_modified, ctx} ->
 				Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
-				Etag.Database.upsert_etag(ctx.url, ctx.etag)
+				if ctx.etag, do: Etag.Database.upsert_etag(ctx.url, ctx.etag)
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 

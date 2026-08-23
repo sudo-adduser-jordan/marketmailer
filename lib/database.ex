@@ -2,7 +2,7 @@ defmodule Database do
 	# database connection
 	use Ecto.Repo,
 		otp_app: :marketmailer,
-		adapter: Ecto.Adapters.Postgres
+		adapter: Ecto.Adapters.SQLite3
 end
 
 defmodule Etag.Database do
@@ -84,6 +84,13 @@ defmodule Market.Database do
 			Enum.map(orders, fn order ->
 				@fields
 				|> Map.new(fn field -> {field, order[Atom.to_string(field)]} end)
+				# insert_all with a bare table name skips ecto type casting; sqlite
+				# would store true/false as text and break `is_buy_order = 1` filters
+				|> Map.update!(:is_buy_order, fn
+					true -> 1
+					false -> 0
+					other -> other
+				end)
 				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
 			end)
 
@@ -93,34 +100,61 @@ defmodule Market.Database do
 		)
 	end
 
-	# It's better to use a path relative to the app root or priv for production safety
-	# sql_path = Path.join([:code.priv_dir(:marketmailer), "queries", "getItemsLessThan.sql"])
-	# sql_path = "/home/user1/Documents/GitHub/marketmailer/lib/getItemsLessThan.sql"
-	def get_items_less_than_jita_buy do
-		{:ok, %{rows: rows, columns: cols}} = Database.query(File.read!("./lib/getItemsLessThan.sql"))
-
-		column_atoms = Enum.map(cols, &String.to_atom/1)
-
-		Enum.map(rows, fn row ->
-			Ecto.Repo.Schema.load(
-				Ecto.Adapters.Postgres,
-				MarketView,
-				Enum.zip(column_atoms, row) |> Map.new()
-			)
-		end)
+	def get_best_order do
+		backfill(load_rows("getBestOrder.sql"))
+		load_rows("getBestOrder.sql")
 	end
 
-	def get_best_order do
-		{:ok, %{rows: rows, columns: cols}} = Database.query(File.read!("./lib/getBestOrder.sql"))
-
-		column_atoms = Enum.map(cols, &String.to_atom/1)
-
-		Enum.map(rows, fn row ->
-			data = Enum.zip(column_atoms, row) |> Map.new()
-			struct = Ecto.Repo.Schema.load(Ecto.Adapters.Postgres, MarketView, data)
-			Map.put(struct, :instant_sell_profit, data[:instant_sell_profit])
-		end)
+	def get_items_less_than_jita_buy do
+		backfill(load_rows("getItemsLessThan.sql"))
+		load_rows("getItemsLessThan.sql")
 	end
 
 	def get_list_less_than_jita_buy, do: []
+
+	# Runs a query file from lib/ and returns one map/struct per row.
+	defp load_rows(file) do
+		{:ok, %{rows: rows, columns: cols}} = Database.query(read_sql(file))
+
+		Enum.map(rows, fn row ->
+			data = cols |> Enum.map(&String.to_atom/1) |> Enum.zip(row) |> Map.new()
+
+			if file == "getBestOrder.sql" do
+				struct = Ecto.Repo.Schema.load(Ecto.Adapters.SQLite3, MarketView, data)
+				Map.put(struct, :instant_sell_profit, data[:instant_sell_profit])
+			else
+				data
+			end
+		end)
+	end
+
+	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
+
+	# Fills the lazy EVE caches (names/systems) for anything the query could not
+	# resolve locally; the caller re-runs the query afterwards.
+	defp backfill([]), do: []
+
+	defp backfill(rows) do
+		name_ids = rows |> Enum.flat_map(&name_gaps/1) |> Enum.uniq()
+
+		system_ids =
+			for row <- rows,
+					Map.get(row, :system_id) != nil and
+						(Map.get(row, :system_name) == nil or Map.get(row, :region_name) == nil),
+					do: Map.get(row, :system_id)
+
+		if name_ids != [], do: name_ids |> ESI.Names.resolve() |> Universe.Database.upsert_names()
+
+		Enum.each(Enum.uniq(system_ids), fn system_id ->
+			with {:ok, info} <- ESI.SystemInfo.fetch(system_id) do
+				Universe.Database.upsert_system(info)
+			end
+		end)
+	end
+
+	defp name_gaps(row) do
+		for {name_key, id_key} <- [item_name: :type_id, location_name: :location_id],
+				Map.get(row, name_key) == nil and Map.get(row, id_key) != nil,
+				do: Map.get(row, id_key)
+	end
 end

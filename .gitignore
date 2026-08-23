@@ -25,3 +25,8 @@ marketmailer-*.tar
 .elixir_ls
 
 .env
+
+# sqlite database files
+/marketmailer.db
+/marketmailer.db-shm
+/marketmailer.db-wal

@@ -128,7 +128,7 @@ defmodule Discord.Messages do
 			fields: [
 				%Embed.Field{
 					name: "#{item.region_name}",
-					value: "#{abs(Float.round(item.security_status, 1))} #{item.system_name}",
+					value: "#{format_security(item.security_status)} #{item.system_name}",
 					inline: true
 				},
 				%Embed.Field{
@@ -143,6 +143,9 @@ defmodule Discord.Messages do
 			}
 		}
 	end
+
+	defp format_security(nil), do: "?"
+	defp format_security(security), do: abs(Float.round(security * 1.0, 1))
 
 	def add_channel(interaction) do
 		%Embed{
