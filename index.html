@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marketmailer — EVE Online Market Watcher</title>
+<meta name="description" content="Marketmailer: an EVE Online market watcher that polls ESI market orders and surfaces arbitrage opportunities against the Jita buy wall." />
+<style>
+  :root {
+    --bg: #070b14;
+    --bg-2: #0b1120;
+    --bg-3: #101a30;
+    --panel: #0d1526;
+    --border: #1c2b4a;
+    --text: #dbe4f5;
+    --muted: #8ea0c0;
+    --gold: #f0b429;
+    --gold-2: #ffe08a;
+    --cyan: #38d9d9;
+    --green: #4ade80;
+    --red: #f87171;
+    --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, Menlo, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(56, 217, 217, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 10% 0%, rgba(240, 180, 41, 0.06), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--border);
+    background: rgba(7, 11, 20, 0.8);
+    backdrop-filter: blur(4px);
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: 0.4px; }
+  .brand .logo {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--gold), #c77b1e);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 800; color: #0d0a02;
+    box-shadow: 0 0 18px rgba(240, 180, 41, 0.35);
+  }
+  .brand span { font-size: 18px; }
+  .brand small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+
+  nav { display: flex; gap: 22px; font-size: 14px; }
+  nav a { color: var(--muted); text-decoration: none; transition: color 0.15s; }
+  nav a:hover { color: var(--gold-2); }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 84px 0 64px; text-align: center; }
+  .hero h1 {
+    font-size: clamp(38px, 6vw, 64px);
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(180deg, #ffffff, var(--gold-2) 55%, var(--gold));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    line-height: 1.1;
+  }
+  .hero .tagline { margin-top: 18px; font-size: clamp(16px, 2.4vw, 20px); color: var(--muted); max-width: 640px; margin-inline: auto; }
+  .hero .tagline strong { color: var(--text); font-weight: 600; }
+
+  .chips { display: flex; gap: 12px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 7px 16px; font-size: 13px; color: var(--muted);
+    background: var(--bg-2);
+  }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.on { background: var(--green); box-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
+  .dot.opt { background: var(--gold); box-shadow: 0 0 8px rgba(240, 180, 41, 0.7); }
+
+  .cta { margin-top: 40px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 13px 26px; border-radius: 9px;
+    font-weight: 600; font-size: 15px; text-decoration: none;
+    transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--gold), #d98a1b);
+    color: #140d02; box-shadow: 0 6px 24px rgba(240, 180, 41, 0.3);
+  }
+  .btn-primary:hover { box-shadow: 0 10px 30px rgba(240, 180, 41, 0.45); }
+  .btn-ghost { border: 1px solid var(--border); color: var(--cyan); background: var(--bg-2); }
+  .btn-ghost:hover { border-color: var(--cyan); box-shadow: 0 0 20px rgba(56, 217, 217, 0.15); }
+
+  /* ---------- Terminal ---------- */
+  .terminal {
+    margin: 56px auto 0; max-width: 720px; text-align: left;
+    background: #060a12; border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; font-family: var(--mono); font-size: 13px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .terminal .bar { display: flex; gap: 8px; padding: 12px 16px; background: var(--bg-3); border-bottom: 1px solid var(--border); }
+  .terminal .bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .terminal .bar i:nth-child(1) { background: #ff5f56; } .terminal .bar i:nth-child(2) { background: #ffbd2e; } .terminal .bar i:nth-child(3) { background: #27c93f; }
+  .terminal pre { padding: 18px 20px 22px; overflow-x: auto; color: #9fb3d1; line-height: 1.7; }
+  .terminal .c { color: var(--muted); }
+  .terminal .p { color: var(--cyan); }
+  .terminal .g { color: var(--green); }
+  .terminal .y { color: var(--gold-2); }
+
+  /* ---------- Sections ---------- */
+  section { padding: 64px 0; }
+  .sec-head { text-align: center; margin-bottom: 44px; }
+  .sec-head .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 3px;
+    color: var(--cyan); text-transform: uppercase; margin-bottom: 10px;
+  }
+  .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 800; letter-spacing: -0.3px; }
+  .sec-head p { color: var(--muted); margin-top: 12px; max-width: 620px; margin-inline: auto; font-size: 15px; }
+
+  /* ---------- How it works ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .step {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 26px; position: relative;
+  }
+  .step .num {
+    position: absolute; top: -14px; left: 22px;
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--cyan), #0e7490);
+    display: grid; place-items: center; font-family: var(--mono); font-weight: 800; font-size: 14px;
+    box-shadow: 0 0 16px rgba(56, 217, 217, 0.35);
+  }
+  .step h3 { margin: 8px 0 10px; font-size: 17px; }
+  .step p { color: var(--muted); font-size: 14px; }
+  .step .flow { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--gold-2); word-break: break-word; }
+
+  /* ---------- Features ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 26px; transition: border-color 0.15s, transform 0.15s;
+  }
+  .card:hover { border-color: #2c3f68; transform: translateY(-3px); }
+  .card .ico {
+    width: 42px; height: 42px; border-radius: 10px; font-size: 21px;
+    display: grid; place-items: center; background: var(--bg-3); border: 1px solid var(--border); margin-bottom: 16px;
+  }
+  .card h3 { font-size: 17px; margin-bottom: 8px; }
+  .card p { color: var(--muted); font-size: 14px; }
+  .card code {
+    font-family: var(--mono); font-size: 12px; color: var(--cyan);
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 5px;
+    padding: 1px 6px;
+  }
+  .card .tag {
+    display: inline-block; margin-top: 14px; font-family: var(--mono); font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--gold);
+    border: 1px solid rgba(240, 180, 41, 0.35); border-radius: 999px; padding: 3px 10px;
+  }
+  .tag.opt { color: var(--cyan); border-color: rgba(56, 217, 217, 0.35); }
+
+  /* ---------- Commands ---------- */
+  .commands { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 30px; }
+  .cmd { display: flex; gap: 16px; padding: 12px 0; border-bottom: 1px dashed var(--border); flex-wrap: wrap; align-items: baseline; }
+  .cmd:last-child { border-bottom: none; padding-bottom: 0; }
+  .cmd code {
+    font-family: var(--mono); font-size: 14px; color: var(--gold-2);
+    background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; white-space: nowrap;
+  }
+  .cmd p { color: var(--muted); font-size: 14px; flex: 1; min-width: 220px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 26px; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--mono); }
+  td code { font-family: var(--mono); font-size: 12.5px; color: var(--cyan); background: var(--bg-3); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; }
+
+  /* ---------- Footer ---------- */
+  footer { border-top: 1px solid var(--border); padding: 34px 0 46px; text-align: center; color: var(--muted); font-size: 13px; }
+  footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--gold-2); }
+
+  @media (max-width: 720px) {
+    .steps { grid-template-columns: 1fr; }
+    nav { display: none; }
+    .hero { padding: 56px 0 44px; }
+    section { padding: 48px 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= Header ================= -->
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">M</div>
+      <div>marketmailer <small>EVE Online market watcher</small></div>
+    </div>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#quickstart">Quick start</a>
+    </nav>
+  </header>
+
+  <!-- ================= Hero ================= -->
+  <section class="hero">
+    <h1>Marketmailer</h1>
+    <p class="tagline">
+      A lightweight EVE Online market watcher that polls the
+      <strong>ESI market endpoints</strong>, stores orders locally in SQLite,
+      and surfaces <strong>arbitrage opportunities</strong> — the best remote
+      sell orders to instantly flip into the <strong>Jita buy wall</strong>.
+    </p>
+
+    <div class="chips">
+      <span class="chip"><span class="dot on"></span> Region pollers — enabled</span>
+      <span class="chip"><span class="dot opt"></span> Discord bot — optional</span>
+      <span class="chip">SQLite · Elixir/OTP · Docker</span>
+    </div>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="#quickstart">Get started</a>
+      <a class="btn btn-ghost" href="#features">See the features</a>
+    </div>
+
+    <div class="terminal">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <pre><span class="c">$</span> <span class="p">mix setup</span>
+  Resolving dependencies... done
+  Ecto: created marketmailer.db (SQLite, WAL mode)
+  Ecto: migrations up to date
+
+<span class="c">$</span> <span class="p">mix start</span>
+<span class="g">app_start</span>  ts=2026-09-22T12:00:00.000Z commit=e3f9a1d
+<span class="g">region_update</span> The Forge   orders=142_381 pages=21
+<span class="g">arbitrage_found</span> <span class="y">"Core Scaffolding"</span> Jita buy 98.4 ISK vs 61.2 ISK · margin 37.2 ISK</pre>
+    </div>
+  </section>
+</div>
+
+<!-- ================= How it works ================= -->
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">01 · Pipeline</div>
+      <h2>How it works</h2>
+      <p>Three stages between EVE's market data and the money-making signal on your screen.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Poll ESI markets</h3>
+        <p>
+          Per-region pollers fetch market orders from the ESI API with dynamic
+          page scaling and exponential backoff. ETag caching means unchanged
+          regions are skipped in a single request.
+        </p>
+        <div class="flow">ESI → ETag cache → market pollers</div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>Store locally</h3>
+        <p>
+          Orders land in a single SQLite file (WAL mode) alongside resolved
+          EVE names for items, systems, regions and stations. Migrations run
+          automatically on every boot.
+        </p>
+        <div class="flow">SQLite · market.db · auto-migrate</div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>Surface the edge</h3>
+        <p>
+          Queries rank remote sell orders that undercut the Jita buy wall,
+          weighted by profit per unit and available volume. Readable on the
+          console or in your Discord server.
+        </p>
+        <div class="flow">SQL pivot → arbitrage ranked → you</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Features ================= -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">02 · Arsenal</div>
+      <h2>Features</h2>
+      <p>Everything tuned for one job: buying low in the regions and selling high in Jita.</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="ico">🎯</div>
+        <h3>Jita spread scanner</h3>
+        <p>
+          Finds the single best remote sell order that can be instantly flipped
+          into Jita's buy wall, ranked by <code>instant_sell_profit</code> —
+          the spread times the volume Jita will actually absorb.
+        </p>
+        <span class="tag">getBestOrder.sql</span>
+      </div>
+      <div class="card">
+        <div class="ico">📉</div>
+        <h3>Undercut radar</h3>
+        <p>
+          Top-100 items whose remote sell price undercuts Jita's best buy,
+          ordered by margin — your shopping list for station trading runs
+          across all watched regions.
+        </p>
+        <span class="tag">getItemsLessThan.sql</span>
+      </div>
+      <div class="card">
+        <div class="ico">🏷️</div>
+        <h3>Lazy EVE name resolution</h3>
+        <p>
+          No static data dumps. Item, system, region and station names resolve
+          on demand from ESI into cached tables, joined straight into query
+          results and re-fetched only when gaps appear.
+        </p>
+        <span class="tag">ESI /universe/names</span>
+      </div>
+      <div class="card">
+        <div class="ico">🤖</div>
+        <h3>Discord bot</h3>
+        <p>
+          Slash commands like <code>/check_market</code> and
+          <code>/list_market</code>, plus scheduled broadcasts to your chosen
+          channel. Optional — without a <code>DISCORD_TOKEN</code> it skips
+          cleanly and the app keeps running.
+        </p>
+        <span class="tag opt">optional · Nostrum</span>
+      </div>
+      <div class="card">
+        <div class="ico">⚡</div>
+        <h3>Elixir/OTP concurrency</h3>
+        <p>
+          A per-region GenServer tree with dynamic page scaling, an ETS market
+          cache warmed from etags, and supervisory restarts that survive
+          transient ESI failures without missing a beat.
+        </p>
+        <span class="tag">OTP supervisors</span>
+      </div>
+      <div class="card">
+        <div class="ico">🔭</div>
+        <h3>Observability built in</h3>
+        <p>
+          Structured JSON logs on the console and rotated error records in
+          <code>./logs/errors.jsonl</code>. Every record carries a timestamp
+          and the git commit it was built from — you always know what's running.
+        </p>
+        <span class="tag">ts + commit on every event</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Quick start ================= -->
+<section id="quickstart">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">03 · Launch</div>
+      <h2>Quick start</h2>
+      <p>From clone to arbitrage feed in three commands.</p>
+    </div>
+    <div class="commands">
+      <div class="cmd"><code>mix setup</code><p>Install deps, create the SQLite database and run migrations.</p></div>
+      <div class="cmd"><code>mix start</code><p>Setup, then run the supervision tree — pollers begin immediately.</p></div>
+      <div class="cmd"><code>iex -S mix run</code><p>Interactive shell with the app running, for live queries and debugging.</p></div>
+      <div class="cmd"><code>mix ecto.migrate</code><p>Manual migration control (migrations also run automatically on every boot).</p></div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Variable</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>DISCORD_TOKEN</code></td><td>Enables the optional Discord bot. Missing/invalid → bot skipped with a warning.</td></tr>
+        <tr><td><code>MARKETMAILER_LOG_DIR</code></td><td>Directory for the rotated error log (default: <code>logs/</code> → <code>logs/errors.jsonl</code>).</td></tr>
+        <tr><td><code>MARKETMAILER_DB</code></td><td>Override the SQLite file path — e.g. when mounting a Docker volume.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ================= Footer ================= -->
+<div class="wrap">
+  <footer>
+    <div class="stack">Elixir ~> 1.19 · OTP · Ecto + SQLite · Nostrum · req</div>
+    <p>Marketmailer v0.0.1 — an EVE Online community utility. Not affiliated with CCP Games.</p>
+  </footer>
+</div>
+
+</body>
+</html>
