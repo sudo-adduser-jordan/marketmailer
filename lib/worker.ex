@@ -56,6 +56,13 @@ defmodule Marketmailer.PageWorker do
 				schedule_next(@ping_interval)
 				{:noreply, state}
 
+			{:error, :rate_limited, ctx} ->
+				# 429: the server says when enough tokens are back; reschedule on
+				# that instead of counting against the exponential backoff.
+				Logger.warning("429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}")
+				schedule_next(max(ctx.retry_after_ms, 1_000))
+				{:noreply, %{state | errors: 0}}
+
 			{:error, reason} ->
 				delay = backoff_ms(errs)
 				schedule_next(delay)
