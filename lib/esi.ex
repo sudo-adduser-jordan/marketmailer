@@ -1,6 +1,4 @@
 defmodule ESI do
-	require Logger
-
 	@user_agent "lostcoastwizard > BEAM me up, Scotty!"
 	@maint_key :maintenance_mode
 	@maint_ping_ms 10_000
@@ -26,7 +24,13 @@ defmodule ESI do
 		case :ets.lookup(@table, @key) do
 			[{@key, t}] when t > now ->
 				sleep = t - now
-				Logger.warning("ESI limit low, pausing #{div(sleep, 1000)}s")
+
+				Marketmailer.Log.warning(
+					"esi_error_limit_pause",
+					%{pause_ms: sleep},
+					"ESI limit low, pausing #{div(sleep, 1000)}s"
+				)
+
 				Process.sleep(sleep)
 
 			_ ->
@@ -103,7 +107,16 @@ defmodule ESI do
 				{:error, response.status}
 
 			{:error, error} ->
-				Logger.error("#{region}/#{page} HTTP error: #{inspect(error)}")
+				Marketmailer.Log.error(
+					"esi_http_error",
+					%{
+						region: region,
+						page: page,
+						error: inspect(error)
+					},
+					"#{region}/#{page} HTTP error: #{inspect(error)}"
+				)
+
 				{:error, error}
 		end
 	end
@@ -172,7 +185,13 @@ defmodule ESI do
 		case :ets.lookup(@table, {:blocked, group}) do
 			[{_, t}] when t > now ->
 				sleep = t - now
-				Logger.warning("ESI rate-limited, waiting #{div(sleep, 1000)}s")
+
+				Marketmailer.Log.warning(
+					"esi_rate_limit_wait",
+					%{sleep_ms: sleep},
+					"ESI rate-limited, waiting #{div(sleep, 1000)}s"
+				)
+
 				Process.sleep(sleep)
 				wait_blocked(group)
 

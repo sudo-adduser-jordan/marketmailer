@@ -1,8 +1,6 @@
 defmodule Marketmailer.PageWorker do
 	use GenServer, restart: :transient
 
-	require Logger
-
 	@ping_interval 10_000
 
 	def start_link({manager, id, page}) do
@@ -39,27 +37,71 @@ defmodule Marketmailer.PageWorker do
 
 		case ESI.fetch(id, page) do
 			{:ok, data, ctx} ->
-				Logger.info("200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+				Marketmailer.Log.info(
+					"page_fetch_ok",
+					%{
+						region: id,
+						page: page,
+						status: 200,
+						orders: length(data),
+						ttl_ms: ctx.ttl,
+						url: ctx.url
+					},
+					"200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
+				)
+
 				Market.Database.upsert_orders(data)
 				Etag.Database.upsert_etag(ctx.url, ctx.etag)
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 
 			{:not_modified, ctx} ->
-				Logger.info("304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}")
+				Marketmailer.Log.info(
+					"page_fetch_not_modified",
+					%{
+						region: id,
+						page: page,
+						status: 304,
+						ttl_ms: ctx.ttl,
+						url: ctx.url
+					},
+					"304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
+				)
+
 				if ctx.etag, do: Etag.Database.upsert_etag(ctx.url, ctx.etag)
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 
 			{:error, :service_unavailable, ctx} ->
-				Logger.info("503 #{id}     \t #{ctx.url}")
+				Marketmailer.Log.info(
+					"page_fetch_unavailable",
+					%{
+						region: id,
+						page: page,
+						status: 503,
+						url: ctx.url
+					},
+					"503 #{id}     \t #{ctx.url}"
+				)
+
 				schedule_next(@ping_interval)
 				{:noreply, state}
 
 			{:error, :rate_limited, ctx} ->
 				# 429: the server says when enough tokens are back; reschedule on
 				# that instead of counting against the exponential backoff.
-				Logger.warning("429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}")
+				Marketmailer.Log.warning(
+					"page_fetch_rate_limited",
+					%{
+						region: id,
+						page: page,
+						status: 429,
+						retry_after_ms: ctx.retry_after_ms,
+						url: ctx.url
+					},
+					"429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}"
+				)
+
 				schedule_next(max(ctx.retry_after_ms, 1_000))
 				{:noreply, %{state | errors: 0}}
 
@@ -67,7 +109,16 @@ defmodule Marketmailer.PageWorker do
 				delay = backoff_ms(errs)
 				schedule_next(delay)
 
-				Logger.warning("Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s")
+				Marketmailer.Log.warning(
+					"page_fetch_error",
+					%{
+						region: id,
+						page: page,
+						reason: inspect(reason),
+						retry_in_ms: delay
+					},
+					"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
+				)
 
 				{:noreply, %{state | errors: errs + 1}}
 		end

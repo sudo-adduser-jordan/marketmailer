@@ -30,3 +30,6 @@ marketmailer-*.tar
 /marketmailer.db
 /marketmailer.db-shm
 /marketmailer.db-wal
+
+# structured JSON logs (errors.jsonl + rotated archives)
+/logs/

@@ -4,8 +4,6 @@ defmodule ESI.Names do
 	ids through ESI's bulk universe/names endpoint.
 	"""
 
-	require Logger
-
 	@url "https://esi.evetech.net/v2/universe/names/"
 
 	def resolve(ids) do
@@ -26,11 +24,13 @@ defmodule ESI.Names do
 
 			{:ok, %{status: status} = response} ->
 				ESI.release(response.headers, @url)
-				Logger.warning("ESI.Names #{status}")
+				Marketmailer.Log.warning("names_resolve_error", %{status: status}, "ESI.Names #{status}")
+
 				[]
 
 			{:error, error} ->
-				Logger.error("ESI.Names HTTP error: #{inspect(error)}")
+				Marketmailer.Log.error("names_http_error", %{error: inspect(error)}, "ESI.Names HTTP error: #{inspect(error)}")
+
 				[]
 		end
 	end
@@ -41,8 +41,6 @@ defmodule ESI.SystemInfo do
 	Resolves solar system metadata (name, security status, region name) lazily
 	via the system -> constellation -> region chain.
 	"""
-
-	require Logger
 
 	@base "https://esi.evetech.net"
 
@@ -71,11 +69,22 @@ defmodule ESI.SystemInfo do
 
 			{:ok, %{status: status} = response} ->
 				ESI.release(response.headers, url)
-				Logger.warning("ESI.SystemInfo #{status} #{path}")
+
+				Marketmailer.Log.warning(
+					"system_info_status",
+					%{status: status, path: path},
+					"ESI.SystemInfo #{status} #{path}"
+				)
+
 				{:error, status}
 
 			{:error, error} ->
-				Logger.error("ESI.SystemInfo HTTP error #{path}: #{inspect(error)}")
+				Marketmailer.Log.error(
+					"system_info_http_error",
+					%{path: path, error: inspect(error)},
+					"ESI.SystemInfo HTTP error #{path}: #{inspect(error)}"
+				)
+
 				{:error, error}
 		end
 	end
