@@ -1,0 +1,63 @@
+defmodule Marketmailer.MixProject do
+	use Mix.Project
+
+	def project do
+		[
+			app: :marketmailer,
+			version: "0.0.1",
+			elixir: "~> 1.19",
+			elixirc_paths: elixirc_paths(Mix.env()),
+			start_permanent: Mix.env() == :prod,
+			deps: deps(),
+			aliases: aliases()
+		]
+	end
+
+	def application do
+		[
+			extra_applications: [:logger, :inets],
+			mod: {Marketmailer.Application, []}
+		]
+	end
+
+	defp deps do
+		[
+			{:req, "~> 0.5.0"},
+			{:ecto_sql, "~> 3.0"},
+			{:ecto_sqlite3, "~> 0.18"},
+			# {:nostrum, "~> 0.10"},
+			{:nostrum, github: "Kraigie/nostrum"},
+			{:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
+		]
+	end
+
+	# Define which paths to include based on the environment
+	defp elixirc_paths(_env) do
+		# "." adds the root directory
+		["lib", "hendricks_formatter.ex"]
+	end
+
+	defp aliases do
+		[
+			setup: [
+				"deps.get",
+				"ecto.setup"
+			],
+			"ecto.setup": [
+				"ecto.create",
+				"ecto.migrate"
+			],
+			"ecto.reset": [
+				"ecto.drop",
+				"ecto.setup"
+			],
+			format: [
+				"format --check-formatted"
+			],
+			start: [
+				"setup",
+				"run --no-halt"
+			]
+		]
+	end
+end
