@@ -1,8 +1,6 @@
 defmodule Marketmailer.BotSupervisor do
 	use Supervisor
 
-	require Logger
-
 	def start_link(opts), do: Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
 
 	@impl true
@@ -14,7 +12,12 @@ defmodule Marketmailer.BotSupervisor do
 		{:ok, Supervisor.init([bot], strategy: :one_for_one)}
 	rescue
 		e ->
-			Logger.warning("Discord bot disabled (rest continues): #{Exception.message(e)}")
+			Marketmailer.Log.warning(
+				"discord_bot_disabled",
+				%{reason: Exception.message(e)},
+				"Discord bot disabled (rest continues): #{Exception.message(e)}"
+			)
+
 			:ignore
 	end
 end

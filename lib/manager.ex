@@ -2,8 +2,6 @@ defmodule Marketmailer.RegionManager do
 	@moduledoc false
 	use GenServer, restart: :permanent
 
-	require Logger
-
 	def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
 	defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
 
@@ -20,7 +18,12 @@ defmodule Marketmailer.RegionManager do
 		if count == old do
 			{:noreply, state}
 		else
-			Logger.debug("Region #{id}: pages #{old} -> #{count}")
+			Marketmailer.Log.info(
+				"page_count_changed",
+				%{region: id, old: old, new: count},
+				"Region #{id}: pages #{old} -> #{count}"
+			)
+
 			adjust_workers(id, old, count)
 			{:noreply, %{state | page_count: count}}
 		end

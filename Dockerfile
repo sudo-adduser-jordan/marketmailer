@@ -8,7 +8,8 @@
 #
 # The app polls ESI market orders into SQLite. Pending migrations run
 # automatically on boot. Discord is disabled by default; pass
-# DISCORD_TOKEN to enable it (see lib/app.ex).
+# DISCORD_TOKEN to enable it (see lib/app.ex). Error events are appended
+# to ./logs/errors.jsonl (wiped on every boot).
 
 FROM elixir:1.20
 

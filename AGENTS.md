@@ -68,6 +68,32 @@ Both formerly-disabled features are now uncommented in `lib/app.ex`:
 
 `.example.env` documents the env vars.
 
+## Logging
+
+Structured JSON logs (logging-sucks style: stable `event` names, flat
+queryable fields, no sensitive data in fields). Everything funnels through
+`Marketmailer.Log` (`lib/log.ex`):
+
+- **Console** — every info/warning/error record as pretty JSON (4-space
+  indent) with keys colored per level and values colored by type
+  (strings/numbers/booleans) (`config.exs`,
+  `:default_handler` level `:info`).
+- **File** — error-level events only, plain pretty JSON to `./logs/errors.jsonl`
+  (rotation: 5 × 10 MB, gz on rotate). `logs/` is removed and recreated on
+  every boot.
+
+Records on both sinks are back-to-back (no blank line) and share a stable
+field order: `level`, `commit`, `ts`, `pid`, `event`, then domain fields
+(alphabetical), then `message` last. Every
+event carries `ts` (RFC3339 ms UTC) and `commit` (git short hash baked in at
+compile time). A startup marker (`app_start` info event) logs the boot
+timestamp and commit. `Marketmailer.Log.Format` renders both sinks with OTP's
+`:json` (no extra deps). Debug events are dropped by both sinks; the single
+previous debug call (page counts) is now info-level. To query console output,
+strip ANSI and collect each record (every record starts with `{` at column 0),
+then pipe to jq:
+`mix run 2>&1 | sed 's/\e\[[0-9;]*m//g' | awk '/^{/{if(r!=""){print r;r=""}r=$0;next}{r=r"\n"$0}END{if(r!="")print r}' | jq -c 'select(.level != "info")'`.
+
 ## Architecture map
 
 - `lib/app.ex` - supervision tree + boot-time migration run (see policy above)
