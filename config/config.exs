@@ -6,6 +6,7 @@ config :logger, :console,
 
 config :marketmailer, Database,
 	database: System.get_env("MARKETMAILER_DB", "marketmailer.db"),
+	priv: "priv/repo",
 	journal_mode: :wal,
 	busy_timeout: 5000,
 	log: false
