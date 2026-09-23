@@ -17,11 +17,15 @@ defmodule ESI.Names do
 	end
 
 	defp fetch_chunk(chunk) do
+		ESI.acquire(@url)
+
 		case Req.post(@url, json: chunk) do
-			{:ok, %{status: 200, body: body}} when is_list(body) ->
+			{:ok, %{status: 200, body: body} = response} when is_list(body) ->
+				ESI.release(response.headers, @url)
 				Enum.map(body, fn entry -> %{id: entry["id"], name: entry["name"]} end)
 
-			{:ok, %{status: status}} ->
+			{:ok, %{status: status} = response} ->
+				ESI.release(response.headers, @url)
 				Logger.warning("ESI.Names #{status}")
 				[]
 
@@ -57,11 +61,16 @@ defmodule ESI.SystemInfo do
 	end
 
 	defp get(path) do
-		case Req.get(@base <> path) do
-			{:ok, %{status: 200, body: body}} ->
+		url = @base <> path
+		ESI.acquire(url)
+
+		case Req.get(url) do
+			{:ok, %{status: 200, body: body} = response} ->
+				ESI.release(response.headers, url)
 				{:ok, body}
 
-			{:ok, %{status: status}} ->
+			{:ok, %{status: status} = response} ->
+				ESI.release(response.headers, url)
 				Logger.warning("ESI.SystemInfo #{status} #{path}")
 				{:error, status}
 

@@ -57,17 +57,16 @@ columns (`system_id`, `location_id`, `type_id`) or backfill cannot see gaps.
 Raw SQL files live in `lib/*.sql` and are loaded relative to `__DIR__`
 (CWD-safe).
 
-## Disabled subsystems
+## Enabled subsystems
 
-All disabled by commented-out children in `lib/app.ex`; code and config stay
-in place for one-line re-enables:
+Both formerly-disabled features are now uncommented in `lib/app.ex`:
 
-| Feature | Enable | Needs |
+| Feature | Child in `lib/app.ex` | Needs |
 | --- | --- | --- |
-| Discord bot | uncomment `{Nostrum.Bot, ...}` | `DISCORD_TOKEN` env |
-| Region pollers | uncomment `Marketmailer.RegionManagerSupervisor` | nothing |
+| Region pollers | `Marketmailer.RegionManagerSupervisor` | nothing |
+| Discord bot | `{Marketmailer.BotSupervisor, ...}` (owns `Nostrum.Bot`) | `DISCORD_TOKEN` — if missing/invalid the bot is skipped with a warning, the rest of the app keeps running |
 
-`.example.env` documents the env vars. Without them the app boots fine.
+`.example.env` documents the env vars.
 
 ## Architecture map
 

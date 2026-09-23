@@ -17,9 +17,9 @@ defmodule Marketmailer.Application do
 			EtagCache,
 			{Registry, keys: :unique, name: Marketmailer.Registry},
 			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
-			{Task.Supervisor, name: Marketmailer.TaskSup}
-			# Marketmailer.RegionManagerSupervisor,
-			# {Nostrum.Bot, Application.fetch_env!(:marketmailer, :bot_options)},
+			{Task.Supervisor, name: Marketmailer.TaskSup},
+			Marketmailer.RegionManagerSupervisor,
+			{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}
 		]
 
 		opts = [
