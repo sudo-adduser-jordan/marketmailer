@@ -37,6 +37,24 @@ defmodule Discord.Messages do
 	def format_security_status do
 	end
 
+	def server_only(_interaction) do
+		%Embed{
+			author: %Embed.Author{
+				name: "Marketmailer",
+				url: "https://discord.com",
+				icon_url: @icon_error
+			},
+			title: "Server only",
+			description: "This command can only be used inside a server, not in DMs.",
+			color: @color_error,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			footer: %Embed.Footer{
+				text: "Sent with Elixir",
+				icon_url: @icon_elixir
+			}
+		}
+	end
+
 	def error(_interaction) do
 		%Embed{
 			title: "Error",
@@ -59,48 +77,59 @@ defmodule Discord.Messages do
 		}
 	end
 
-	def market_list_embed do
-		# _market_context = Market.Database.cheapest_order() # get row
-		market_url = "https://janice.e-351.com/i/81008/market/2"
-		reference_url = "https://everef.net/types/81008"
+	def market_list_embed(items) do
+		lines = items |> Enum.with_index(1) |> Enum.map(fn {item, i} -> list_line(item, i) end)
+		description = truncate_lines(lines, "")
+
+		description =
+			if description == "" do
+				"No items are undercutting the Jita buy wall right now."
+			else
+				description
+			end
 
 		%Embed{
-			title: "Squall",
-			description: "
-						[Market](#{market_url}) [Reference](#{reference_url})
-						",
-			# url: "https://discord.com",
-			color: 0x7289DA,
+			title: "Items undercutting the Jita buy wall",
+			description: description,
+			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
-				name: "Marketmailer - Best Order",
+				name: "Marketmailer - Market List",
 				url: "https://discord.com",
 				icon_url: @icon_success
 			},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			},
-			image: %Embed.Image{
-				url: @icon_market
-			},
-			fields: [
-				%Embed.Field{
-					name: "The Forge",
-					value: "1.0 Jita",
-					inline: true
-				},
-				%Embed.Field{
-					name: "69%",
-					value: "69 420 ISK",
-					inline: true
-				}
-			],
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
 				icon_url: @icon_elixir
 			}
 		}
 	end
+
+	defp list_line(item, i) do
+		name = item[:item] || "?"
+		location = item[:location_name] || item[:system_name] || "?"
+
+		"#{i}. **#{name}** — sell #{format_isk(item[:sell_price])} / buy #{format_isk(item[:buy_price])} | +#{format_isk(item[:margin])} ISK @ #{location}"
+	end
+
+	# Embed descriptions cap at 4096 chars; drop lines that would overflow.
+	defp truncate_lines([], acc), do: acc
+
+	defp truncate_lines([line | rest], acc) do
+		next = if acc == "", do: line, else: acc <> "\n" <> line
+
+		if String.length(next) < 4000 do
+			truncate_lines(rest, next)
+		else
+			acc
+		end
+	end
+
+	defp format_isk(nil), do: "?"
+	defp format_isk(number), do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
 
 	def market_embed(item) do
 		market_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
@@ -230,33 +259,83 @@ defmodule Discord.Consumer do
 	@admin_only "16"
 	@interval 15 * 60 * 1000
 
+	# integration_types: 0 = guild install (server), 1 = user install (personal)
+	# contexts: 0 = guild, 1 = bot DMs, 2 = private channels
+	@server_install [0]
+	@server_context [0]
+	@both_installs [0, 1]
+	@any_context [0, 1, 2]
+
 	defp schedule_broadcast, do: Process.send_after(self(), :broadcast, @interval)
 
 	def handle_event({:READY, _, _}) do
-		commands = [
-			%{name: "add_channel", description: "Set current channel for alerts", default_member_permissions: @admin_only},
-			%{name: "remove_channel", description: "Remove alerts from this server", default_member_permissions: @admin_only},
-			%{name: "list_channel", description: "Show the current update channel"},
-			%{name: "check_market", description: "Scan the market immediately"}
+		server_commands = [
+			%{
+				name: "add_channel",
+				description: "Set current channel for alerts",
+				integration_types: @server_install,
+				contexts: @server_context,
+				default_member_permissions: @admin_only
+			},
+			%{
+				name: "remove_channel",
+				description: "Remove alerts from this server",
+				integration_types: @server_install,
+				contexts: @server_context,
+				default_member_permissions: @admin_only
+			},
+			%{
+				name: "list_channel",
+				description: "Show the current update channel",
+				integration_types: @server_install,
+				contexts: @server_context
+			}
 		]
 
-		Api.ApplicationCommand.bulk_overwrite_global_commands(commands)
+		market_commands = [
+			%{
+				name: "check_market",
+				description: "Scan the market immediately",
+				integration_types: @both_installs,
+				contexts: @any_context
+			},
+			%{
+				name: "list_market",
+				description: "Items undercutting the Jita buy wall",
+				integration_types: @both_installs,
+				contexts: @any_context
+			}
+		]
+
+		Api.ApplicationCommand.bulk_overwrite_global_commands(server_commands ++ market_commands)
 		schedule_broadcast()
 	end
 
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
 		case name do
 			"add_channel" ->
-				Discord.Database.upsert(interaction.guild_id, interaction.channel_id)
-				respond(interaction, Messages.add_channel(interaction))
+				if is_nil(interaction.guild_id) do
+					respond(interaction, Messages.server_only(interaction))
+				else
+					Discord.Database.upsert(interaction.guild_id, interaction.channel_id)
+					respond(interaction, Messages.add_channel(interaction))
+				end
 
 			"remove_channel" ->
-				Discord.Database.delete(interaction.guild_id)
-				respond(interaction, Messages.channel_removed(interaction))
+				if is_nil(interaction.guild_id) do
+					respond(interaction, Messages.server_only(interaction))
+				else
+					Discord.Database.delete(interaction.guild_id)
+					respond(interaction, Messages.channel_removed(interaction))
+				end
 
 			"list_channel" ->
-				channel_id = Discord.Database.get(interaction.guild_id)
-				respond(interaction, Messages.list_channel(channel_id))
+				if is_nil(interaction.guild_id) do
+					respond(interaction, Messages.server_only(interaction))
+				else
+					channel_id = Discord.Database.get(interaction.guild_id)
+					respond(interaction, Messages.list_channel(channel_id))
+				end
 
 			"check_market" ->
 				item = Market.Database.get_best_order() |> List.first()
@@ -268,8 +347,8 @@ defmodule Discord.Consumer do
 				end
 
 			"list_market" ->
-				_items = Market.Database.get_items_less_than_jita_buy()
-				respond(interaction, Messages.market_list_embed())
+				items = Market.Database.get_items_less_than_jita_buy()
+				respond(interaction, Messages.market_list_embed(items))
 		end
 	end
 
