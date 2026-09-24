@@ -74,6 +74,8 @@ defmodule Discord.Database do
 end
 
 defmodule Market.Database do
+	import Ecto.Query
+
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
 	@table "market"
 
@@ -105,6 +107,28 @@ defmodule Market.Database do
 		load_rows("getBestOrder.sql")
 	end
 
+	def get_market_item(item_name) when is_binary(item_name) do
+		item_name = String.trim(item_name)
+
+		if item_name != "" do
+			case load_rows("getMarketItem.sql", [item_name]) do
+				[] ->
+					backfill_market_type_names()
+
+					case load_rows("getMarketItem.sql", [item_name]) do
+						[] -> nil
+						[item | _] -> item
+					end
+
+				[item | _] ->
+					backfill([item])
+					load_rows("getMarketItem.sql", [item_name]) |> List.first()
+			end
+		end
+	end
+
+	def get_market_item(_item_name), do: nil
+
 	def get_items_less_than_jita_buy do
 		backfill(load_rows("getItemsLessThan.sql"))
 		load_rows("getItemsLessThan.sql")
@@ -113,13 +137,13 @@ defmodule Market.Database do
 	def get_list_less_than_jita_buy, do: []
 
 	# Runs a query file from lib/ and returns one map/struct per row.
-	defp load_rows(file) do
-		{:ok, %{rows: rows, columns: cols}} = Database.query(read_sql(file))
+	defp load_rows(file, params \\ []) do
+		{:ok, %{rows: rows, columns: cols}} = Database.query(read_sql(file), params)
 
 		Enum.map(rows, fn row ->
 			data = cols |> Enum.map(&String.to_atom/1) |> Enum.zip(row) |> Map.new()
 
-			if file == "getBestOrder.sql" do
+			if file in ["getBestOrder.sql", "getMarketItem.sql"] do
 				struct = Ecto.Repo.Schema.load(Ecto.Adapters.SQLite3, MarketView, data)
 				Map.put(struct, :instant_sell_profit, data[:instant_sell_profit])
 			else
@@ -129,6 +153,23 @@ defmodule Market.Database do
 	end
 
 	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
+
+	# A name lookup cannot discover an unresolved type id from the market query
+	# itself, so fill the type-name cache before retrying an item lookup.
+	defp backfill_market_type_names do
+		query =
+			from market in @table,
+				left_join: name in "names",
+				on: name.id == market.type_id,
+				where: is_nil(name.id),
+				select: market.type_id,
+				distinct: true
+
+		case Database.all(query) do
+			[] -> :ok
+			ids -> ids |> ESI.Names.resolve() |> Universe.Database.upsert_names()
+		end
+	end
 
 	# Fills the lazy EVE caches (names/systems) for anything the query could not
 	# resolve locally; the caller re-runs the query afterwards.
