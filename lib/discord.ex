@@ -77,6 +77,30 @@ defmodule Discord.Messages do
 		}
 	end
 
+	def market_not_found_embed(item_name) do
+		item_name = if is_binary(item_name), do: String.trim(item_name), else: ""
+		item_name = if item_name == "", do: "that item", else: item_name
+
+		%Embed{
+			title: "Item not found",
+			description: "No cached market order was found for **#{item_name}**.",
+			color: @color_error,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: %Embed.Author{
+				name: "Marketmailer - Market Lookup",
+				url: "https://discord.com",
+				icon_url: @icon_error
+			},
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			},
+			footer: %Embed.Footer{
+				text: "Sent with Elixir",
+				icon_url: @icon_elixir
+			}
+		}
+	end
+
 	def market_list_embed(items) do
 		lines = items |> Enum.with_index(1) |> Enum.map(fn {item, i} -> list_line(item, i) end)
 		description = truncate_lines(lines, "")
@@ -136,7 +160,7 @@ defmodule Discord.Messages do
 		reference_url = "https://everef.net/types/#{item.type_id}"
 
 		%Embed{
-			title: "Squall",
+			title: item.item_name || "Market order",
 			description: "
 						[Market](#{market_url}) [Reference](#{reference_url})
 						",
@@ -144,7 +168,7 @@ defmodule Discord.Messages do
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
-				name: "Marketmailer - Best Order",
+				name: "Marketmailer - Market Order",
 				url: "https://discord.com",
 				icon_url: @icon_success
 			},
@@ -160,16 +184,25 @@ defmodule Discord.Messages do
 					value: "#{format_security(item.security_status)} #{item.system_name}",
 					inline: true
 				},
-				%Embed.Field{
-					name: "#{item.instant_sell_profit} %",
-					value: "#{item.price} ISK",
-					inline: true
-				}
+				profit_field(item)
 			],
 			footer: %Embed.Footer{
 				text: "Sent with Elixir",
 				icon_url: @icon_elixir
 			}
+		}
+	end
+
+	defp profit_field(item) do
+		name =
+			if is_nil(item.instant_sell_profit),
+				do: "Sell price",
+				else: "#{format_isk(item.instant_sell_profit)} ISK profit"
+
+		%Embed.Field{
+			name: name,
+			value: "#{format_isk(item.price)} ISK",
+			inline: true
 		}
 	end
 
@@ -254,6 +287,7 @@ defmodule Discord.Consumer do
 
 	alias Discord.Messages
 	alias Nostrum.Api
+	alias Nostrum.Constants.ApplicationCommandOptionType
 	alias Nostrum.Struct.Interaction
 
 	@admin_only "16"
@@ -295,9 +329,17 @@ defmodule Discord.Consumer do
 		market_commands = [
 			%{
 				name: "check_market",
-				description: "Scan the market immediately",
+				description: "Check an item in the market",
 				integration_types: @both_installs,
-				contexts: @any_context
+				contexts: @any_context,
+				options: [
+					%{
+						type: ApplicationCommandOptionType.string(),
+						name: "item",
+						description: "EVE item name",
+						required: true
+					}
+				]
 			},
 			%{
 				name: "list_market",
@@ -338,12 +380,11 @@ defmodule Discord.Consumer do
 				end
 
 			"check_market" ->
-				item = Market.Database.get_best_order() |> List.first()
+				item_name = option_value(interaction, "item")
 
-				if item do
-					respond(interaction, Messages.market_embed(item))
-				else
-					respond(interaction, Messages.error(interaction))
+				case Market.Database.get_market_item(item_name) do
+					nil -> respond(interaction, Messages.market_not_found_embed(item_name))
+					item -> respond(interaction, Messages.market_embed(item))
 				end
 
 			"list_market" ->
@@ -355,6 +396,15 @@ defmodule Discord.Consumer do
 	def handle_event(_), do: :ok
 
 	# --- Helpers ---
+
+	defp option_value(%{data: %{options: options}}, name) when is_list(options) do
+		Enum.find_value(options, fn
+			%{name: ^name, value: value} -> value
+			_ -> nil
+		end)
+	end
+
+	defp option_value(_interaction, _name), do: nil
 
 	defp respond(intr, %Nostrum.Struct.Embed{} = embed) do
 		Api.Interaction.create_response(intr, %{
