@@ -27,6 +27,7 @@ defmodule Marketmailer.MixProject do
 			{:ecto_sqlite3, "~> 0.18"},
 			# {:nostrum, "~> 0.10"},
 			{:nostrum, github: "Kraigie/nostrum"},
+			{:playwright_ex, "~> 0.12.1"},
 			{:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
 		]
 	end

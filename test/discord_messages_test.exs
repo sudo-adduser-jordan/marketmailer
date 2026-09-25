@@ -29,4 +29,19 @@ defmodule Discord.MessagesTest do
 		assert price_field.value == "10.00 ISK"
 		assert embed.description =~ "janice.e-351.com/i/1001/market/2"
 	end
+
+	test "uses an attachment URL when a Janice graph is supplied" do
+		item = %MarketView{
+			type_id: 1_001,
+			item_name: "Tritanium",
+			region_name: "The Forge",
+			system_name: "Jita",
+			security_status: 0.0,
+			price: 10.0
+		}
+
+		embed = Discord.Messages.market_embed(item, "attachment://janice-1001.png")
+
+		assert embed.thumbnail.url == "attachment://janice-1001.png"
+	end
 end
