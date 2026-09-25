@@ -14,6 +14,7 @@ defmodule Marketmailer.RegionManager do
 	@impl true
 	def handle_info({:update_page_count, count}, %{id: id, page_count: old} = state) do
 		count = max(count, 1)
+		Market.UpdateCoordinator.page_count(id, count)
 
 		if count == old do
 			{:noreply, state}

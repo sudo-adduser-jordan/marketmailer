@@ -1,6 +1,6 @@
 # Marketmailer command and broadcast TODO
 
-Status: in progress. Tasks 1–3 are complete; task 4 is next.
+Status: in progress. Tasks 1–4 are complete; task 5 is next.
 
 ## Decisions captured
 
@@ -54,7 +54,7 @@ Do not squash these commits.
   - Test success, timeout, capture failure, attachment naming, and thumbnail fallback paths.
   - Commit: `feat: capture Janice market charts`
 
-- [ ] **4. Coordinate completed region refresh cycles**
+- [x] **4. Coordinate completed region refresh cycles** (commit `a98ab69`)
   - Add a market-update coordinator (a supervised GenServer is preferred) separate from individual page workers.
   - Have page workers report terminal fetch results (`200`, `304`, and failures) to the coordinator after persistence.
   - Track the expected page set from `x-pages`; reset state safely when page counts change or workers restart.

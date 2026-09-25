@@ -18,6 +18,7 @@ defmodule Marketmailer.Application do
 			{Registry, keys: :unique, name: Marketmailer.Registry},
 			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
 			{Task.Supervisor, name: Marketmailer.TaskSup},
+			Market.UpdateCoordinator,
 			Janice.Supervisor,
 			Marketmailer.RegionManagerSupervisor,
 			{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}

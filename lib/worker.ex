@@ -34,6 +34,7 @@ defmodule Marketmailer.PageWorker do
 	defp perform_fetch(state) do
 		%{manager: manager, id: id, page: page, errors: errs} = state
 		ESI.wait_for_error_window()
+		Market.UpdateCoordinator.page_started(id, page)
 
 		case ESI.fetch(id, page) do
 			{:ok, data, ctx} ->
@@ -52,6 +53,7 @@ defmodule Marketmailer.PageWorker do
 
 				Market.Database.upsert_orders(data)
 				Etag.Database.upsert_etag(ctx.url, ctx.etag)
+				Market.UpdateCoordinator.page_result(id, page, :updated, %{pages: ctx.pages})
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 
@@ -69,6 +71,7 @@ defmodule Marketmailer.PageWorker do
 				)
 
 				if ctx.etag, do: Etag.Database.upsert_etag(ctx.url, ctx.etag)
+				Market.UpdateCoordinator.page_result(id, page, :not_modified, %{pages: ctx.pages})
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 
@@ -84,6 +87,7 @@ defmodule Marketmailer.PageWorker do
 					"503 #{id}     \t #{ctx.url}"
 				)
 
+				Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: :service_unavailable})
 				schedule_next(@ping_interval)
 				{:noreply, state}
 
@@ -102,6 +106,7 @@ defmodule Marketmailer.PageWorker do
 					"429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}"
 				)
 
+				Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: :rate_limited})
 				schedule_next(max(ctx.retry_after_ms, 1_000))
 				{:noreply, %{state | errors: 0}}
 
@@ -120,9 +125,14 @@ defmodule Marketmailer.PageWorker do
 					"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
 				)
 
+				Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: failure_reason(reason)})
 				{:noreply, %{state | errors: errs + 1}}
 		end
 	end
+
+	defp failure_reason(reason) when is_atom(reason) or is_binary(reason), do: reason
+	defp failure_reason(reason) when is_integer(reason), do: reason
+	defp failure_reason(_reason), do: :unknown
 
 	defp try_claim_ping do
 		# only one process 'wins' the right to ping during this 10s window.
