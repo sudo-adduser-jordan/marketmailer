@@ -4,9 +4,12 @@ defmodule Discord.BroadcasterTest do
 	alias MarketView
 
 	setup do
-		coordinator = :"broadcaster_coordinator_#{System.unique_integer([:positive])}"
+		unique = System.unique_integer([:positive])
+		coordinator = :"broadcaster_coordinator_#{unique}"
+		task_supervisor = :"broadcaster_tasks_#{unique}"
 		start_supervised!({Market.UpdateCoordinator, name: coordinator, cycle_timeout: 1_000})
-		{:ok, coordinator: coordinator}
+		start_supervised!({Task.Supervisor, name: task_supervisor})
+		{:ok, coordinator: coordinator, task_supervisor: task_supervisor}
 	end
 
 	test "broadcasts a successful market embed with an attachment to every channel", %{coordinator: coordinator} do
@@ -121,7 +124,34 @@ defmodule Discord.BroadcasterTest do
 		assert Process.alive?(broadcaster)
 	end
 
-	defp start_broadcaster(coordinator, channels, market_result, deliver_fun) do
+	test "keeps the broadcaster alive after an async refresh completes", %{
+		coordinator: coordinator,
+		task_supervisor: task_supervisor
+	} do
+		test_pid = self()
+
+		broadcaster =
+			start_broadcaster(
+				coordinator,
+				[800],
+				market_item(),
+				fn channel, _payload ->
+					send(test_pid, {:sent, channel})
+					{:ok, :sent}
+				end,
+				async: true,
+				task_supervisor: task_supervisor
+			)
+
+		complete_cycle(coordinator, 17, :updated)
+		assert_receive {:sent, 800}
+
+		complete_cycle(coordinator, 18, :updated)
+		assert_receive {:sent, 800}
+		assert Process.alive?(broadcaster)
+	end
+
+	defp start_broadcaster(coordinator, channels, market_result, deliver_fun, opts \\ []) do
 		name = :"broadcaster_#{System.unique_integer([:positive])}"
 		deliver_opts = if deliver_fun, do: [deliver_fun: deliver_fun], else: []
 
@@ -131,7 +161,8 @@ defmodule Discord.BroadcasterTest do
 				 [
 					 name: name,
 					 coordinator: coordinator,
-					 async: false,
+					 async: Keyword.get(opts, :async, false),
+					 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 					 channels_fun: fn -> channels end,
 					 market_fun: fn -> market_result end,
 					 capture_fun: fn _type_id -> {:ok, <<137, 80, 78, 71>>} end

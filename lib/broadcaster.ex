@@ -46,7 +46,7 @@ defmodule Discord.Broadcaster do
 	end
 
 	def handle_info({:broadcast_done, key, result}, state) do
-		complete_refresh(state, key, result)
+		{:noreply, complete_refresh(state, key, result)}
 	end
 
 	def handle_info(_message, state), do: {:noreply, state}
