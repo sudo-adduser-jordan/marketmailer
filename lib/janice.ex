@@ -144,7 +144,7 @@ defmodule Janice.Playwright do
 	end
 
 	defp navigate(page, url, timeout) do
-		case Frame.goto(page.main_frame,
+		case Frame.goto(page.main_frame.guid,
 					 url: url,
 					 wait_until: "domcontentloaded",
 					 timeout: timeout
