@@ -16,6 +16,7 @@ defmodule Market.DatabaseTest do
 			priv: "priv/repo",
 			journal_mode: :wal,
 			busy_timeout: 5_000,
+			pool_size: 1,
 			log: false
 		)
 
@@ -77,6 +78,24 @@ defmodule Market.DatabaseTest do
 		assert MarketDatabase.get_market_item("Empty Item") == nil
 		assert MarketDatabase.get_market_item("") == nil
 		assert MarketDatabase.get_market_item(nil) == nil
+	end
+
+	test "reads ordered undercutting rows from the market list view" do
+		insert_fixture()
+
+		items = MarketDatabase.get_items_less_than_jita_buy()
+
+		assert length(items) == 2
+		assert Enum.at(items, 0).item == "Tritanium"
+		assert Enum.at(items, 0).sell_price == 10.0
+		assert Enum.at(items, 0).buy_price == 110.0
+		assert Enum.at(items, 0).margin == 100.0
+		assert Enum.at(items, 0).type_id == 1_001
+	end
+
+	test "the market list view is created by the migration" do
+		assert %{rows: [["marketListView"]]} =
+						 Database.query!("SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'marketListView'")
 	end
 
 	defp insert_fixture do

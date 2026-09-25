@@ -194,8 +194,12 @@ defmodule Market.Database do
 	end
 
 	defp name_gaps(row) do
-		for {name_key, id_key} <- [item_name: :type_id, location_name: :location_id],
-				Map.get(row, name_key) == nil and Map.get(row, id_key) != nil,
-				do: Map.get(row, id_key)
+		type_id =
+			if is_nil(Map.get(row, :item_name)) and is_nil(Map.get(row, :item)),
+				do: Map.get(row, :type_id)
+
+		location_id = if is_nil(Map.get(row, :location_name)), do: Map.get(row, :location_id)
+
+		[type_id, location_id] |> Enum.reject(&is_nil/1)
 	end
 end
