@@ -1,6 +1,6 @@
 # Marketmailer command and broadcast TODO
 
-Status: in progress. Tasks 1–4 are complete; task 5 is next.
+Status: in progress. Tasks 1–5 are complete; final verification remains.
 
 ## Decisions captured
 
@@ -63,7 +63,7 @@ Do not squash these commits.
   - Test first completion, duplicate worker reports, page-count changes, all-304 cycles, mixed 200/304 cycles, and failure completion.
   - Commit: `feat: coordinate completed market refreshes`
 
-- [ ] **5. Broadcast successful updates and failures to Discord**
+- [x] **5. Broadcast successful updates and failures to Discord** (commit `d8b97ed`)
   - Add a database function that returns all registered alert channels and a broadcaster/consumer path that sends through the active Nostrum bot.
   - On each completed successful region refresh, query the current best-order result and send the success market embed (including the captured graph attachment when available) to every registered channel.
   - On a failed refresh or when no market item can be produced, send a clear failure embed containing the region/page/reason.

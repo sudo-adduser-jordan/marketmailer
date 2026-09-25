@@ -50,6 +50,7 @@ defmodule Market.DatabaseTest do
 		Database.delete_all("market")
 		Database.delete_all("names")
 		Database.delete_all("systems")
+		Database.delete_all("discord")
 		:ok
 	end
 
@@ -96,6 +97,17 @@ defmodule Market.DatabaseTest do
 	test "the market list view is created by the migration" do
 		assert %{rows: [["marketListView"]]} =
 						 Database.query!("SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'marketListView'")
+	end
+
+	test "lists registered Discord channels in guild order" do
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("discord", [
+			%{guild_id: 20, channel_id: 200, inserted_at: now, updated_at: now},
+			%{guild_id: 10, channel_id: 100, inserted_at: now, updated_at: now}
+		])
+
+		assert Discord.Database.registered_channels() == [100, 200]
 	end
 
 	defp insert_fixture do

@@ -19,6 +19,7 @@ defmodule Marketmailer.Application do
 			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
 			{Task.Supervisor, name: Marketmailer.TaskSup},
 			Market.UpdateCoordinator,
+			Discord.Broadcaster,
 			Janice.Supervisor,
 			Marketmailer.RegionManagerSupervisor,
 			{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}

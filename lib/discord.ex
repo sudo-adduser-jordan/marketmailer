@@ -73,6 +73,45 @@ defmodule Discord.Messages do
 		}
 	end
 
+	def market_update_failed_embed(summary, reason \\ :refresh_failed) do
+		region = Map.get(summary, :region, "?")
+		failures = Map.get(summary, :failures, [])
+
+		details =
+			case failures do
+				[] -> "Reason: #{format_reason(reason)}"
+				failures -> Enum.map_join(failures, "\n", &format_failure/1)
+			end
+
+		%Embed{
+			title: "Market update failed",
+			description: "**Region #{region}**\n#{details}",
+			color: @color_error,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: %Embed.Author{
+				name: "Marketmailer - Update Failure",
+				url: "https://discord.com",
+				icon_url: @icon_error
+			},
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			},
+			footer: %Embed.Footer{
+				text: "Sent with Elixir",
+				icon_url: @icon_elixir
+			}
+		}
+	end
+
+	defp format_failure(%{page: page, reason: reason}) do
+		"Page #{page || "?"}: #{format_reason(reason)}"
+	end
+
+	defp format_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+	defp format_reason(reason) when is_integer(reason), do: Integer.to_string(reason)
+	defp format_reason(reason) when is_binary(reason), do: String.slice(reason, 0, 120)
+	defp format_reason(_reason), do: "unknown error"
+
 	def market_not_found_embed(item_name) do
 		item_name = if is_binary(item_name), do: String.trim(item_name), else: ""
 		item_name = if item_name == "", do: "that item", else: item_name
@@ -289,7 +328,6 @@ defmodule Discord.Consumer do
 	alias Nostrum.Struct.Interaction
 
 	@admin_only "16"
-	@interval 15 * 60 * 1000
 
 	# integration_types: 0 = guild install (server), 1 = user install (personal)
 	# contexts: 0 = guild, 1 = bot DMs, 2 = private channels
@@ -297,8 +335,6 @@ defmodule Discord.Consumer do
 	@server_context [0]
 	@both_installs [0, 1]
 	@any_context [0, 1, 2]
-
-	defp schedule_broadcast, do: Process.send_after(self(), :broadcast, @interval)
 
 	def handle_event({:READY, _, _}) do
 		server_commands = [
@@ -348,7 +384,6 @@ defmodule Discord.Consumer do
 		]
 
 		Api.ApplicationCommand.bulk_overwrite_global_commands(server_commands ++ market_commands)
-		schedule_broadcast()
 	end
 
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
@@ -489,10 +524,5 @@ defmodule Discord.Consumer do
 			type: 4,
 			data: %{embeds: [embed]}
 		})
-	end
-
-	def handle_info(:broadcast, state) do
-		schedule_broadcast()
-		{:noreply, state}
 	end
 end

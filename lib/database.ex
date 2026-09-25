@@ -43,9 +43,15 @@ defmodule Etag.Database do
 end
 
 defmodule Discord.Database do
+	import Ecto.Query
+
 	@table "discord"
 
 	def get(guild_id), do: Database.get(Discord, guild_id)
+
+	def registered_channels do
+		Database.all(from channel in Discord, select: channel.channel_id, order_by: [asc: channel.guild_id])
+	end
 
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
