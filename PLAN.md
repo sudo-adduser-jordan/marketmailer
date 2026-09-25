@@ -1,6 +1,6 @@
 # Marketmailer command and broadcast TODO
 
-Status: in progress. Tasks 1 and 2 are complete; task 3 is next.
+Status: in progress. Tasks 1–3 are complete; task 4 is next.
 
 ## Decisions captured
 
@@ -44,7 +44,7 @@ Do not squash these commits.
   - Test migration up/down, view rows, ordering/limit behavior, and unresolved-name backfill.
   - Commit: `feat: add market list database view`
 
-- [ ] **3. Capture and attach the Janice graph**
+- [x] **3. Capture and attach the Janice graph** (commit `e12ca4e`)
   - Add a supervised browser-capture module (using a pinned Playwright client) and install the required browser/runtime in the Docker image.
   - Navigate to `https://janice.e-351.com/i/<type_id>/market/2`, wait for the rendered chart/canvas rather than a fixed sleep, capture the chart element as PNG, and always close/clean up the browser page.
   - Put the capture behind a small injectable interface so command and broadcast code can be tested without a live browser.

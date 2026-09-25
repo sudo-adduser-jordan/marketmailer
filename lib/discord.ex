@@ -22,11 +22,7 @@ defmodule Discord.Messages do
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
-	def get_canvas_graph do
-		# canvas = Playwright.Page.query_selector(page, "canvas#my-canvas-id")
-		# _png_binary = Playwright.ElementHandle.screenshot(canvas, %{type: "png"})
-		# File.write!("captured_canvas.png", png_binary)
-	end
+	def get_canvas_graph(type_id, opts \\ []), do: Janice.Capture.capture(type_id, opts)
 
 	def format_margin do
 	end
@@ -155,7 +151,7 @@ defmodule Discord.Messages do
 	defp format_isk(nil), do: "?"
 	defp format_isk(number), do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
 
-	def market_embed(item) do
+	def market_embed(item, thumbnail_url \\ nil) do
 		market_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
 		reference_url = "https://everef.net/types/#{item.type_id}"
 
@@ -173,7 +169,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_success
 			},
 			thumbnail: %Embed.Thumbnail{
-				url: @icon_
+				url: thumbnail_url || @icon_
 			},
 			image: %Embed.Image{
 				url: @icon_market
@@ -287,7 +283,9 @@ defmodule Discord.Consumer do
 
 	alias Discord.Messages
 	alias Nostrum.Api
+	alias Nostrum.Bot
 	alias Nostrum.Constants.ApplicationCommandOptionType
+	alias Nostrum.Constants.InteractionCallbackType
 	alias Nostrum.Struct.Interaction
 
 	@admin_only "16"
@@ -384,7 +382,7 @@ defmodule Discord.Consumer do
 
 				case Market.Database.get_market_item(item_name) do
 					nil -> respond(interaction, Messages.market_not_found_embed(item_name))
-					item -> respond(interaction, Messages.market_embed(item))
+					item -> respond_market(interaction, item)
 				end
 
 			"list_market" ->
@@ -405,6 +403,86 @@ defmodule Discord.Consumer do
 	end
 
 	defp option_value(_interaction, _name), do: nil
+
+	defp respond_market(interaction, item) do
+		case active_bot_name() do
+			nil ->
+				respond(interaction, Messages.market_embed(item))
+
+			bot_name ->
+				response = %{
+					type: InteractionCallbackType.deferred_channel_message_with_source()
+				}
+
+				case Api.Interaction.create_response(interaction, response) do
+					:ok -> start_capture_task(bot_name, interaction, item)
+					{:error, reason} -> log_discord_warning("check_market_defer_failed", reason, interaction)
+				end
+		end
+	end
+
+	defp start_capture_task(bot_name, interaction, item) do
+		task =
+			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
+				capture_and_edit(bot_name, interaction, item)
+			end)
+
+		case task do
+			{:ok, _pid} ->
+				:ok
+
+			{:error, reason} ->
+				log_discord_warning("check_market_task_failed", reason, interaction)
+				edit_market_response(bot_name, interaction, item)
+		end
+	end
+
+	defp capture_and_edit(bot_name, interaction, item) do
+		case Janice.Capture.capture(item.type_id) do
+			{:ok, png} ->
+				filename = Janice.Capture.filename(item.type_id)
+				thumbnail = "attachment://#{filename}"
+				embed = Messages.market_embed(item, thumbnail)
+				file = %{name: filename, body: png}
+				edit_response(bot_name, interaction, %{embeds: [embed], files: [file]})
+
+			{:error, reason} ->
+				Marketmailer.Log.warning(
+					"janice_capture_failed",
+					%{type_id: item.type_id, reason: inspect(reason)},
+					"Janice chart capture failed; using the static market thumbnail"
+				)
+
+				edit_market_response(bot_name, interaction, item)
+		end
+	end
+
+	defp edit_market_response(bot_name, interaction, item) do
+		edit_response(bot_name, interaction, %{embeds: [Messages.market_embed(item)]})
+	end
+
+	defp edit_response(bot_name, interaction, payload) do
+		case Bot.with_bot(bot_name, fn -> Api.Interaction.edit_response(interaction, payload) end) do
+			:ok -> :ok
+			{:ok, _message} -> :ok
+			{:error, reason} -> log_discord_warning("check_market_edit_failed", reason, interaction)
+		end
+	end
+
+	defp active_bot_name do
+		case Bot.fetch_all_bots() do
+			[%{name: name}] -> name
+			_ -> nil
+		end
+	end
+
+	defp log_discord_warning(event, reason, interaction) do
+		Marketmailer.Log.warning(
+			event,
+			%{interaction_id: interaction.id, reason: inspect(reason)},
+			"Discord market response failed"
+		)
+	end
 
 	defp respond(intr, %Nostrum.Struct.Embed{} = embed) do
 		Api.Interaction.create_response(intr, %{
