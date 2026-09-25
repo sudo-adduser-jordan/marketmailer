@@ -15,7 +15,10 @@ defmodule Market.UpdateCoordinatorTest do
 		Market.UpdateCoordinator.page_result(1, 2, :not_modified, %{pages: 2}, server)
 
 		assert_receive {:region_refresh_complete, summary}
-		assert summary == %{region: 1, pages: 2, updated_pages: [1]}
+		assert summary.region == 1
+		assert summary.pages == 2
+		assert summary.updated_pages == [1]
+		assert is_integer(summary.cycle_id)
 		refute_receive {:region_refresh_complete, _summary}, 150
 	end
 

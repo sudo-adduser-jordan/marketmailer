@@ -44,6 +44,14 @@ defmodule Market.UpdateCoordinator do
 	@impl true
 	def handle_cast({:page_started, region, page}, state) do
 		region_state = get_region(state, region)
+
+		region_state =
+			if is_nil(region_state.cycle_id) do
+				%{region_state | cycle_id: System.unique_integer([:positive, :monotonic])}
+			else
+				region_state
+			end
+
 		region_state = %{region_state | started: MapSet.put(region_state.started, page)}
 
 		region_state =
@@ -96,6 +104,7 @@ defmodule Market.UpdateCoordinator do
 			%{timer: {^timer_token, _timer_handle}} = region_state ->
 				failure = %{
 					region: region,
+					cycle_id: region_state.cycle_id,
 					pages: region_state.expected_pages,
 					failures: [%{page: nil, reason: :cycle_timeout}]
 				}
@@ -120,7 +129,7 @@ defmodule Market.UpdateCoordinator do
 	end
 
 	defp new_cycle(expected_pages) do
-		%{expected_pages: expected_pages, started: MapSet.new(), results: %{}, timer: nil}
+		%{expected_pages: expected_pages, cycle_id: nil, started: MapSet.new(), results: %{}, timer: nil}
 	end
 
 	defp set_expected_pages(%{expected_pages: previous} = region_state, count)
@@ -150,6 +159,7 @@ defmodule Market.UpdateCoordinator do
 					failures != [] ->
 						failure = %{
 							region: region,
+							cycle_id: region_state.cycle_id,
 							pages: expected_pages,
 							failures: failures
 						}
@@ -160,6 +170,7 @@ defmodule Market.UpdateCoordinator do
 					:updated in statuses ->
 						summary = %{
 							region: region,
+							cycle_id: region_state.cycle_id,
 							pages: expected_pages,
 							updated_pages: updated_pages(region_state.results)
 						}
@@ -194,7 +205,8 @@ defmodule Market.UpdateCoordinator do
 	end
 
 	defp updated_pages(results) do
-		for {page, %{status: :updated}} <- results, do: page
+		pages = for {page, %{status: :updated}} <- results, do: page
+		Enum.sort(pages)
 	end
 
 	defp schedule_timer(region, %{timer: nil} = region_state, timeout) do
