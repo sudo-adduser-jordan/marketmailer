@@ -107,9 +107,11 @@ then pipe to jq:
   `Market.Database` access modules
 - `lib/names.ex` - `ESI.Names`, `ESI.SystemInfo`, `Universe.Database`
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
-- `lib/manager.ex`, `lib/supervisor.ex` - per-region sequential workers (one
-  GenServer per region sweeps pages 1..N in order; boot jitter staggers the
-  initial sweep; persist failures report `:failed` instead of crashing)
+- `lib/manager.ex`, `lib/supervisor.ex`, `lib/worker.ex` - per-region fan-out
+  (one `RegionManager` per region, one `PageWorker` per page; page 1 reports
+  `X-Pages` and the manager starts/stops workers; each page polls on its own
+  ESI TTL/ETag so unchanged pages stay cheap `304`s; persist failures report
+  `:failed` instead of crashing)
 - `lib/update_coordinator.ex` - region cycle tracker (sliding deadline per
   activity; timeout failures name the pending pages, not `page: nil`)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`

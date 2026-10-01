@@ -1,77 +1,145 @@
 defmodule Marketmailer.RegionManagerTest do
-	# Sequential per-region sweep with stubbed ESI: no HTTP, no DB writes.
+	# Per-page fan-out with no HTTP and no DB writes: ESI maintenance mode is
+	# forced active so PageWorkers park on their 10s timer instead of fetching.
 	use ExUnit.Case, async: false
 
 	setup do
 		ensure_ets(:esi_error_state)
-		registry = :"rm_registry_#{System.unique_integer([:positive])}"
+		ensure_ets(:market_cache)
 
-		# RegionManager hardcodes Marketmailer.Registry; point it at a fresh one
-		# by starting the expected name only if absent.
+		# `mix test` boots the app, which already starts Registry and the
+		# default coordinator (pollers stay disabled via `start_pollers: false`).
+		# PageSup is a poller child, so tests provide it when absent.
 		if !Process.whereis(Marketmailer.Registry) do
 			start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
 		end
 
-		_ = registry
-		coord = :"rm_coord_#{System.unique_integer([:positive])}"
-		start_supervised!({Market.UpdateCoordinator, name: coord, cycle_timeout: 2_000})
-		:ok = Market.UpdateCoordinator.subscribe(self(), coord)
-		{:ok, coord: coord}
+		if !Process.whereis(Marketmailer.PageSup) do
+			start_supervised!({DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup})
+		end
+
+		if !Process.whereis(Market.UpdateCoordinator) do
+			start_supervised!({Market.UpdateCoordinator, []})
+		end
+
+		# Park every PageWorker: with maintenance active no worker calls ESI.
+		:ets.insert(:esi_error_state, {:maintenance_mode, System.system_time(:millisecond) + 120_000})
+
+		on_exit(fn ->
+			:ets.delete(:esi_error_state, :maintenance_mode)
+		end)
+
+		:ok
 	end
 
-	test "sweeps pages 1..N sequentially with one worker", %{coord: coord} do
+	test "page 1 reports its count and the manager fans out one worker per page" do
 		region = 99_000_001
-		test_pid = self()
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
 
-		fetch_fun = fn
-			^region, 1 ->
-				{:ok, [], %{url: "stub://#{region}/1", etag: nil, ttl: 60_000, pages: 3, retry_after_ms: 0}}
+		# Page 1 boots on init (parked, no fetch).
+		assert [{_pid, _}] = Registry.lookup(Marketmailer.Registry, {:page, region, 1})
 
-			^region, page ->
-				send(test_pid, {:fetched, page})
-				{:not_modified, %{url: "stub://#{region}/#{page}", etag: nil, ttl: 60_000, pages: 3, retry_after_ms: 0}}
-		end
+		# PageWorker 1 reports X-Pages -> manager provides workers for the rest.
+		# `send` is fire-and-forget, so keep checking until the workers show up.
+		send(manager, {:update_page_count, 3})
+		assert_all_pages(region, [1, 2, 3])
 
-		persist_fun = fn _page, _ctx -> :ok end
-		name = {:via, Registry, {Marketmailer.Registry, {:region, region}}}
-		assert Registry.lookup(Marketmailer.Registry, {:region, region}) == []
-
-		{:ok, pid} =
-			GenServer.start_link(
-				Marketmailer.RegionManager,
-				{region, [fetch_fun: fetch_fun, persist_fun: persist_fun, coordinator: coord]},
-				name: name
-			)
-
-		send(pid, :work)
-
-		assert_receive {:fetched, 2}, 1_000
-		assert_receive {:fetched, 3}, 1_000
-		assert_receive {:region_refresh_complete, %{region: ^region, pages: 3}}, 1_000
-		assert Process.alive?(pid)
-		GenServer.stop(pid, :normal)
+		assert %{page_count: 3} = :sys.get_state(manager)
+		GenServer.stop(manager, :normal)
 	end
 
-	test "a persist crash still reports failure instead of hanging the cycle", %{coord: coord} do
+	test "shrinking page count stops the extra workers" do
 		region = 99_000_002
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
 
-		fetch_fun = fn ^region, 1 ->
-			{:ok, [], %{url: "stub://#{region}/1", etag: nil, ttl: 60_000, pages: 1, retry_after_ms: 0}}
+		send(manager, {:update_page_count, 3})
+		assert_all_pages(region, [1, 2, 3])
+
+		send(manager, {:update_page_count, 1})
+		assert_no_pages(region, [2, 3])
+		assert_all_pages(region, [1])
+
+		assert %{page_count: 1} = :sys.get_state(manager)
+		GenServer.stop(manager, :normal)
+	end
+
+	test "duplicate page count spawns nothing new" do
+		region = 99_000_003
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+
+		before = DynamicSupervisor.count_children(Marketmailer.PageSup)
+		send(manager, {:update_page_count, 1})
+		# Asserting nothing happened: give the manager 200ms to misbehave first.
+		Process.sleep(200)
+
+		assert DynamicSupervisor.count_children(Marketmailer.PageSup) == before
+		assert_all_pages(region, [1])
+		GenServer.stop(manager, :normal)
+	end
+
+	test "a page worker stays alive under maintenance without fetching" do
+		region = 99_000_004
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+		[{worker, _}] = Registry.lookup(Marketmailer.Registry, {:page, region, 1})
+
+		Process.sleep(200)
+		assert Process.alive?(worker)
+		assert Process.alive?(manager)
+		GenServer.stop(manager, :normal)
+	end
+
+	test "format_ttl renders mm:ss" do
+		assert Marketmailer.PageWorker.format_ttl(60_000) == "01:00"
+		assert Marketmailer.PageWorker.format_ttl(90_000) == "01:30"
+	end
+
+	# Each lookup races the manager, which handles our `send` asynchronously:
+	# retry until the workers appear (or 2s passes, then fail).
+	defp assert_all_pages(region, pages, timeout \\ 2_000) do
+		deadline = System.monotonic_time(:millisecond) + timeout
+
+		for page <- pages do
+			await_page(region, page, deadline)
 		end
+	end
 
-		persist_fun = fn _page, _ctx -> raise "boom" end
+	defp await_page(region, page, deadline) do
+		case Registry.lookup(Marketmailer.Registry, {:page, region, page}) do
+			[{_pid, _}] ->
+				:ok
 
-		{:ok, pid} =
-			GenServer.start_link(
-				Marketmailer.RegionManager,
-				{region, [fetch_fun: fetch_fun, persist_fun: persist_fun, coordinator: coord]},
-				name: {:via, Registry, {Marketmailer.Registry, {:region, region}}}
-			)
+			[] ->
+				if System.monotonic_time(:millisecond) > deadline do
+					flunk("expected a worker for region #{region} page #{page}")
+				else
+					Process.sleep(10)
+					await_page(region, page, deadline)
+				end
+		end
+	end
 
-		send(pid, :work)
-		assert_receive {:region_refresh_failed, %{region: ^region}}, 1_000
-		assert Process.alive?(pid)
-		GenServer.stop(pid, :normal)
+	# Same race in reverse: retry until the stopped workers disappear.
+	defp assert_no_pages(region, pages, timeout \\ 2_000) do
+		deadline = System.monotonic_time(:millisecond) + timeout
+
+		for page <- pages do
+			await_no_page(region, page, deadline)
+		end
+	end
+
+	defp await_no_page(region, page, deadline) do
+		case Registry.lookup(Marketmailer.Registry, {:page, region, page}) do
+			[] ->
+				:ok
+
+			_ ->
+				if System.monotonic_time(:millisecond) > deadline do
+					flunk("expected no worker for region #{region} page #{page}")
+				else
+					Process.sleep(10)
+					await_no_page(region, page, deadline)
+				end
+		end
 	end
 
 	defp ensure_ets(name) do

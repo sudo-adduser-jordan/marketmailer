@@ -47,6 +47,7 @@ defmodule Marketmailer.Application do
 	defp poller_children do
 		if pollers_enabled?() do
 			[
+				{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
 				Marketmailer.RegionManagerSupervisor,
 				{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}
 			]
