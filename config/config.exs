@@ -18,7 +18,7 @@ config :marketmailer, Database,
 config :marketmailer, :bot_options, %{
 	consumer: Discord.Consumer,
 	intents: [:guild_messages],
-	wrapped_token: fn -> System.fetch_env!("DISCORD_TOKEN") end
+	wrapped_token: &Marketmailer.BotSupervisor.token!/0
 }
 
 config :marketmailer, ecto_repos: [Database]

@@ -36,3 +36,9 @@ marketmailer-*.tar
 
 # structured JSON logs (errors.jsonl + rotated archives)
 /logs/
+
+# Castle release artifacts and baselines (shipped tarballs staged for upgrades)
+# Directory itself is kept; tarballs stay out of git (CI artifact storage).
+/artifacts/*
+!/artifacts/.gitkeep
+/_build/castle/baselines/

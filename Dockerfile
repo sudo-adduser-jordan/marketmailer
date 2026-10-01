@@ -8,10 +8,12 @@
 #
 # The app polls ESI market orders into SQLite. Pending migrations run
 # automatically on boot. Discord is disabled by default; pass
-# DISCORD_TOKEN to enable it (see lib/app.ex). Error events are appended
-# to ./logs/errors.jsonl (wiped on every boot). Janice chart capture uses
-# the Playwright runtime installed below and falls back to the static image
-# when that runtime is unavailable.
+# DISCORD_TOKEN to enable it (see lib/app.ex). Upgrades use Castle:
+# copy the new marketmailer-<vsn>.tar.gz into the deployment's releases/
+# dir, then `bin/castle unpack|install|commit <vsn>` (see AGENTS.md).
+# Error events are appended to ./logs/errors.jsonl (wiped on every boot).
+# Janice chart capture uses the Playwright runtime installed below and
+# falls back to the static image when that runtime is unavailable.
 
 FROM node:22-bookworm-slim AS playwright
 
@@ -24,7 +26,7 @@ FROM elixir:1.20
 
 ENV MIX_ENV=prod \
 	TERM=dumb \
-	MARKETMAILER_DB=marketmailer.db \
+	MARKETMAILER_DB=/data/marketmailer.db \
 	PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 	PATH=/opt/playwright/node_modules/.bin:/usr/local/bin:${PATH}
 
@@ -41,16 +43,17 @@ WORKDIR /app
 
 # fetch dependencies first so this layer survives source edits
 COPY mix.exs mix.lock ./
-RUN mix deps.get
+COPY config config/
+RUN mix deps.get --only prod
 
 # Install Chromium and its system libraries in the final image.
 RUN mkdir -p /ms-playwright \
 	&& playwright install --with-deps chromium \
 	&& rm -rf /var/lib/apt/lists/*
 
-# compile the application
+# assemble the Castle release (includes ERTS; hot-upgradeable via bin/castle)
 COPY . .
-RUN mix compile
+RUN mix release
 
 # drop privileges; MARKETMAILER_DB must point somewhere writable
 RUN useradd --system --create-home app \
@@ -60,4 +63,4 @@ RUN useradd --system --create-home app \
 USER app
 
 EXPOSE 443
-CMD ["mix", "run", "--no-halt"]
+CMD ["/app/_build/prod/rel/marketmailer/bin/marketmailer", "foreground"]

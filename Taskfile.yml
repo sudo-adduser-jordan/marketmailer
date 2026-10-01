@@ -61,14 +61,37 @@ tasks:
       - mix test
 
   test:safe:
-    desc: Refuse if a live poller runs, then test in MIX_ENV=test (stubbed ESI, isolated test.db)
+    desc: Test in MIX_ENV=test alongside a live poller when DB-isolated (stubbed ESI, test.db)
     cmds:
       - mix test.safe
 
-  upgrade:dev:
-    desc: Compile and hot-load beams into the live node (no restart; state-shape changes need a poller restart)
+  release:
+    desc: Assemble the prod OTP release with Castle hot-upgrade support
     cmds:
-      - mix upgrade.hot
+      - MIX_ENV=prod mix release
+
+  upgrade:build:
+    desc: "Build the release tarball and stage it under artifacts/ for tar: baselines"
+    cmds:
+      - MIX_ENV=prod mix release
+      - mkdir -p artifacts
+      - cp _build/prod/marketmailer-*.tar.gz artifacts/
+      - ls artifacts/
+
+  upgrade:check:
+    desc: "Validate appup/relup for FROM -> TO (e.g. task upgrade:check FROM=0.1.0 TO=0.1.1)"
+    cmds:
+      - 'test -n "{{.FROM}}" -a -n "{{.TO}}" || (echo "usage: task upgrade:check FROM=<vsn> TO=<vsn>" && exit 1)'
+      - mix castle.appup --from tar:artifacts/marketmailer-{{.FROM}}.tar.gz --to rel:_build/prod/rel/marketmailer/releases/{{.TO}}/marketmailer
+      - mix castle.relup --target _build/prod/rel/marketmailer/releases/{{.TO}}/marketmailer --fromto tar:artifacts/marketmailer-{{.FROM}}.tar.gz --dry-run
+
+  upgrade:install:
+    desc: Hot-upgrade the running deployment (bin/castle unpack/install/commit; needs VSN, e.g. task upgrade:install VSN=0.1.1)
+    cmds:
+      - 'test -n "{{.VSN}}" || (echo "usage: task upgrade:install VSN=<vsn>" && exit 1)'
+      - _build/prod/rel/marketmailer/bin/castle unpack {{.VSN}}
+      - _build/prod/rel/marketmailer/bin/castle install {{.VSN}}
+      - _build/prod/rel/marketmailer/bin/castle commit
 
   upgrade:test:
     desc: Recompile and run the isolated test suite (stubbed ESI, isolated test.db)
@@ -76,27 +99,32 @@ tasks:
       - mix compile --warnings-as-errors
       - mix test.safe
 
-  live:cookie:
-    desc: Generate the shared distribution cookie (~/.config/marketmailer/cookie, mode 600; never overwrites)
-    cmds:
-      - mkdir -p ~/.config/marketmailer && if [ -f ~/.config/marketmailer/cookie ]; then echo "cookie already exists"; else openssl rand -hex 32 > ~/.config/marketmailer/cookie && chmod 600 ~/.config/marketmailer/cookie && echo "cookie created"; fi
-
   live:start:
-    desc: Run the poller as a distributed node (attachable, hot-reloadable; blocks)
+    desc: Run the poller as a distributed node (attachable; blocks — upgrades via bin/castle)
     cmds:
-      - test -f ~/.config/marketmailer/cookie || (echo "run task live:cookie first" && exit 1)
-      - elixir --sname marketmailer --cookie "$(cat ~/.config/marketmailer/cookie)" -S mix run --no-halt
+      - elixir --sname marketmailer -S mix run --no-halt
+    interactive: true
+
+  live:start:release:
+    desc: Run the prod release in the foreground (RELEASE_NODE from env; blocks)
+    cmds:
+      - _build/prod/rel/marketmailer/bin/marketmailer foreground
     interactive: true
 
   live:attach:
-    desc: Attach to the live node (run recompile() there to hot-load by hand)
+    desc: Attach to the live mix-run node (read-only inspection; upgrades via bin/castle, not recompile())
     cmds:
-      - test -f ~/.config/marketmailer/cookie || (echo "run task live:cookie first" && exit 1)
-      - iex --sname debug --cookie "$(cat ~/.config/marketmailer/cookie)" --remsh marketmailer
+      - iex --sname debug --remsh marketmailer
+    interactive: true
+
+  live:remote:
+    desc: Attach to the running release (reads the deployment cookie itself; no setup)
+    cmds:
+      - _build/prod/rel/marketmailer/bin/marketmailer remote
     interactive: true
 
   upgrade:prod:
-    desc: Restart prod (no mix release configured; safe now that etag expiry persists — zero early requests)
+    desc: Build the prod release image and run the Castle deployment (see Dockerfile header)
     cmds:
       - docker build -t marketmailer .
       - docker run --rm -p 443:443 -v marketmailer-data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer

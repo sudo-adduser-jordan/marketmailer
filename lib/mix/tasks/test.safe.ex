@@ -1,39 +1,72 @@
 defmodule Mix.Tasks.Test.Safe do
-	@shortdoc "Guard against a live poller, then run tests in MIX_ENV=test"
+	@shortdoc "Run tests in MIX_ENV=test, safe alongside a live poller when DB-isolated"
 
 	@moduledoc """
-	Guards the suite against a live poller, then runs tests in `MIX_ENV=test`.
+	Grants the suite safe passage alongside an always-on live poller, then
+	runs tests in `MIX_ENV=test`.
 
-	Refuses when a `mix run` / `mix start` / `iex -S mix` process is visible
-	(best-effort via `pgrep`). A stale `-wal` sidecar alone is only a warning:
-	WAL files can linger after an unclean shutdown without any live holder.
+	The suite never touches the live poller: `config/test.exs` disables
+	pollers (`start_pollers: false`), stubs ESI (maintenance ETS + fixtures),
+	and defaults to an isolated `test.db` (or per-suite tmp files). A live
+	poller — `mix run` or a Castle release (`bin/marketmailer`) — is therefore
+	allowed to keep running as long as the test DB file is isolated from the
+	live `marketmailer.db`. Refusal happens only on a DB collision (e.g.
+	`MARKETMAILER_DB=marketmailer.db` while a poller holds it).
+
+	A stale `-wal`/`-shm` sidecar alone is only a warning: WAL files can
+	linger after an unclean shutdown without any live holder.
 	"""
 
 	use Mix.Task
 
+	@live_db "marketmailer.db"
+
 	@impl true
 	def run(args) do
-		db = System.get_env("MARKETMAILER_DB", "marketmailer.db")
+		# What the test run will actually use: explicit env wins, otherwise
+		# config/test.exs defaults to test.db (never the live default).
+		test_db = System.get_env("MARKETMAILER_DB", "test.db")
 
-		if poller_running?() do
-			Mix.shell().error(
-				"Refusing: a live poller seems to be running (see `ps aux | grep -F marketmailer`). " <>
-					"Stop `mix run` first, or set MARKETMAILER_DB to an isolated file."
-			)
+		cond do
+			!poller_running?() ->
+				if stale_sidecar?(test_db) do
+					Mix.shell().info("test.safe: stale #{test_db}-wal sidecar present, no live poller found; continuing")
+				end
 
-			exit({:shutdown, 1})
+				run_tests(args)
+
+			db_collision?(test_db) ->
+				Mix.shell().error(
+					"Refusing: a live poller seems to be running and the test DB " <>
+						"#{test_db} collides with the live #{@live_db} " <>
+						"(see `ps aux | grep -F marketmailer`). Unset MARKETMAILER_DB " <>
+						"(tests default to isolated test.db) or point it at a tmp file."
+				)
+
+				exit({:shutdown, 1})
+
+			true ->
+				Mix.shell().info(
+					"test.safe: live poller detected but test DB is isolated " <>
+						"(#{test_db} vs live #{@live_db}); continuing"
+				)
+
+				run_tests(args)
 		end
+	end
 
-		if stale_sidecar?(db) do
-			Mix.shell().info("test.safe: stale #{db}-wal sidecar present, no live poller found; continuing")
-		end
-
+	defp run_tests(args) do
 		if Mix.env() == :test do
 			Mix.Task.run("test", args)
 		else
+			env =
+				if db = System.get_env("MARKETMAILER_DB"),
+					do: [{"MIX_ENV", "test"}, {"MARKETMAILER_DB", db}],
+					else: [{"MIX_ENV", "test"}]
+
 			{_, code} =
 				System.cmd("mix", ["test" | args],
-					env: [{"MIX_ENV", "test"}],
+					env: env,
 					into: IO.stream(:stdio, :line)
 				)
 
@@ -41,12 +74,20 @@ defmodule Mix.Tasks.Test.Safe do
 		end
 	end
 
+	defp db_collision?(test_db) do
+		Path.expand(test_db) == Path.expand(@live_db)
+	end
+
 	defp stale_sidecar?(db), do: File.exists?(db <> "-wal") or File.exists?(db <> "-shm")
 
 	# A live `mix run --no-halt` / `mix start` / `iex -S mix run` for this
-	# project. Excludes this task's own re-exec chain.
+	# project, or a Castle release (`bin/marketmailer foreground|start`,
+	# `beam.smp ... marketmailer`). Best-effort via `pgrep`; excludes this
+	# task's own re-exec chain.
 	defp poller_running? do
-		case System.cmd("pgrep", ["-af", "mix.*(run|start)|iex.*mix"], stderr_to_stdout: true) do
+		case System.cmd("pgrep", ["-af", "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"],
+					 stderr_to_stdout: true
+				 ) do
 			{out, 0} ->
 				out
 				|> String.split("\n", trim: true)
