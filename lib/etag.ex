@@ -13,8 +13,8 @@ defmodule EtagCache do
 
 	@impl true
 	def handle_info(:warmup, state) do
-		for {url, etag} <- Database.all(from tag in Etag, select: {tag.url, tag.etag}),
-				do: :ets.insert(:market_cache, {url, etag})
+		for {url, etag, expires_at} <- Database.all(from tag in Etag, select: {tag.url, tag.etag, tag.expires_at}),
+				do: :ets.insert(:market_cache, {url, etag, expires_at})
 
 		{:noreply, state}
 	end

@@ -15,7 +15,16 @@ defmodule Marketmailer.PageWorker do
 
 	@impl true
 	def init({manager, id, page}) do
-		send(self(), :work)
+		# Crash resume: delay first fetch until the persisted Expires passes.
+		# Unexpected entries (missing/expired/corrupt) fetch immediately with a
+		# tiny stagger so a cold boot does not fire every page in the same ms.
+		delay =
+			case Etag.Database.resume_delay_ms(ESI.page_url(id, page)) do
+				0 -> :erlang.phash2({id, page}, 500)
+				remaining -> remaining + :erlang.phash2({id, page}, 2_000)
+			end
+
+		Process.send_after(self(), :work, delay)
 		{:ok, %{manager: manager, id: id, page: page, errors: 0}}
 	end
 
@@ -79,7 +88,7 @@ defmodule Marketmailer.PageWorker do
 					"304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
 				)
 
-				if ctx.etag, do: Etag.Database.upsert_etag(ctx.url, ctx.etag)
+				if ctx.etag, do: Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
 				Market.UpdateCoordinator.page_result(id, page, :not_modified, %{pages: ctx.pages})
 				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
@@ -143,7 +152,7 @@ defmodule Marketmailer.PageWorker do
 	# hanging on a page that started but never reports.
 	defp persist_orders(data, ctx) do
 		Market.Database.upsert_orders(data)
-		Etag.Database.upsert_etag(ctx.url, ctx.etag)
+		Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
 		:ok
 	rescue
 		e ->

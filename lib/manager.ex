@@ -7,8 +7,12 @@ defmodule Marketmailer.RegionManager do
 
 	@impl true
 	def init(id) do
-		start_page(id, 1)
-		{:ok, %{id: id, page_count: 1}}
+		# Crash resume: pre-start workers for every page with a known etag row
+		# so each resumes its own persisted TTL timer. Page 1 always starts so
+		# the page count is rediscovered even with a cold etags table.
+		pages = [1 | Etag.Database.pages_for_region(id)] |> Enum.uniq()
+		Enum.each(pages, &start_page(id, &1))
+		{:ok, %{id: id, page_count: Enum.max(pages)}}
 	end
 
 	@impl true

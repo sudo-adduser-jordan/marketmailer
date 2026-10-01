@@ -17,11 +17,12 @@ defmodule Etag do
 	schema "etags" do
 		field :etag, :string
 		field :url, :string
+		field :expires_at, :integer
 		timestamps()
 	end
 
 	def changeset(etag, attrs),
-		do: etag |> cast(attrs, [:url, :etag]) |> validate_required([:url, :etag]) |> unique_constraint(:url)
+		do: etag |> cast(attrs, [:url, :etag, :expires_at]) |> validate_required([:url, :etag]) |> unique_constraint(:url)
 end
 
 defmodule Market do

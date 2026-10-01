@@ -73,8 +73,10 @@ defmodule ESI do
 		end
 	end
 
+	def page_url(region, page \\ 1), do: "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
+
 	def fetch(region, page \\ 1, opts \\ []) do
-		url = "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
+		url = page_url(region, page)
 		http_fun = Keyword.get(opts, :http_fun, &Req.get/2)
 		acquire(url)
 		etag = Etag.Database.get_etag(url)
@@ -138,11 +140,13 @@ defmodule ESI do
 		error_rem = first(response.headers, "x-esi-error-limit-remain")
 		ttl = calc_ttl(first(response.headers, "expires"))
 		ttl = if remain(error_rem) < @error_limit_threshold, do: enforce_pause(ttl), else: ttl
+		now = System.system_time(:millisecond)
 
 		%{
 			url: url,
 			etag: first(response.headers, "etag"),
 			ttl: ttl,
+			expires_at: now + ttl,
 			pages: String.to_integer(first(response.headers, "x-pages") || "1"),
 			retry_after_ms: retry_after_ms(response.headers)
 		}

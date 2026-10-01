@@ -65,6 +65,23 @@ tasks:
     cmds:
       - mix test.safe
 
+  upgrade:dev:
+    desc: Compile; hot-load by running recompile() in your iex -S mix run session (no release configured)
+    cmds:
+      - mix compile --warnings-as-errors
+
+  upgrade:test:
+    desc: Recompile and run the isolated test suite (stubbed ESI, isolated test.db)
+    cmds:
+      - mix compile --warnings-as-errors
+      - mix test.safe
+
+  upgrade:prod:
+    desc: Restart prod (no mix release configured; safe now that etag expiry persists — zero early requests)
+    cmds:
+      - docker build -t marketmailer .
+      - docker run --rm -p 443:443 -v marketmailer-data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer
+
   update:
     desc: Update all dependencies to latest allowed versions (mix deps.update --all)
     cmds:

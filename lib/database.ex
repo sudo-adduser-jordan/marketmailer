@@ -8,37 +8,133 @@ end
 defmodule Etag.Database do
 	import Ecto.Query
 
+	# Absurd-future cap: an expires_at further out than this is treated as an
+	# unexpected entry (bad Expires header / clock skew) and refetched.
+	@max_ttl_ms 1_800_000
+
 	def get_etag(url) do
 		case :ets.lookup(:market_cache, url) do
+			[{^url, etag, _expires_at}] -> etag
 			[{^url, etag}] -> etag
 			_ -> fetch_etag(url)
 		end
 	end
 
+	def get_expiry(url) do
+		case :ets.lookup(:market_cache, url) do
+			[{^url, _etag, expires_at}] when is_integer(expires_at) -> expires_at
+			[{^url, _etag}] -> fetch_expiry(url)
+			_ -> fetch_expiry(url)
+		end
+	end
+
+	# Milliseconds until this URL may be refetched. Returns 0 (fetch now) for
+	# every unexpected entry: missing row, NULL, non-integer, expired, absurdly
+	# far future, or an unreachable database. Unexpected entries log once.
+	def resume_delay_ms(url) do
+		now = System.system_time(:millisecond)
+
+		try do
+			case get_expiry(url) do
+				expires_at when is_integer(expires_at) and expires_at > now and expires_at <= now + @max_ttl_ms ->
+					expires_at - now
+
+				other ->
+					reason =
+						cond do
+							is_nil(other) -> :missing
+							not is_integer(other) -> :bad_type
+							other <= now -> :expired
+							true -> :absurd_future
+						end
+
+					unexpected(url, reason)
+					0
+			end
+		rescue
+			_ ->
+				unexpected(url, :db_error)
+				0
+		end
+	end
+
+	defp unexpected(url, reason) do
+		Marketmailer.Log.warning(
+			"etag_unexpected",
+			%{url: url, reason: reason},
+			"etag entry #{reason}, fetching now: #{url}"
+		)
+	end
+
+	# Pages with a known etag row for a region, parsed from the stored URLs.
+	# Unparseable URLs are unexpected entries: ignored for pre-start, logged.
+	def pages_for_region(region) when is_integer(region) do
+		prefix = "https://esi.evetech.net/v1/markets/#{region}/orders/"
+
+		from(tag in "etags", where: like(tag.url, ^"#{prefix}%"), select: tag.url)
+		|> Database.all()
+		|> Enum.flat_map(fn url ->
+			case page_from_url(url) do
+				nil ->
+					Marketmailer.Log.warning(
+						"etag_unexpected",
+						%{url: url, reason: :unparseable_url},
+						"ignoring unparseable etag url: #{url}"
+					)
+
+					[]
+
+				page ->
+					[page]
+			end
+		end)
+		|> Enum.uniq()
+	rescue
+		_ -> []
+	end
+
+	def page_from_url(url) when is_binary(url) do
+		case Regex.run(~r/[?&]page=(\d+)/, url, capture: :all_but_first) do
+			[n] -> String.to_integer(n)
+			_ -> nil
+		end
+	end
+
+	def max_ttl_ms, do: @max_ttl_ms
+
 	defp fetch_etag(url) do
-		query = from(tag in "etags", where: tag.url == ^url, select: tag.etag)
+		query = from(tag in "etags", where: tag.url == ^url, select: {tag.etag, tag.expires_at})
 
 		case Database.one(query) do
 			nil ->
 				nil
 
-			etag ->
-				:ets.insert(:market_cache, {url, etag})
+			{etag, expires_at} ->
+				:ets.insert(:market_cache, {url, etag, expires_at})
 				etag
 		end
 	end
 
-	def upsert_etag(url, etag) do
+	defp fetch_expiry(url) do
+		query = from(tag in "etags", where: tag.url == ^url, select: tag.expires_at)
+
+		case Database.one(query) do
+			nil -> nil
+			expires_at -> expires_at
+		end
+	end
+
+	def upsert_etag(url, etag, expires_at \\ nil) do
 		now = NaiveDateTime.utc_now(:second)
 
 		Database.insert_all(
 			"etags",
-			[%{url: url, etag: etag, inserted_at: now, updated_at: now}],
-			on_conflict: {:replace, [:etag, :updated_at]},
+			[%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
+			on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
 			conflict_target: :url
 		)
 
-		:ets.insert(:market_cache, {url, etag})
+		:ets.insert(:market_cache, {url, etag, expires_at})
 	end
 end
 
