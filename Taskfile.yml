@@ -55,6 +55,11 @@ tasks:
     cmds:
       - mix ecto.rollback
 
+  chartdb:
+    desc: Rebuild assets/schema.svg from migrations (temp DB; live poller untouched) + ensure README embed
+    cmds:
+      - mix chartdb
+
   test:
     desc: Run the test suite
     cmds:

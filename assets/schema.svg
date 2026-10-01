@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="810" viewBox="0 0 1240 810" font-family="sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="921" viewBox="0 0 1240 921" font-family="sans-serif">
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
       <path d="M0,0 L10,4 L0,8 z" fill="#1e1e1e"/>
@@ -7,133 +7,105 @@
       <path d="M0,0 L10,4 L0,8 z" fill="#868e96"/>
     </marker>
   </defs>
-  <rect width="1240" height="810" fill="#ffffff"/>
+  <rect width="1240" height="921" fill="#ffffff"/>
   <text x="40" y="48" font-size="28" fill="#1e1e1e">Marketmailer — database schema</text>
-  <text x="40" y="70" font-size="13" fill="#555">priv/data/marketmailer.db (WAL, gitignored) • tables: market / etags / names / systems / discord • VIEW: marketListView</text>
-
-  <!-- market (central fact table) -->
-  <rect x="40" y="90" width="280" height="460" rx="8" fill="#d0ebff" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="40" y="70" font-size="13" fill="#555">priv/data/marketmailer.db (WAL, gitignored) • tables: discord / etags / market / names / systems • VIEW: marketListView</text>
+  <rect x="40" y="90" width="280" height="410" rx="8" fill="#d0ebff" stroke="#1e1e1e" stroke-width="2"/>
   <text x="180" y="118" font-size="15" font-weight="bold" text-anchor="middle">market</text>
-  <g font-size="13" font-family="monospace">
-    <text x="56" y="142" font-weight="bold">order_id PK</text>
-    <text x="56" y="164">duration</text>
-    <text x="56" y="186">is_buy_order</text>
-    <text x="56" y="208">issued</text>
-    <text x="56" y="230">location_id → names</text>
-    <text x="56" y="252">min_volume</text>
-    <text x="56" y="274">price</text>
-    <text x="56" y="296">range</text>
-    <text x="56" y="318">system_id → systems</text>
-    <text x="56" y="340">type_id → names</text>
-    <text x="56" y="362">volume_remain</text>
-    <text x="56" y="384">volume_total</text>
-    <text x="56" y="406">inserted_at</text>
-    <text x="56" y="428">updated_at</text>
-  </g>
-  <text x="56" y="452" font-size="12" fill="#555">4 indexes (2 partial:</text>
-  <text x="56" y="468" font-size="12" fill="#555">Jita-buy, sell scan)</text>
-  <text x="56" y="484" font-size="12" fill="#555">bool stored 1/0 (see</text>
-  <text x="56" y="500" font-size="12" fill="#555">Market.Database)</text>
-
-  <!-- names -->
-  <rect x="350" y="90" width="260" height="140" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="56" y="130" font-size="13" font-family="monospace" font-weight="bold">order_id PK</text>
+  <text x="56" y="152" font-size="13" font-family="monospace">duration</text>
+  <text x="56" y="174" font-size="13" font-family="monospace">is_buy_order</text>
+  <text x="56" y="196" font-size="13" font-family="monospace">issued</text>
+  <text x="56" y="218" font-size="13" font-family="monospace">location_id → names</text>
+  <text x="56" y="240" font-size="13" font-family="monospace">min_volume</text>
+  <text x="56" y="262" font-size="13" font-family="monospace">price</text>
+  <text x="56" y="284" font-size="13" font-family="monospace">range</text>
+  <text x="56" y="306" font-size="13" font-family="monospace">system_id → systems</text>
+  <text x="56" y="328" font-size="13" font-family="monospace">type_id → names</text>
+  <text x="56" y="350" font-size="13" font-family="monospace">volume_remain</text>
+  <text x="56" y="372" font-size="13" font-family="monospace">volume_total</text>
+  <text x="56" y="394" font-size="13" font-family="monospace">inserted_at *</text>
+  <text x="56" y="416" font-size="13" font-family="monospace">updated_at *</text>
+  <text x="56" y="444" font-size="12" fill="#555">4 indexes (2 partial)</text>
+  <text x="56" y="460" font-size="12" fill="#555">bool stored 1/0 (see</text>
+  <text x="56" y="476" font-size="12" fill="#555">Market.Database)</text>
+  <rect x="350" y="90" width="260" height="130" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
   <text x="480" y="118" font-size="15" font-weight="bold" text-anchor="middle">names (lazy cache)</text>
-  <g font-size="13" font-family="monospace">
-    <text x="366" y="142" font-weight="bold">id PK</text>
-    <text x="366" y="164">name *</text>
-  </g>
-  <text x="366" y="188" font-size="12" fill="#555">no timestamps</text>
-  <text x="366" y="206" font-size="12" fill="#555">POST /v2/universe/names</text>
-
-  <!-- systems -->
-  <rect x="350" y="250" width="260" height="160" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="480" y="278" font-size="15" font-weight="bold" text-anchor="middle">systems (lazy cache)</text>
-  <g font-size="13" font-family="monospace">
-    <text x="366" y="302" font-weight="bold">system_id PK</text>
-    <text x="366" y="324">name *</text>
-    <text x="366" y="346">security_status</text>
-    <text x="366" y="368">region_name *</text>
-  </g>
-  <text x="366" y="392" font-size="12" fill="#555">no timestamps</text>
-
-  <!-- etags -->
-  <rect x="350" y="430" width="260" height="150" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="480" y="458" font-size="15" font-weight="bold" text-anchor="middle">etags</text>
-  <g font-size="13" font-family="monospace">
-    <text x="366" y="482" font-weight="bold">url PK</text>
-    <text x="366" y="504">etag</text>
-    <text x="366" y="526">expires_at</text>
-    <text x="366" y="548">inserted_at / updated_at</text>
-  </g>
-
-  <!-- discord -->
-  <rect x="640" y="90" width="260" height="140" rx="8" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="366" y="130" font-size="13" font-family="monospace" font-weight="bold">id PK</text>
+  <text x="366" y="152" font-size="13" font-family="monospace">name *</text>
+  <text x="366" y="180" font-size="12" fill="#555">no timestamps</text>
+  <text x="366" y="196" font-size="12" fill="#555">POST /v2/universe/names</text>
+  <rect x="350" y="240" width="260" height="158" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="480" y="268" font-size="15" font-weight="bold" text-anchor="middle">systems (lazy cache)</text>
+  <text x="366" y="280" font-size="13" font-family="monospace" font-weight="bold">system_id PK</text>
+  <text x="366" y="302" font-size="13" font-family="monospace">name *</text>
+  <text x="366" y="324" font-size="13" font-family="monospace">security_status</text>
+  <text x="366" y="346" font-size="13" font-family="monospace">region_name *</text>
+  <text x="366" y="374" font-size="12" fill="#555">no timestamps</text>
+  <rect x="350" y="418" width="260" height="164" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="480" y="446" font-size="15" font-weight="bold" text-anchor="middle">etags</text>
+  <text x="366" y="458" font-size="13" font-family="monospace" font-weight="bold">url PK</text>
+  <text x="366" y="480" font-size="13" font-family="monospace">etag</text>
+  <text x="366" y="502" font-size="13" font-family="monospace">inserted_at *</text>
+  <text x="366" y="524" font-size="13" font-family="monospace">updated_at *</text>
+  <text x="366" y="546" font-size="13" font-family="monospace">expires_at</text>
+  <rect x="640" y="90" width="260" height="142" rx="8" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="2"/>
   <text x="770" y="118" font-size="15" font-weight="bold" text-anchor="middle">discord</text>
-  <g font-size="13" font-family="monospace">
-    <text x="656" y="142" font-weight="bold">guild_id PK</text>
-    <text x="656" y="164">channel_id *</text>
-    <text x="656" y="186">inserted_at / updated_at</text>
-  </g>
-
-  <!-- marketListView -->
-  <rect x="640" y="250" width="260" height="370" rx="8" fill="#ffecd2" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 4"/>
-  <text x="770" y="278" font-size="15" font-weight="bold" text-anchor="middle">marketListView</text>
-  <text x="770" y="294" font-size="12" fill="#555" text-anchor="middle">VIEW (not a table)</text>
-  <g font-size="13" font-family="monospace">
-    <text x="656" y="314">item</text>
-    <text x="656" y="333">buy_price / sell_price</text>
-    <text x="656" y="352">margin</text>
-    <text x="656" y="371">order_id / type_id</text>
-    <text x="656" y="390">system_id / location_id</text>
-    <text x="656" y="409">volume_remain/total</text>
-    <text x="656" y="428">issued / duration</text>
-    <text x="656" y="447">range</text>
-    <text x="656" y="466">system_name / sec.</text>
-    <text x="656" y="485">region_name</text>
-    <text x="656" y="504">location_name</text>
-  </g>
-  <text x="656" y="528" font-size="12" fill="#555">sell orders priced</text>
-  <text x="656" y="544" font-size="12" fill="#555">under Jita buy wall</text>
-  <text x="656" y="566" font-size="12" fill="#555"> reads market +</text>
-  <text x="656" y="582" font-size="12" fill="#555"> names + systems</text>
-
-  <!-- schema_migrations -->
-  <rect x="930" y="90" width="270" height="110" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="656" y="130" font-size="13" font-family="monospace" font-weight="bold">guild_id PK</text>
+  <text x="656" y="152" font-size="13" font-family="monospace">channel_id *</text>
+  <text x="656" y="174" font-size="13" font-family="monospace">inserted_at *</text>
+  <text x="656" y="196" font-size="13" font-family="monospace">updated_at *</text>
+  <rect x="640" y="252" width="260" height="457" rx="8" fill="#ffecd2" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="8 4"/>
+  <text x="770" y="280" font-size="15" font-weight="bold" text-anchor="middle">marketListView</text>
+  <text x="770" y="296" font-size="12" fill="#555" text-anchor="middle">VIEW (not a table)</text>
+  <text x="656" y="308" font-size="13" font-family="monospace">item</text>
+  <text x="656" y="327" font-size="13" font-family="monospace">buy_price</text>
+  <text x="656" y="346" font-size="13" font-family="monospace">sell_price</text>
+  <text x="656" y="365" font-size="13" font-family="monospace">margin</text>
+  <text x="656" y="384" font-size="13" font-family="monospace">order_id</text>
+  <text x="656" y="403" font-size="13" font-family="monospace">type_id</text>
+  <text x="656" y="422" font-size="13" font-family="monospace">system_id</text>
+  <text x="656" y="441" font-size="13" font-family="monospace">location_id</text>
+  <text x="656" y="460" font-size="13" font-family="monospace">volume_remain</text>
+  <text x="656" y="479" font-size="13" font-family="monospace">volume_total</text>
+  <text x="656" y="498" font-size="13" font-family="monospace">issued</text>
+  <text x="656" y="517" font-size="13" font-family="monospace">duration</text>
+  <text x="656" y="536" font-size="13" font-family="monospace">range</text>
+  <text x="656" y="555" font-size="13" font-family="monospace">system_name</text>
+  <text x="656" y="574" font-size="13" font-family="monospace">security_status</text>
+  <text x="656" y="593" font-size="13" font-family="monospace">region_name</text>
+  <text x="656" y="612" font-size="13" font-family="monospace">location_name</text>
+  <text x="656" y="637" font-size="12" fill="#555">sell orders priced</text>
+  <text x="656" y="653" font-size="12" fill="#555">under Jita buy wall</text>
+  <text x="656" y="669" font-size="12" fill="#555">reads market +</text>
+  <text x="656" y="685" font-size="12" fill="#555">names + systems</text>
+  <rect x="930" y="90" width="270" height="114" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
   <text x="1065" y="118" font-size="15" font-weight="bold" text-anchor="middle">schema_migrations</text>
-  <g font-size="13" font-family="monospace">
-    <text x="946" y="142" font-weight="bold">version PK</text>
-    <text x="946" y="164">inserted_at</text>
-  </g>
-  <text x="946" y="186" font-size="12" fill="#555">Ecto-managed</text>
-
-  <!-- legend -->
-  <rect x="930" y="220" width="270" height="180" rx="8" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="1065" y="248" font-size="15" font-weight="bold" text-anchor="middle">legend</text>
-  <text x="946" y="272" font-size="13" font-weight="bold">bold = primary key</text>
-  <text x="946" y="294" font-size="13">* = NOT NULL</text>
-  <text x="946" y="316" font-size="13">→ = logical FK (no DB</text>
-  <text x="946" y="334" font-size="13">constraint; app-joined)</text>
-  <text x="946" y="356" font-size="13">dashed box = VIEW</text>
-  <text x="946" y="378" font-size="13">dashed line = VIEW reads</text>
-
-  <!-- FK arrows (solid) -->
+  <text x="946" y="130" font-size="13" font-family="monospace" font-weight="bold">version PK</text>
+  <text x="946" y="152" font-size="13" font-family="monospace">inserted_at</text>
+  <text x="946" y="180" font-size="12" fill="#555">Ecto-managed</text>
+  <rect x="930" y="224" width="270" height="186" rx="8" fill="#ffffff" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="1065" y="252" font-size="15" font-weight="bold" text-anchor="middle">legend</text>
+  <text x="946" y="264" font-size="13" font-family="sans-serif" font-weight="bold">bold = primary key</text>
+  <text x="946" y="286" font-size="13" font-family="sans-serif">* = NOT NULL</text>
+  <text x="946" y="308" font-size="13" font-family="sans-serif">→ = logical FK (no DB</text>
+  <text x="946" y="330" font-size="13" font-family="sans-serif">constraint; app-joined)</text>
+  <text x="946" y="352" font-size="13" font-family="sans-serif">dashed box = VIEW</text>
+  <text x="946" y="374" font-size="13" font-family="sans-serif">dashed line = VIEW reads</text>
   <g stroke="#1e1e1e" stroke-width="2" fill="none">
-    <path d="M320,340 C336,340 336,150 348,150" marker-end="url(#arrow)"/>
-    <path d="M320,230 C336,230 336,170 348,170" marker-end="url(#arrow)"/>
-    <path d="M320,318 C336,318 336,305 348,305" marker-end="url(#arrow)"/>
+  <path d="M320,324 C336,324 336,126 350,126" marker-end="url(#arrow)"/>
+  <path d="M320,214 C336,214 336,126 350,126" marker-end="url(#arrow)"/>
+  <path d="M320,302 C336,302 336,276 350,276" marker-end="url(#arrow)"/>
   </g>
-  <!-- VIEW derivation arrows (dashed gray) -->
   <g stroke="#868e96" stroke-width="2" stroke-dasharray="6 4" fill="none">
-    <path d="M612,160 H638" marker-end="url(#arrow-gray)"/>
-    <path d="M612,330 H638" marker-end="url(#arrow-gray)"/>
-    <path d="M180,550 V606 H770 V618" marker-end="url(#arrow-gray)"/>
+  <path d="M610,155 H638,155 V312 H638" marker-end="url(#arrow-gray)"/>
+  <path d="M610,319 H638,319 V319 H638" marker-end="url(#arrow-gray)"/>
+  <path d="M180,500 V733 H770 V709" marker-end="url(#arrow-gray)"/>
   </g>
-  <text x="475" y="599" font-size="12" fill="#868e96" text-anchor="middle">VIEW reads market + caches</text>
-
-  <!-- bottom notes -->
-  <rect x="40" y="650" width="1160" height="120" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="620" y="678" font-size="13" text-anchor="middle">Indexes: market(type_id, system_id, is_buy_order) • market(price) • partial Jita-buy index (system_id = 30000142) • partial sell index (is_buy_order = 0)</text>
-  <text x="620" y="700" font-size="13" text-anchor="middle">names/systems carry no timestamps; all other tables have inserted_at/updated_at. MarketView (lib/schema.ex) is a query struct, not a DB view.</text>
-  <text x="620" y="722" font-size="13" text-anchor="middle">Queries LEFT JOIN the lazy caches and backfill gaps from ESI, then re-run once (Market.Database). Read-only sqlite3 on the live WAL file is safe; never write.</text>
-  <text x="620" y="744" font-size="13" text-anchor="middle">* bool is_buy_order is stored 1/0 because insert_all skips Ecto casting (see Market.Database.upsert_orders).</text>
+  <text x="475" y="727" font-size="12" fill="#868e96" text-anchor="middle">VIEW reads market + caches</text>
+  <rect x="40" y="761" width="1160" height="120" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="620" y="789" font-size="13" text-anchor="middle">Indexes: market (4 total, 2 partial) • Jita-buy (system_id = 30000142) • sell scan (is_buy_order = 0)</text>
+  <text x="620" y="811" font-size="13" text-anchor="middle">names/systems carry no timestamps; all other tables have inserted_at/updated_at. MarketView (lib/schema.ex) is a query struct, not a DB view.</text>
+  <text x="620" y="833" font-size="13" text-anchor="middle">Queries LEFT JOIN the lazy caches and backfill gaps from ESI, then re-run once (Market.Database). Read-only sqlite3 on the live WAL file is safe; never write.</text>
+  <text x="620" y="855" font-size="13" text-anchor="middle">* bool is_buy_order is stored 1/0 because insert_all skips Ecto casting (see Market.Database.upsert_orders).</text>
 </svg>

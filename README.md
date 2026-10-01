@@ -67,7 +67,7 @@ are logical FKs joined by the app, not DB constraints.
 
 ![System design](assets/system-design.svg)
 
-Editable source: [docs/system-design.excalidraw](docs/system-design.excalidraw) —
+Editable source: [docs/design.excalidraw](docs/design.excalidraw) —
 open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 `assets/` after edits.
 
