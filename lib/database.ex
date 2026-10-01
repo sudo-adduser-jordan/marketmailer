@@ -127,12 +127,14 @@ defmodule Etag.Database do
 	def upsert_etag(url, etag, expires_at \\ nil) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Database.insert_all(
-			"etags",
-			[%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
-			on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
-			conflict_target: :url
-		)
+		Market.DbWriter.write(fn ->
+			Database.insert_all(
+				"etags",
+				[%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
+				on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
+				conflict_target: :url
+			)
+		end)
 
 		:ets.insert(:market_cache, {url, etag, expires_at})
 	end
@@ -152,25 +154,27 @@ defmodule Discord.Database do
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Database.insert_all(
-			@table,
-			[
-				%{
-					guild_id: guild_id,
-					channel_id: channel_id,
-					inserted_at: now,
-					updated_at: now
-				}
-			],
-			on_conflict: {:replace, [:channel_id, :updated_at]},
-			conflict_target: :guild_id
-		)
+		Market.DbWriter.write(fn ->
+			Database.insert_all(
+				@table,
+				[
+					%{
+						guild_id: guild_id,
+						channel_id: channel_id,
+						inserted_at: now,
+						updated_at: now
+					}
+				],
+				on_conflict: {:replace, [:channel_id, :updated_at]},
+				conflict_target: :guild_id
+			)
+		end)
 	end
 
 	def delete(guild_id) do
 		case get(guild_id) do
 			nil -> :ok
-			record -> Database.delete(record)
+			record -> Market.DbWriter.write(fn -> Database.delete(record) end)
 		end
 	end
 end
@@ -180,6 +184,11 @@ defmodule Market.Database do
 
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
 	@table "market"
+
+	# SQLite has a single writer: one giant per-page transaction holds the
+	# write lock for the whole page and starves every other connection past
+	# busy_timeout ("Database busy"). Small transactions keep each lock hold short.
+	@upsert_chunk_size 200
 
 	def upsert_orders(orders) do
 		timestamp = NaiveDateTime.utc_now(:second)
@@ -198,11 +207,22 @@ defmodule Market.Database do
 				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
 			end)
 
-		Database.insert_all(@table, rows,
-			on_conflict: {:replace, @fields ++ [:updated_at]},
-			conflict_target: :order_id
-		)
+		Market.DbWriter.write(fn ->
+			rows
+			|> Enum.chunk_every(@upsert_chunk_size)
+			|> Enum.reduce(0, fn chunk, total ->
+				{count, _} =
+					Database.insert_all(@table, chunk,
+						on_conflict: {:replace, @fields ++ [:updated_at]},
+						conflict_target: :order_id
+					)
+
+				total + count
+			end)
+		end)
 	end
+
+	def upsert_chunk_size, do: @upsert_chunk_size
 
 	def get_best_order do
 		backfill(load_rows("getBestOrder.sql"))

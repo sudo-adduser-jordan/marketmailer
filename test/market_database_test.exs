@@ -1,6 +1,8 @@
 defmodule Market.DatabaseTest do
 	use ExUnit.Case, async: false
 
+	import Ecto.Query, only: [from: 2]
+
 	alias Database
 	alias Market.Database, as: MarketDatabase
 
@@ -99,6 +101,37 @@ defmodule Market.DatabaseTest do
 						 Database.query!("SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'marketListView'")
 	end
 
+	test "upsert_orders persists multi-chunk pages and replaces on conflict" do
+		size = MarketDatabase.upsert_chunk_size()
+		assert size > 0
+
+		orders = for n <- 1..(size * 2 + 50), do: order_fixture(50_000 + n)
+
+		assert MarketDatabase.upsert_orders(orders) == size * 2 + 50
+		assert Database.aggregate("market", :count) == size * 2 + 50
+
+		# Same ids, new prices: conflict path replaces instead of duplicating.
+		orders = for n <- 1..(size * 2 + 50), do: order_fixture(50_000 + n, 99.5)
+		assert MarketDatabase.upsert_orders(orders) == size * 2 + 50
+		assert Database.aggregate("market", :count) == size * 2 + 50
+
+		assert [%{price: 99.5}] =
+						 Database.all(from m in "market", where: m.order_id == 50_001, select: %{price: m.price})
+	end
+
+	test "concurrent upserts through the single writer never fail" do
+		tasks =
+			for w <- 1..20 do
+				Task.async(fn ->
+					orders = for n <- 1..30, do: order_fixture(60_000 + w * 100 + n)
+					MarketDatabase.upsert_orders(orders)
+				end)
+			end
+
+		assert Enum.sum(Task.await_many(tasks, 30_000)) == 600
+		assert Database.aggregate("market", :count) == 600
+	end
+
 	test "lists registered Discord channels in guild order" do
 		now = NaiveDateTime.utc_now(:second)
 
@@ -134,6 +167,23 @@ defmodule Market.DatabaseTest do
 			market_row(102, 30_000_143, 1_001, 12.0, 0, now),
 			market_row(103, 30_000_142, 1_001, 110.0, 1, now)
 		])
+	end
+
+	defp order_fixture(order_id, price \\ 10.0) do
+		%{
+			"order_id" => order_id,
+			"duration" => 1,
+			"is_buy_order" => false,
+			"issued" => "2026-09-24T00:00:00Z",
+			"location_id" => 2_001,
+			"min_volume" => 1,
+			"price" => price,
+			"range" => "station",
+			"system_id" => 30_000_142,
+			"type_id" => 1_001,
+			"volume_remain" => 10,
+			"volume_total" => 10
+		}
 	end
 
 	defp market_row(order_id, system_id, type_id, price, is_buy_order, now) do

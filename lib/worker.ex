@@ -165,7 +165,7 @@ defmodule Marketmailer.PageWorker do
 		e ->
 			Marketmailer.Log.warning(
 				"page_persist_failed",
-				%{region: ctx |> Map.get(:url), reason: Exception.message(e)},
+				%{region: ctx |> Map.get(:url), reason: first_line(e), orders: length(data)},
 				"Persist failed for #{ctx.url}"
 			)
 
@@ -176,6 +176,7 @@ defmodule Marketmailer.PageWorker do
 	# a DBConnection queue_timeout here used to terminate the worker without
 	# ever reporting to the UpdateCoordinator, stalling the region cycle.
 	defp safe_upsert_etag(%{etag: nil}), do: :ok
+
 	defp safe_upsert_etag(%{etag: false}), do: :ok
 
 	defp safe_upsert_etag(ctx) do
@@ -185,12 +186,17 @@ defmodule Marketmailer.PageWorker do
 		e ->
 			Marketmailer.Log.warning(
 				"page_persist_failed",
-				%{region: ctx |> Map.get(:url), reason: Exception.message(e)},
+				%{region: ctx |> Map.get(:url), reason: first_line(e)},
 				"Persist failed for #{ctx.url}"
 			)
 
 			{:error, :persist_failed}
 	end
+
+	# Exqlite embeds the full SQL statement in the exception message (a
+	# 1000-row upsert is ~90KB) — keep only the first line ("Database busy")
+	# so one failure cannot fill the error-log rotation with placeholders.
+	defp first_line(e), do: e |> Exception.message() |> String.split("\n") |> List.first()
 
 	defp failure_reason(reason) when is_atom(reason) or is_binary(reason), do: reason
 	defp failure_reason(reason) when is_integer(reason), do: reason
