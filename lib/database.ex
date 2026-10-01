@@ -59,7 +59,7 @@ defmodule Etag.Database do
 	end
 
 	defp unexpected(url, reason) do
-		Marketmailer.Log.warning(
+		Marketmailer.Log.info(
 			"etag_unexpected",
 			%{url: url, reason: reason},
 			"etag entry #{reason}, fetching now: #{url}"
@@ -76,7 +76,7 @@ defmodule Etag.Database do
 		|> Enum.flat_map(fn url ->
 			case page_from_url(url) do
 				nil ->
-					Marketmailer.Log.warning(
+					Marketmailer.Log.info(
 						"etag_unexpected",
 						%{url: url, reason: :unparseable_url},
 						"ignoring unparseable etag url: #{url}"

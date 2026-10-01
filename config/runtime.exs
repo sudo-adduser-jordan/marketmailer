@@ -5,8 +5,14 @@ import Config
 # Build-time `config/config.exs` holds defaults; this file wins at runtime
 # so release tarballs stay env-agnostic (DB path, Discord token).
 if config_env() == :prod do
+	# An empty MARKETMAILER_DB (e.g. bare `export MARKETMAILER_DB=""` in `.env`)
+	# counts as unset so it falls back to the default instead of pointing
+	# Ecto at an invalid empty path.
 	database =
-		System.get_env("MARKETMAILER_DB", "/data/marketmailer.db")
+		case System.get_env("MARKETMAILER_DB") do
+			path when path in [nil, ""] -> "/data/marketmailer.db"
+			path -> path
+		end
 
 	config :marketmailer, Database,
 		database: database,

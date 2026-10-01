@@ -1,5 +1,14 @@
 import Config
 
+# An empty MARKETMAILER_DB (e.g. bare `export MARKETMAILER_DB=""` in `.env`)
+# counts as unset so it falls back to the default instead of pointing Ecto
+# at an invalid empty path.
+db_path =
+	case System.get_env("MARKETMAILER_DB") do
+		path when path in [nil, ""] -> "priv/data/marketmailer.db"
+		path -> path
+	end
+
 # Console handler: pretty JSON records (info/warning/error), keys colored per
 # level, values colored by type.
 config :logger, :default_handler,
@@ -9,7 +18,7 @@ config :logger, :default_handler,
 # Warning/error-level events also go to logs/errors.jsonl (see lib/app.ex).
 
 config :marketmailer, Database,
-	database: System.get_env("MARKETMAILER_DB", "priv/data/marketmailer.db"),
+	database: db_path,
 	priv: "priv/repo",
 	journal_mode: :wal,
 	busy_timeout: 5000,

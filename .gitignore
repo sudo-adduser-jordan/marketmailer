@@ -32,6 +32,9 @@ marketmailer-*.tar
 /priv/data/*.db-wal
 !/priv/data/.gitkeep
 
+# dev poller pidfile (runtime state written by `task start`)
+/priv/data/marketmailer.pid
+
 # structured JSON logs (errors.jsonl + rotated archives)
 /logs/
 

@@ -44,9 +44,9 @@ is always on unless deliberately stopped (detached `task start` /
   `lsof priv/data/marketmailer.db`.
 - If none exists, start one: `task start` for a manual detached dev
   run (`task start:live` for the detached prod release). Stop is the
-  only intended off switch: `kill $(cat priv/data/marketmailer.pid)` for
-  the dev poller / `_build/prod/rel/marketmailer/bin/marketmailer stop`
-  for the release.
+  only intended off switch: `task stop` for the dev poller
+  (`kill $(cat priv/data/marketmailer.pid)`) / `task stop:live` for the
+  release (`_build/prod/rel/marketmailer/bin/marketmailer stop`).
 - Talk to the live node instead of booting a second one:
   `iex --sname debug --remsh marketmailer` for a remote shell on the
   mix-run poller (`_build/prod/rel/marketmailer/bin/marketmailer remote`

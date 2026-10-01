@@ -20,8 +20,30 @@ tasks:
       - mix setup
       - mkdir -p logs priv/data
       - |
-        if pgrep -f "[m]arketmailer" > /dev/null; then
-          echo "poller already running — nothing to do (logs/poller.log)"
+        if [ -f priv/data/marketmailer.pid ]; then
+          PID=$(cat priv/data/marketmailer.pid)
+          if /bin/kill -0 "$PID" 2>/dev/null; then
+            echo "poller already running — nothing to do (pid $PID, logs/poller.log)"
+            exit 0
+          fi
+          rm -f priv/data/marketmailer.pid
+        fi
+        # Fallback: live node without a pidfile (predates pidfile logic).
+        # NOTE: `pgrep -f` scans full command lines, and this script's own
+        # text contains the pattern — as does every go-task wrapper shell
+        # above us — so exclude this shell AND all its ancestors. A bare
+        # `pgrep -f "[m]arketmailer"` (or filtering only $$) always matches
+        # itself and is useless here.
+        drop="^$$\$"
+        _p=$PPID
+        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
+          drop="$drop|^${_p}\$"
+          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
+        done
+        LIVE=$(pgrep -f "sname marketmailer" | grep -Ev "$drop" | head -n 1 || true)
+        if [ -n "$LIVE" ]; then
+          echo "$LIVE" > priv/data/marketmailer.pid
+          echo "poller already running — nothing to do (pid $LIVE, logs/poller.log)"
           exit 0
         fi
         nohup elixir --sname marketmailer -S mix run --no-halt >> logs/poller.log 2>&1 &
@@ -33,12 +55,90 @@ tasks:
     cmds:
       - MIX_ENV=prod mix release
       - |
-        if pgrep -f "[m]arketmailer" > /dev/null; then
-          echo "poller already running — nothing to do"
+        # See `start` for why this shell and all its ancestors must be
+        # excluded from pgrep -f results.
+        drop="^$$\$"
+        _p=$PPID
+        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
+          drop="$drop|^${_p}\$"
+          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
+        done
+        if pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
+          echo "prod release already running — nothing to do"
+          exit 0
+        fi
+        if [ -f priv/data/marketmailer.pid ]; then
+          PID=$(cat priv/data/marketmailer.pid)
+          if /bin/kill -0 "$PID" 2>/dev/null; then
+            echo "dev poller already running — nothing to do (pid $PID); stop it first"
+            exit 0
+          fi
+          rm -f priv/data/marketmailer.pid
+        fi
+        LIVE=$(pgrep -f "sname marketmailer" | grep -Ev "$drop" | head -n 1 || true)
+        if [ -n "$LIVE" ]; then
+          echo "$LIVE" > priv/data/marketmailer.pid
+          echo "dev poller already running — nothing to do (pid $LIVE); stop it first"
           exit 0
         fi
         _build/prod/rel/marketmailer/bin/marketmailer daemon
         echo "started prod release (daemon)"
+
+  stop:
+    desc: Stop the dev poller (kill nohup via pidfile)
+    cmds:
+      - |
+        if [ -f priv/data/marketmailer.pid ]; then
+          PID=$(cat priv/data/marketmailer.pid)
+          if /bin/kill -0 "$PID" 2>/dev/null; then
+            /bin/kill "$PID"
+            rm -f priv/data/marketmailer.pid
+            echo "stopped dev poller pid $PID"
+            exit 0
+          fi
+          rm -f priv/data/marketmailer.pid
+        fi
+        # Fallback: live node without a pidfile. See `start` for why this
+        # shell and all its ancestors must be excluded from pgrep results.
+        drop="^$$\$"
+        _p=$PPID
+        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
+          drop="$drop|^${_p}\$"
+          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
+        done
+        LIVE=$(pgrep -f "sname marketmailer" | grep -Ev "$drop" | head -n 1 || true)
+        if [ -z "$LIVE" ]; then
+          echo "poller not running — nothing to do"
+          exit 0
+        fi
+        /bin/kill "$LIVE"
+        echo "stopped dev poller pid $LIVE"
+
+  stop:live:
+    desc: Stop the prod release daemon
+    cmds:
+      - |
+        # Match only release beams (bundled erts under prod/rel), never the
+        # dev `mix run` poller — both are named `marketmailer`. See `start`
+        # for why this shell and all its ancestors must be excluded.
+        drop="^$$\$"
+        _p=$PPID
+        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
+          drop="$drop|^${_p}\$"
+          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
+        done
+        LIVE=$(pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" | head -n 1 || true)
+        if [ -z "$LIVE" ]; then
+          echo "prod release not running — nothing to do"
+          exit 0
+        fi
+        BIN=_build/prod/rel/marketmailer/bin/marketmailer
+        if [ -x "$BIN" ]; then
+          "$BIN" stop
+        else
+          /bin/kill "$LIVE"
+        fi
+        echo "stopped prod release (was pid $LIVE)"
 
   live:update:
     desc: Hot-upgrade the running deployment without restart (auto VSN from mix.exs)
