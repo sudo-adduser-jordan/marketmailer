@@ -76,7 +76,7 @@ defmodule Marketmailer.MixProject do
 		|> Enum.filter(&(Version.compare(&1, vsn) == :lt))
 		|> Enum.sort({:desc, Version})
 		|> Enum.take(1)
-		|> Enum.map(&("tar:artifacts/marketmailer-#{&1}.tar.gz"))
+		|> Enum.map(&"tar:artifacts/marketmailer-#{&1}.tar.gz")
 	end
 
 	defp aliases do

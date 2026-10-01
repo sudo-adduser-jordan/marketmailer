@@ -22,6 +22,9 @@ config :marketmailer, Database,
 	priv: "priv/repo",
 	journal_mode: :wal,
 	busy_timeout: 5000,
+	pool_size: 20,
+	queue_target: 2000,
+	queue_interval: 5000,
 	log: false
 
 config :marketmailer, :bot_options, %{

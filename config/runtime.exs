@@ -19,6 +19,9 @@ if config_env() == :prod do
 		priv: "priv/repo",
 		journal_mode: :wal,
 		busy_timeout: 5_000,
+		pool_size: 20,
+		queue_target: 2_000,
+		queue_interval: 5_000,
 		log: false
 
 	# The bot reads DISCORD_TOKEN lazily (&Marketmailer.BotSupervisor.token!/0),

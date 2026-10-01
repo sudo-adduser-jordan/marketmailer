@@ -88,10 +88,17 @@ defmodule Marketmailer.PageWorker do
 					"304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
 				)
 
-				if ctx.etag, do: Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
-				Market.UpdateCoordinator.page_result(id, page, :not_modified, %{pages: ctx.pages})
-				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
-				{:noreply, new_state}
+				case safe_upsert_etag(ctx) do
+					:ok ->
+						Market.UpdateCoordinator.page_result(id, page, :not_modified, %{pages: ctx.pages})
+						new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
+						{:noreply, new_state}
+
+					{:error, reason} ->
+						Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: reason})
+						schedule_next(backoff_ms(state.errors))
+						{:noreply, %{state | errors: state.errors + 1}}
+				end
 
 			{:error, :service_unavailable, ctx} ->
 				Marketmailer.Log.info(
@@ -152,6 +159,26 @@ defmodule Marketmailer.PageWorker do
 	# hanging on a page that started but never reports.
 	defp persist_orders(data, ctx) do
 		Market.Database.upsert_orders(data)
+		Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
+		:ok
+	rescue
+		e ->
+			Marketmailer.Log.warning(
+				"page_persist_failed",
+				%{region: ctx |> Map.get(:url), reason: Exception.message(e)},
+				"Persist failed for #{ctx.url}"
+			)
+
+			{:error, :persist_failed}
+	end
+
+	# 304 path must not crash the GenServer when the pool is saturated:
+	# a DBConnection queue_timeout here used to terminate the worker without
+	# ever reporting to the UpdateCoordinator, stalling the region cycle.
+	defp safe_upsert_etag(%{etag: nil}), do: :ok
+	defp safe_upsert_etag(%{etag: false}), do: :ok
+
+	defp safe_upsert_etag(ctx) do
 		Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
 		:ok
 	rescue

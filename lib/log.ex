@@ -105,6 +105,10 @@ defmodule Marketmailer.Log.Format do
 		color = if Keyword.get(opts, :color, false), do: Map.get(@colors, level, 36)
 		json = event |> ordered_fields() |> encode(Keyword.get(opts, :pretty, true), color)
 		[json, "\n"]
+	rescue
+		_ -> [~s({"level":"error","event":"formatter_crash"}), "\n"]
+	catch
+		_, _ -> [~s({"level":"error","event":"formatter_crash"}), "\n"]
 	end
 
 	defp render(event, _opts) do
@@ -205,11 +209,19 @@ defmodule Marketmailer.Log.Format do
 	defp normalize_list([]), do: []
 
 	defp normalize_list([head | _] = list) do
-		if is_integer(head) and List.ascii_printable?(list) do
+		if is_integer(head) and printable_list?(list) do
 			List.to_string(list)
 		else
 			Enum.map(list, &normalize/1)
 		end
+	rescue
+		_ -> inspect(list)
+	end
+
+	defp printable_list?(list) do
+		List.ascii_printable?(list)
+	rescue
+		_ -> false
 	end
 
 	defp normalize_map(map), do: Map.new(map, fn {key, value} -> {to_string(key), normalize(value)} end)
@@ -292,5 +304,10 @@ defmodule Marketmailer.Log.Format do
 	# `nil` is JSON null; :json.encode/1 would encode the atom as the string
 	# "nil" instead.
 	defp json_string(nil), do: "null"
-	defp json_string(value), do: value |> :json.encode() |> IO.iodata_to_binary()
+
+	defp json_string(value) do
+		value |> :json.encode() |> IO.iodata_to_binary()
+	rescue
+		_ -> inspect(value)
+	end
 end
