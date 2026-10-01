@@ -1,0 +1,25 @@
+# Template user unit: keeps one marketmailer poller always running.
+# Created in-repo only — copy to ~/.config/systemd/user/ and adjust paths,
+# then: systemctl --user daemon-reload && systemctl --user enable --now marketmailer
+# Stop (the only intended off switch): systemctl --user stop marketmailer
+# NOTE: adjust WorkingDirectory to this repo's checkout on the target machine.
+[Unit]
+Description=marketmailer EVE market poller (always on unless stopped)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Documents/GitHub/marketmailer
+EnvironmentFile=-%h/.config/marketmailer/env
+# Cookie/token/DB path come from the EnvironmentFile:
+#   MARKETMAILER_COOKIE=... (see `task live:cookie`)
+#   MARKETMAILER_DB=/absolute/path/marketmailer.db (defaults to ./marketmailer.db)
+#   DISCORD_TOKEN=... (bot is skipped with a warning when missing/invalid)
+ExecStart=/usr/bin/env elixir --sname marketmailer --cookie ${MARKETMAILER_COOKIE} -S mix run --no-halt
+ExecStartPre=/usr/bin/env mix setup
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

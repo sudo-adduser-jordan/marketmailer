@@ -9,6 +9,9 @@ the Jita buy wall). The Discord bot feature exists but is currently disabled.
 ```sh
 mix setup            # deps.get + ecto.create + ecto.migrate
 mix start            # setup + run --no-halt
+task live:start      # run the poller as a distributed node (attachable, hot-reloadable)
+task live:attach     # attach to the live node (recompile() there hot-loads by hand)
+mix upgrade.hot      # compile + hot-load beams into the live node (no restart)
 iex -S mix run       # interactive with app started (migrates automatically)
 mix compile          # compile; use --warnings-as-errors for strict mode
 mix ecto.migrate     # manual migration run (also happens on every boot)
@@ -17,10 +20,38 @@ mix ecto.migrate     # manual migration run (also happens on every boot)
 Docker: `sudo docker build -t marketmailer .` then see the header of the
 `Dockerfile` for run examples.
 
-Live-process check: before `mix test` / `mix run` / DB inspection, check for
-a running poller (`ps aux | grep -F marketmailer`, `lsof marketmailer.db`).
-Dev tests must not hit live ESI or the live `marketmailer.db` while the
-poller runs — use stubbed ESI fixtures and a separate `MARKETMAILER_DB`.
+## Live-process policy
+
+Develop against a live running poller, not a cold boot — expiry timers,
+ETS caches, and supervision state only exist in a running VM. The poller
+is always on unless deliberately stopped (systemd user unit, see below).
+
+- Before `mix test` / `mix run` / DB inspection, check for a poller:
+  `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix"`,
+  `lsof marketmailer.db`.
+- If none exists, start one: `task live:start` for a manual distributed
+  run, or install the always-on unit: copy `deploy/marketmailer.service`
+  to `~/.config/systemd/user/` (adjust paths), copy `deploy/env.example`
+  to `~/.config/marketmailer/env`, then
+  `systemctl --user daemon-reload && systemctl --user enable --now marketmailer`.
+  The unit file in the repo is a template only — never enable/start it
+  from the repo. Stop is the only intended off switch:
+  `systemctl --user stop marketmailer`.
+- Talk to the live node instead of booting a second one:
+  `task live:attach` for a remote shell (`recompile()` there hot-loads by
+  hand), `mix upgrade.hot` to compile + rpc-load beams into it with no
+  restart. Both need the shared cookie (`task live:cookie` creates
+  `~/.config/marketmailer/cookie`, mode 600); the live node is
+  `marketmailer@<hostname>` unless `MARKETMAILER_NODE` says otherwise.
+  Hot reload keeps processes, ETS, and timers; state-shape changes
+  (GenServer state, ETS tuple shapes) still need a poller restart.
+- Safety while a poller runs: dev tests must still not hit live ESI or
+  the live `marketmailer.db` — use stubbed ESI fixtures and a separate
+  `MARKETMAILER_DB`. Read-only inspection of the live DB is fine
+  (WAL mode allows concurrent readers); never write to it from dev/test
+  tooling. `mix test.safe` refuses while a poller process is visible;
+  bypass only via `MIX_ENV=test mix test` (isolated `test.db`,
+  stubbed ESI, no pollers).
 
 `mix format` is aliased to `format --check-formatted` and never writes.
 To actually format files: `mix format --no-check-formatted`.
@@ -117,3 +148,7 @@ then pipe to jq:
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
 - `lib/discord.ex` - nostrum consumer, slash commands, embed builders
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
+- `lib/mix/tasks/` - `test.safe` (live-poller guard), `upgrade.hot`
+  (compile + rpc hot-load into the live node, no restart)
+- `deploy/` - `marketmailer.service` template (always-on user unit, never
+  loaded from the repo) + `env.example` for `~/.config/marketmailer/env`

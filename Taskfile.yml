@@ -66,15 +66,34 @@ tasks:
       - mix test.safe
 
   upgrade:dev:
-    desc: Compile; hot-load by running recompile() in your iex -S mix run session (no release configured)
+    desc: Compile and hot-load beams into the live node (no restart; state-shape changes need a poller restart)
     cmds:
-      - mix compile --warnings-as-errors
+      - mix upgrade.hot
 
   upgrade:test:
     desc: Recompile and run the isolated test suite (stubbed ESI, isolated test.db)
     cmds:
       - mix compile --warnings-as-errors
       - mix test.safe
+
+  live:cookie:
+    desc: Generate the shared distribution cookie (~/.config/marketmailer/cookie, mode 600; never overwrites)
+    cmds:
+      - mkdir -p ~/.config/marketmailer && if [ -f ~/.config/marketmailer/cookie ]; then echo "cookie already exists"; else openssl rand -hex 32 > ~/.config/marketmailer/cookie && chmod 600 ~/.config/marketmailer/cookie && echo "cookie created"; fi
+
+  live:start:
+    desc: Run the poller as a distributed node (attachable, hot-reloadable; blocks)
+    cmds:
+      - test -f ~/.config/marketmailer/cookie || (echo "run task live:cookie first" && exit 1)
+      - elixir --sname marketmailer --cookie "$(cat ~/.config/marketmailer/cookie)" -S mix run --no-halt
+    interactive: true
+
+  live:attach:
+    desc: Attach to the live node (run recompile() there to hot-load by hand)
+    cmds:
+      - test -f ~/.config/marketmailer/cookie || (echo "run task live:cookie first" && exit 1)
+      - iex --sname debug --cookie "$(cat ~/.config/marketmailer/cookie)" --remsh marketmailer
+    interactive: true
 
   upgrade:prod:
     desc: Restart prod (no mix release configured; safe now that etag expiry persists — zero early requests)

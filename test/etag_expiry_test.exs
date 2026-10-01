@@ -6,7 +6,10 @@ defmodule Etag.ExpiryTest do
 	setup_all do
 		# Use the app-booted test repo (pollers disabled, isolated test.db):
 		# reconfiguring Database here would poison the shared repo for the
-		# rest of the suite. Migration is idempotent.
+		# rest of the suite. Migration is idempotent. Market.DatabaseTest
+		# stops/restarts the shared repo in its lifecycle, so wait for it.
+		await_repo!(Database, 10_000)
+
 		Ecto.Migrator.run(
 			Database,
 			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
@@ -23,6 +26,26 @@ defmodule Etag.ExpiryTest do
 		end
 
 		:ok
+	end
+
+	# The shared test repo is stopped/restarted by other modules' lifecycles;
+	# poll until a trivial query succeeds (or the deadline passes, then fail).
+	defp await_repo!(repo, timeout) do
+		deadline = System.monotonic_time(:millisecond) + timeout
+		await_repo_loop!(repo, deadline)
+	end
+
+	defp await_repo_loop!(repo, deadline) do
+		_ = repo.query!("SELECT 1")
+		:ok
+	rescue
+		_ ->
+			if System.monotonic_time(:millisecond) > deadline do
+				flunk("test repo #{inspect(repo)} did not come up")
+			else
+				Process.sleep(20)
+				await_repo_loop!(repo, deadline)
+			end
 	end
 
 	test "upsert round-trips etag and expires_at through SQLite and ETS" do
