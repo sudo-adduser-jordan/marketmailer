@@ -21,8 +21,8 @@ tasks:
       - mkdir -p logs priv/data
       - |
         if pgrep -f "[m]arketmailer" > /dev/null; then
-          echo "poller already running; refusing second start"
-          exit 1
+          echo "poller already running — nothing to do (logs/poller.log)"
+          exit 0
         fi
         nohup elixir --sname marketmailer -S mix run --no-halt >> logs/poller.log 2>&1 &
         echo $! > priv/data/marketmailer.pid
@@ -34,8 +34,8 @@ tasks:
       - MIX_ENV=prod mix release
       - |
         if pgrep -f "[m]arketmailer" > /dev/null; then
-          echo "poller already running; refusing second start"
-          exit 1
+          echo "poller already running — nothing to do"
+          exit 0
         fi
         _build/prod/rel/marketmailer/bin/marketmailer daemon
         echo "started prod release (daemon)"

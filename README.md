@@ -53,7 +53,7 @@ Pending migrations run automatically on every boot, so containers and
 
 ![Database schema](assets/schema.svg)
 
-Editable source: [docs/schema.excalidraw](docs/schema.excalidraw) —
+Editable source: [assets/schema.excalidraw](assets/schema.excalidraw) —
 open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 `assets/` after edits.
 
@@ -67,7 +67,7 @@ are logical FKs joined by the app, not DB constraints.
 
 ![System design](assets/system-design.svg)
 
-Editable source: [docs/design.excalidraw](docs/design.excalidraw) —
+Editable source: [assets/design.excalidraw](assets/design.excalidraw) —
 open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 `assets/` after edits.
 

@@ -369,7 +369,7 @@ defmodule Mix.Tasks.Chartdb do
 
 			![Database schema](#{@svg})
 
-			Editable source: [docs/schema.excalidraw](docs/schema.excalidraw) —
+			Editable source: [assets/schema.excalidraw](assets/schema.excalidraw) —
 			open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 			`assets/` after edits.
 
