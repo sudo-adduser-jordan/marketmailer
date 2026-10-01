@@ -179,21 +179,28 @@ defmodule Discord.Broadcaster do
 				{Messages.market_embed(item, "attachment://#{filename}"), %{name: filename, body: png}}
 
 			{:ok, _other} ->
-				{Messages.market_embed(item), nil}
+				fallback_payload(item)
 
 			{:error, reason} ->
 				capture_failure(item, reason)
 		end
 	end
 
+	defp fallback_payload(item) do
+		filename = Janice.Capture.fallback_filename()
+		{Messages.market_embed(item, "attachment://#{filename}"), %{name: filename, body: Janice.Capture.fallback_image()}}
+	rescue
+		_ -> {Messages.market_embed(item), nil}
+	end
+
 	defp capture_failure(item, reason) do
 		Marketmailer.Log.warning(
 			"janice_broadcast_capture_failed",
 			%{type_id: item.type_id, reason: inspect(reason)},
-			"Broadcast chart capture failed; using the static market thumbnail"
+			"Broadcast chart capture failed; using the fallback chart image"
 		)
 
-		{Messages.market_embed(item), nil}
+		fallback_payload(item)
 	end
 
 	defp deliver_all(channels, embed, file, state) do

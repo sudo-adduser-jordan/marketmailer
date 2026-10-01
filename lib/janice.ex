@@ -8,6 +8,12 @@ defmodule Janice.Capture do
 
 	def filename(type_id) when is_integer(type_id), do: "janice-#{type_id}.png"
 
+	def fallback_filename, do: "janice-failed.png"
+
+	def fallback_image do
+		[__DIR__, "..", "assets", fallback_filename()] |> Path.join() |> Path.expand() |> File.read!()
+	end
+
 	def capture(type_id, opts \\ []) when is_integer(type_id) do
 		adapter =
 			Keyword.get(

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400">
+  <rect width="800" height="400" fill="#2b2d42"/>
+  <rect x="40" y="40" width="720" height="280" rx="12" fill="#1a1c2e" stroke="#7289da" stroke-width="3"/>
+  <polyline points="80,260 200,220 320,240 440,160 560,180 680,120" fill="none" stroke="#7289da" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="12 8" opacity="0.6"/>
+  <line x1="80" y1="100" x2="720" y2="300" stroke="#f04747" stroke-width="6" stroke-linecap="round"/>
+  <line x1="720" y1="100" x2="80" y2="300" stroke="#f04747" stroke-width="6" stroke-linecap="round"/>
+  <text x="400" y="360" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="bold" fill="#ffffff">Chart unavailable</text>
+</svg>

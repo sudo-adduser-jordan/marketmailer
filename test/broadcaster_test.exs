@@ -124,6 +124,31 @@ defmodule Discord.BroadcasterTest do
 		assert Process.alive?(broadcaster)
 	end
 
+	test "attaches the fallback chart image when capture fails", %{coordinator: coordinator} do
+		test_pid = self()
+
+		_broadcaster =
+			start_broadcaster(
+				coordinator,
+				[900],
+				market_item(),
+				fn channel, payload ->
+					send(test_pid, {:sent, channel, payload})
+					{:ok, :sent}
+				end,
+				capture_fun: fn _type_id -> {:error, :timeout} end
+			)
+
+		complete_cycle(coordinator, 19, :updated)
+
+		assert_receive {:sent, 900, payload}
+		assert [embed] = payload.embeds
+		assert embed.thumbnail.url == "attachment://#{Janice.Capture.fallback_filename()}"
+		assert [%{name: name, body: body}] = payload.files
+		assert name == Janice.Capture.fallback_filename()
+		assert binary_part(body, 0, 4) == <<137, 80, 78, 71>>
+	end
+
 	test "keeps the broadcaster alive after an async refresh completes", %{
 		coordinator: coordinator,
 		task_supervisor: task_supervisor
@@ -154,6 +179,7 @@ defmodule Discord.BroadcasterTest do
 	defp start_broadcaster(coordinator, channels, market_result, deliver_fun, opts \\ []) do
 		name = :"broadcaster_#{System.unique_integer([:positive])}"
 		deliver_opts = if deliver_fun, do: [deliver_fun: deliver_fun], else: []
+		capture_fun = Keyword.get(opts, :capture_fun, fn _type_id -> {:ok, <<137, 80, 78, 71>>} end)
 
 		pid =
 			start_supervised!(
@@ -165,7 +191,7 @@ defmodule Discord.BroadcasterTest do
 					 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 					 channels_fun: fn -> channels end,
 					 market_fun: fn -> market_result end,
-					 capture_fun: fn _type_id -> {:ok, <<137, 80, 78, 71>>} end
+					 capture_fun: capture_fun
 				 ] ++ deliver_opts}
 			)
 

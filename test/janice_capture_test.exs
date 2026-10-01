@@ -34,6 +34,18 @@ defmodule Janice.CaptureTest do
 		assert Janice.Capture.filename(1_001) == "janice-1001.png"
 	end
 
+	test "exposes a stable fallback filename" do
+		assert Janice.Capture.fallback_filename() == "janice-failed.png"
+	end
+
+	test "loads a PNG fallback image for failed captures" do
+		body = Janice.Capture.fallback_image()
+
+		assert is_binary(body)
+		assert byte_size(body) > 0
+		assert binary_part(body, 0, 4) == <<137, 80, 78, 71>>
+	end
+
 	test "Playwright adapter reports unavailable when its supervisor is absent" do
 		ensure_playwright_supervisor_absent()
 

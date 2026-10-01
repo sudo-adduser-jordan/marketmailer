@@ -463,7 +463,7 @@ defmodule Discord.Consumer do
 
 			{:error, reason} ->
 				log_discord_warning("check_market_task_failed", reason, interaction)
-				edit_market_response(bot_name, interaction, item)
+				edit_fallback_response(bot_name, interaction, item)
 		end
 	end
 
@@ -480,11 +480,20 @@ defmodule Discord.Consumer do
 				Marketmailer.Log.warning(
 					"janice_capture_failed",
 					%{type_id: item.type_id, reason: inspect(reason)},
-					"Janice chart capture failed; using the static market thumbnail"
+					"Janice chart capture failed; using the fallback chart image"
 				)
 
-				edit_market_response(bot_name, interaction, item)
+				edit_fallback_response(bot_name, interaction, item)
 		end
+	end
+
+	defp edit_fallback_response(bot_name, interaction, item) do
+		filename = Janice.Capture.fallback_filename()
+		embed = Messages.market_embed(item, "attachment://#{filename}")
+		file = %{name: filename, body: Janice.Capture.fallback_image()}
+		edit_response(bot_name, interaction, %{embeds: [embed], files: [file]})
+	rescue
+		_ -> edit_market_response(bot_name, interaction, item)
 	end
 
 	defp edit_market_response(bot_name, interaction, item) do
