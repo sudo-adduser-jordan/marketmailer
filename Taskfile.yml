@@ -82,7 +82,7 @@ tasks:
     desc: "Validate appup/relup for FROM -> TO (e.g. task upgrade:check FROM=0.1.0 TO=0.1.1)"
     cmds:
       - 'test -n "{{.FROM}}" -a -n "{{.TO}}" || (echo "usage: task upgrade:check FROM=<vsn> TO=<vsn>" && exit 1)'
-      - mix castle.appup --from tar:artifacts/marketmailer-{{.FROM}}.tar.gz --to rel:_build/prod/rel/marketmailer/releases/{{.TO}}/marketmailer
+      - mix castle.appup --from tar:artifacts/marketmailer-{{.FROM}}.tar.gz --to tar:artifacts/marketmailer-{{.TO}}.tar.gz
       - mix castle.relup --target _build/prod/rel/marketmailer/releases/{{.TO}}/marketmailer --fromto tar:artifacts/marketmailer-{{.FROM}}.tar.gz --dry-run
 
   upgrade:install:
