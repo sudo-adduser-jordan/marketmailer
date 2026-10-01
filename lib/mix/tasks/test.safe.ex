@@ -8,7 +8,8 @@ defmodule Mix.Tasks.Test.Safe do
 	The suite never touches the live poller: `config/test.exs` disables
 	pollers (`start_pollers: false`), stubs ESI (maintenance ETS + fixtures),
 	and defaults to an isolated `priv/data/test.db` (or per-suite tmp files). A live
-	poller — `mix run` or a Castle release (`bin/marketmailer`) — is therefore
+	prod daemon (`task start`, i.e. a Castle release, `bin/marketmailer`) or a
+	dev shell (`task dev`) is therefore
 	allowed to keep running as long as the test DB file is isolated from the
 	live `priv/data/marketmailer.db`. Refusal happens only on a DB collision (e.g.
 	`MARKETMAILER_DB=priv/data/marketmailer.db` while a poller holds it).
@@ -80,9 +81,9 @@ defmodule Mix.Tasks.Test.Safe do
 
 	defp stale_sidecar?(db), do: File.exists?(db <> "-wal") or File.exists?(db <> "-shm")
 
-	# A live `mix run --no-halt` / `mix start` / `iex -S mix run` for this
-	# project, or a Castle release (`bin/marketmailer foreground|start`,
-	# `beam.smp ... marketmailer`). Best-effort via `pgrep`; excludes this
+	# A live prod daemon (`task start`) or dev shell (`task dev`) for this
+	# project — i.e. a Castle release (`bin/marketmailer ...`) or a
+	# `beam.smp ... marketmailer` node. Best-effort via `pgrep`; excludes this
 	# task's own re-exec chain.
 	defp poller_running? do
 		case System.cmd("pgrep", ["-af", "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"],

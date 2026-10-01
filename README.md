@@ -15,14 +15,14 @@ to flip into the Jita buy wall). A Discord bot broadcasts market updates.
 ```sh
 cp .example.env .env   # then fill in values
 task setup             # deps.get + ecto.create + ecto.migrate
-task start             # setup + run --no-halt
+task start             # prod release detached (daemon, survives terminal close)
 ```
 
-Or with plain mix:
+Or a dev shell with plain mix:
 
 ```sh
 mix setup
-mix start
+iex -S mix run
 ```
 
 Pending migrations run automatically on every boot, so containers and

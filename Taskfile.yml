@@ -15,20 +15,10 @@ tasks:
       - mix setup
 
   start:
-    desc: Run dev poller detached (nohup, survives terminal close)
+    desc: Run prod release detached (daemon, survives terminal close)
     cmds:
-      - mix setup
-      - mkdir -p logs priv/data
+      - MIX_ENV=prod mix release
       - |
-        if [ -f priv/data/marketmailer.pid ]; then
-          PID=$(cat priv/data/marketmailer.pid)
-          if /bin/kill -0 "$PID" 2>/dev/null; then
-            echo "poller already running — nothing to do (pid $PID, logs/poller.log)"
-            exit 0
-          fi
-          rm -f priv/data/marketmailer.pid
-        fi
-        # Fallback: live node without a pidfile (predates pidfile logic).
         # NOTE: `pgrep -f` scans full command lines, and this script's own
         # text contains the pattern — as does every go-task wrapper shell
         # above us — so exclude this shell AND all its ancestors. A bare
@@ -40,86 +30,21 @@ tasks:
           drop="$drop|^${_p}\$"
           _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
         done
-        LIVE=$(pgrep -f "sname marketmailer" | grep -Ev "$drop" | head -n 1 || true)
-        if [ -n "$LIVE" ]; then
-          echo "$LIVE" > priv/data/marketmailer.pid
-          echo "poller already running — nothing to do (pid $LIVE, logs/poller.log)"
-          exit 0
-        fi
-        nohup elixir --sname marketmailer -S mix run --no-halt >> logs/poller.log 2>&1 &
-        echo $! > priv/data/marketmailer.pid
-        echo "started dev poller pid $(cat priv/data/marketmailer.pid) logs/poller.log"
-
-  start:live:
-    desc: Run prod release detached (daemon, survives terminal close)
-    cmds:
-      - MIX_ENV=prod mix release
-      - |
-        # See `start` for why this shell and all its ancestors must be
-        # excluded from pgrep -f results.
-        drop="^$$\$"
-        _p=$PPID
-        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
-          drop="$drop|^${_p}\$"
-          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
-        done
         if pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
           echo "prod release already running — nothing to do"
           exit 0
         fi
-        if [ -f priv/data/marketmailer.pid ]; then
-          PID=$(cat priv/data/marketmailer.pid)
-          if /bin/kill -0 "$PID" 2>/dev/null; then
-            echo "dev poller already running — nothing to do (pid $PID); stop it first"
-            exit 0
-          fi
-          rm -f priv/data/marketmailer.pid
-        fi
-        LIVE=$(pgrep -f "sname marketmailer" | grep -Ev "$drop" | head -n 1 || true)
-        if [ -n "$LIVE" ]; then
-          echo "$LIVE" > priv/data/marketmailer.pid
-          echo "dev poller already running — nothing to do (pid $LIVE); stop it first"
-          exit 0
-        fi
+        # Stale pidfile from the removed detached-dev workflow (dev is now
+        # shell-only via `task dev`); the release daemon never uses it.
+        rm -f priv/data/marketmailer.pid
         _build/prod/rel/marketmailer/bin/marketmailer daemon
         echo "started prod release (daemon)"
 
   stop:
-    desc: Stop the dev poller (kill nohup via pidfile)
-    cmds:
-      - |
-        if [ -f priv/data/marketmailer.pid ]; then
-          PID=$(cat priv/data/marketmailer.pid)
-          if /bin/kill -0 "$PID" 2>/dev/null; then
-            /bin/kill "$PID"
-            rm -f priv/data/marketmailer.pid
-            echo "stopped dev poller pid $PID"
-            exit 0
-          fi
-          rm -f priv/data/marketmailer.pid
-        fi
-        # Fallback: live node without a pidfile. See `start` for why this
-        # shell and all its ancestors must be excluded from pgrep results.
-        drop="^$$\$"
-        _p=$PPID
-        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
-          drop="$drop|^${_p}\$"
-          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
-        done
-        LIVE=$(pgrep -f "sname marketmailer" | grep -Ev "$drop" | head -n 1 || true)
-        if [ -z "$LIVE" ]; then
-          echo "poller not running — nothing to do"
-          exit 0
-        fi
-        /bin/kill "$LIVE"
-        echo "stopped dev poller pid $LIVE"
-
-  stop:live:
     desc: Stop the prod release daemon
     cmds:
       - |
-        # Match only release beams (bundled erts under prod/rel), never the
-        # dev `mix run` poller — both are named `marketmailer`. See `start`
+        # Match only release beams (bundled erts under prod/rel). See `start`
         # for why this shell and all its ancestors must be excluded.
         drop="^$$\$"
         _p=$PPID
@@ -140,6 +65,17 @@ tasks:
         fi
         echo "stopped prod release (was pid $LIVE)"
 
+  start:live:
+    desc: Alias for start (prod release detached)
+    cmds:
+      - task: start
+
+  stop:live:
+    desc: Alias for stop (prod release daemon)
+    cmds:
+      - task: stop
+
+
   live:update:
     desc: Hot-upgrade prod when code changed (auto patch-bump, appup, build, unpack/install/commit); no-op otherwise
     cmds:
@@ -158,7 +94,7 @@ tasks:
           MIX_ENV=prod mix release --overwrite
           mkdir -p artifacts
           cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
-          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz — run task start:live to launch it"
+          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz — run task start to launch it"
           exit 0
         fi
         FROM_TAR=""
@@ -189,7 +125,7 @@ tasks:
           else
             if [ -n "$DIRTY" ]; then
               echo "live:update: non-code changes only — no hot-upgrade needed"
-              echo "(release config applies at boot: task stop:live + task start:live; docs need nothing)"
+              echo "(release config applies at boot: task stop + task start; docs need nothing)"
             else
               echo "live:update: no changes (version $VSN matches $FROM_TAR) — nothing to do"
             fi
@@ -225,7 +161,7 @@ tasks:
             echo "live:update: appup coverage check failed for $FROM_TAR"
             mix castle.appup --from "tar:$FROM_TAR" || true
             echo "change needs manual review (migration, state-shape change, or restart_emulator?)"
-            echo "commit mix.exs + appup.exs and restart instead: task stop:live + task start:live"
+            echo "commit mix.exs + appup.exs and restart instead: task stop + task start"
             exit 1
           fi
           echo "live:update: building prod release $VSN"
@@ -243,7 +179,7 @@ tasks:
           _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
         done
         if ! pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
-          echo "live:update: prod release not running — built $VSN, run task start:live to launch it"
+          echo "live:update: prod release not running — built $VSN, run task start to launch it"
           echo "live:update: remember to commit mix.exs + appup.exs"
           exit 0
         fi
@@ -252,12 +188,12 @@ tasks:
         RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
         if [ -n "$RUN_VSN" ] && [ "$RUN_VSN" != "$FROM_VER" ] && [ "$RUN_VSN" != "$VSN" ]; then
           echo "live:update: prod runs $RUN_VSN but the relup spans $FROM_VER -> $VSN"
-          echo "step through $FROM_VER first, or restart: task stop:live + task start:live"
+          echo "step through $FROM_VER first, or restart: task stop + task start"
           exit 1
         fi
         echo "live:update: hot-upgrading to $VSN"
         "$CASTLE" unpack "$VSN" && "$CASTLE" install "$VSN" && "$CASTLE" commit || (
-          echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start:live)"
+          echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start)"
           exit 1
         )
         echo "live:update: now on $VSN — remember to commit mix.exs + appup.exs"

@@ -8,12 +8,10 @@ the Jita buy wall). The Discord bot feature exists but is currently disabled.
 
 ```sh
 mix setup            # deps.get + ecto.create + ecto.migrate
-mix start            # setup + run --no-halt
-task start           # dev poller detached (nohup, survives terminal close)
-task start:live      # prod release detached (daemon, survives terminal close)
+task start           # prod release detached (daemon, survives terminal close)
+task dev             # interactive shell with the app started (dev, shell-only)
 task live:update     # auto hot-upgrade when code changed (patch-bump + appup + release + unpack/install/commit); no-op otherwise
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
-iex -S mix run       # interactive with app started (migrates automatically)
 mix compile          # compile; use --warnings-as-errors for strict mode
 mix ecto.migrate     # manual migration run (also happens on every boot)
 ```
@@ -26,16 +24,16 @@ the whole flow: no-op when the tree matches the newest shipped baseline
 install), drafts the appup edge from that baseline (`mix castle.appup.gen`),
 verifies coverage, builds (`mix release --overwrite`), stages the tarball,
 then `bin/castle unpack/install/commit` if the prod daemon is running
-(builds + tells you to run `task start:live` if it isn't). `mix.exs`
+(builds + tells you to run `task start` if it isn't). `mix.exs`
 `upgrade_from` always excludes the version being built (self-relups are
 rejected). SemVer — patch = hot-loadable logic, minor =
 feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape.
 Non-code dirt alone never bumps (docs need nothing; release config applies
-at boot, so config-only changes need `task stop:live` + `task start:live`).
+at boot, so config-only changes need `task stop` + `task start`).
 If appup coverage fails (migration, state-shape change), commit and restart
 instead of hot upgrade. Restarts before `commit` return to the
 previous permanent version; `restart_emulator` upgrades exit the emulator,
-so re-run `task start:live` to come back up on the new version. No version bump is needed
+so re-run `task start` to come back up on the new version. No version bump is needed
 for changes delivered via restart instead of hot upgrade.
 
 Docker: `sudo docker build -t marketmailer .` then see the header of the
@@ -45,28 +43,27 @@ Docker: `sudo docker build -t marketmailer .` then see the header of the
 
 Develop against a live running poller, not a cold boot — expiry timers,
 ETS caches, and supervision state only exist in a running VM. The poller
-is always on unless deliberately stopped (detached `task start` /
-`task start:live` processes).
+is the prod release daemon and is always on unless deliberately stopped
+(`task start` / `task stop`); there is no detached dev poller — dev work
+happens in `task dev` (interactive shell) or the test suite.
 
-- Before `mix test` / `mix run` / DB inspection, check for a poller:
+- Before `mix test` / DB inspection, check for the poller:
   `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"`,
   `lsof priv/data/marketmailer.db`.
-- If none exists, start one: `task start` for a manual detached dev
-  run (`task start:live` for the detached prod release). Stop is the
-  only intended off switch: `task stop` for the dev poller
-  (`kill $(cat priv/data/marketmailer.pid)`) / `task stop:live` for the
-  release (`_build/prod/rel/marketmailer/bin/marketmailer stop`).
+- If none exists, start it: `task start` (prod release daemon, survives
+  terminal close). `task stop` (`_build/prod/rel/marketmailer/bin/marketmailer stop`)
+  is the only intended off switch.
 - Talk to the live node instead of booting a second one:
-  `iex --sname debug --remsh marketmailer` for a remote shell on the
-  mix-run poller (`_build/prod/rel/marketmailer/bin/marketmailer remote`
-  for the release — it reads the deployment cookie itself). Upgrades go
+  `_build/prod/rel/marketmailer/bin/marketmailer remote`
+  (it reads the deployment cookie itself). `task dev` boots a second,
+  dev-env node — never point it at the live DB file while the daemon
+  holds it. Upgrades go
   through Castle (`task live:update`, i.e. `bin/castle unpack/install/commit`
   with the auto-derived `mix.exs` version); the old rpc beam-push
   (`mix upgrade.hot`) and `recompile()` hot-loading are removed.
-  No cookie setup exists: mix-run nodes share `~/.erlang.cookie`
-  automatically. Hot upgrade keeps processes, ETS, and
+  Hot upgrade keeps processes, ETS, and
   timers; state-shape changes (GenServer state, ETS tuple shapes) still
-  need a poller restart.
+  need a poller restart (`task stop` + `task start`).
 - Safety while a poller runs: dev tests run fine alongside it — the suite
   uses stubbed ESI fixtures, `start_pollers: false`, and an isolated DB
   (`priv/data/test.db` default, per-suite tmp files). Read-only inspection of the
