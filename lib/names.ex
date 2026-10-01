@@ -91,6 +91,45 @@ defmodule ESI.SystemInfo do
 end
 
 defmodule Universe.Database do
+	import Ecto.Query
+
+	# Local cache read only - never blocks on HTTP, so embed rendering and
+	# the 100ms broadcaster test windows stay fast. Names are seeded at boot
+	# (see seed_region_names/1) and refreshed by the usual lazy backfills.
+	def get_name(id) when is_integer(id) do
+		Database.one(from name in "names", where: name.id == ^id, select: name.name)
+	rescue
+		_ -> nil
+	catch
+		_, _ -> nil
+	end
+
+	def get_name(_), do: nil
+
+	# Bulk-resolves any uncached ids from a known set (e.g. all polled
+	# regions) into the names cache. Safe to fire-and-forget at boot.
+	def seed_region_names(ids) when is_list(ids) do
+		ids = ids |> Enum.filter(&is_integer/1) |> Enum.uniq()
+
+		cached =
+			try do
+				Database.all(from name in "names", where: name.id in ^ids, select: name.id)
+			rescue
+				_ -> []
+			end
+
+		missing = ids -- cached
+
+		case ESI.Names.resolve(missing) do
+			[] -> :ok
+			entries -> upsert_names(entries)
+		end
+	rescue
+		_ -> :ok
+	catch
+		_, _ -> :ok
+	end
+
 	def upsert_names([]), do: :ok
 
 	def upsert_names(entries),

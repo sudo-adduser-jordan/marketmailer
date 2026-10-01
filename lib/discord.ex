@@ -14,7 +14,6 @@ defmodule Discord.Messages do
 	# @icon_corporation "https://images.evetech.net/corporations/98666181/logo?size=64"
 
 	@icon_ "https://images.evetech.net/types/81008/icon?size=64"
-	@icon_elixir "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/elixir.png"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
 	@icon_database "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/database.png"
 
@@ -43,11 +42,7 @@ defmodule Discord.Messages do
 			title: "Server only",
 			description: "This command can only be used inside a server, not in DMs.",
 			color: @color_error,
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
-			}
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
 		}
 	end
 
@@ -65,17 +60,21 @@ defmodule Discord.Messages do
 			},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
-			},
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
 			}
 		}
 	end
 
 	def market_update_failed_embed(summary, reason \\ :refresh_failed) do
-		region = Map.get(summary, :region, "?")
+		region_id = Map.get(summary, :region, "?")
+		region_name = Map.get(summary, :region_name) || Universe.Database.get_name(region_id)
 		failures = Map.get(summary, :failures, [])
+
+		header =
+			if region_name do
+				"**#{region_name} (#{region_id})**"
+			else
+				"**Region #{region_id}**"
+			end
 
 		details =
 			case failures do
@@ -85,7 +84,7 @@ defmodule Discord.Messages do
 
 		%Embed{
 			title: "Market update failed",
-			description: "**Region #{region}**\n#{details}",
+			description: "#{header}\n#{details}",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
@@ -95,10 +94,6 @@ defmodule Discord.Messages do
 			},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
-			},
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
 			}
 		}
 	end
@@ -128,10 +123,6 @@ defmodule Discord.Messages do
 			},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
-			},
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
 			}
 		}
 	end
@@ -153,16 +144,12 @@ defmodule Discord.Messages do
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
-				name: "Marketmailer - Market List",
+				name: "Marketmailer",
 				url: "https://discord.com",
 				icon_url: @icon_success
 			},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
-			},
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
 			}
 		}
 	end
@@ -220,11 +207,7 @@ defmodule Discord.Messages do
 					inline: true
 				},
 				profit_field(item)
-			],
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
-			}
+			]
 		}
 	end
 
@@ -257,10 +240,6 @@ defmodule Discord.Messages do
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database
-			},
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
 			}
 		}
 	end
@@ -278,10 +257,6 @@ defmodule Discord.Messages do
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database
-			},
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
 			}
 		}
 	end
@@ -308,10 +283,6 @@ defmodule Discord.Messages do
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database
-			},
-			footer: %Embed.Footer{
-				text: "Sent with Elixir",
-				icon_url: @icon_elixir
 			}
 		}
 	end

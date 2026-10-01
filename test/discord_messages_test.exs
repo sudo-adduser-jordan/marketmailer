@@ -11,6 +11,26 @@ defmodule Discord.MessagesTest do
 		assert embed.description == "No cached market order was found for **Rifter**."
 	end
 
+	test "prints region name and id in a failure embed" do
+		embed =
+			Discord.Messages.market_update_failed_embed(%{
+				region: 10_000_002,
+				region_name: "The Forge",
+				failures: [%{page: 1, reason: :timeout}]
+			})
+
+		assert %Embed{title: "Market update failed"} = embed
+		assert embed.description =~ "**The Forge (10000002)**"
+		assert embed.description =~ "timeout"
+	end
+
+	test "falls back to region id when the name is unknown" do
+		embed = Discord.Messages.market_update_failed_embed(%{region: "?", failures: []})
+
+		assert embed.description =~ "**Region ?**"
+		assert embed.description =~ "refresh_failed"
+	end
+
 	test "uses the item name and sell price for a market embed" do
 		item = %MarketView{
 			type_id: 1_001,

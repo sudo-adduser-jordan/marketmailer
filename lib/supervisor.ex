@@ -11,6 +11,7 @@ defmodule Marketmailer.RegionManagerSupervisor do
 											]
 											|> Enum.concat()
 											|> Enum.to_list()
+		def region_ids, do: @regions
 		def start_link(_), do: Supervisor.start_link(__MODULE__, [], name: __MODULE__)
 
 		@impl true
