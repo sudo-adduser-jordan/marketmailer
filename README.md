@@ -49,6 +49,20 @@ Pending migrations run automatically on every boot, so containers and
 - **Name resolution** — type/system/station names resolve lazily from ESI
   into local cache tables; no static data dumps needed.
 
+## Database schema
+
+![Database schema](assets/schema.svg)
+
+Editable source: [docs/schema.excalidraw](docs/schema.excalidraw) —
+open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
+`assets/` after edits.
+
+SQLite at `priv/data/marketmailer.db` (WAL, gitignored): `market` order
+cache, `etags` per-page ETag/Expires, lazy `names`/`systems` EVE caches,
+`discord` channel routing, plus the `marketListView` undercut view.
+`MarketView` (`lib/schema.ex`) is a query struct, not a DB view. Arrows
+are logical FKs joined by the app, not DB constraints.
+
 ## System design
 
 ![System design](assets/system-design.svg)
