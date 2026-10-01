@@ -1,6 +1,38 @@
 {
-  ~c"0.1.4",
+  ~c"0.1.5",
   [
+    {~c"0.1.4",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Market.DbWriter: added by this transition.
+       {:add_module, Market.DbWriter},
+       # Discord.Database: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Database},
+       # Etag.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Etag.Database},
+       # Market.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Market.Database},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.PageWorker, {:advanced, []}},
+       # Universe.Database: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Universe.Database}
+     ]},
     {~c"0.1.3",
      [
        # add_module comes first and delete_module last, but changed modules are not
@@ -57,6 +89,39 @@
      ]}
   ],
   [
+    {~c"0.1.4",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Discord.Database: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Database},
+       # Etag.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Etag.Database},
+       # Market.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Market.Database},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.PageWorker, {:advanced, []}},
+       # Universe.Database: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Universe.Database},
+       # Market.DbWriter: removed by this transition. delete_module purges the module and
+       # loads nothing, so never use it for a module the target build still has.
+       {:delete_module, Market.DbWriter}
+     ]},
     {~c"0.1.3",
      [
        # add_module comes first and delete_module last, but changed modules are not

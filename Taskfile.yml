@@ -99,7 +99,10 @@ tasks:
         DEV_DB="priv/data/marketmailer.db"
         PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
         if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
-          mkdir -p "$(dirname "$PROD_DB")"
+          if ! mkdir -p "$(dirname "$PROD_DB")" 2>/dev/null || [ ! -w "$(dirname "$PROD_DB")" ]; then
+            echo "swap: cannot write prod DB dir $(dirname "$PROD_DB") — set MARKETMAILER_DB to a writable path in .env (e.g. priv/data/marketmailer.db)"
+            exit 1
+          fi
           for suffix in "" "-wal" "-shm"; do
             if [ -f "$DEV_DB$suffix" ]; then
               cp "$DEV_DB$suffix" "$PROD_DB$suffix"
@@ -306,6 +309,7 @@ tasks:
       - docker build -t marketmailer .
 
   docker:run:
-    desc: Run the marketmailer Docker image (SQLite volume at marketmailer-data:/data)
+    desc: Run the marketmailer Docker image (database stays in ./priv/data)
     cmds:
-      - docker run --rm -p 443:443 -v marketmailer-data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer
+      - mkdir -p priv/data
+      - docker run --rm -p 443:443 -v ./priv/data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer

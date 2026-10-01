@@ -85,9 +85,9 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
 ## Database policy
 
 - **SQLite only** (`ecto_sqlite3`). File: `priv/data/marketmailer.db`
-  (gitignored, `priv/data/.gitkeep` keeps the directory), override with
-  `MARKETMAILER_DB` env var - useful for
-  mounting a Docker volume. WAL journal mode.
+  (gitignored, `priv/data/.gitkeep` keeps the directory) — single-host
+  prod uses the same in-project file via `MARKETMAILER_DB` in `.env`, and
+  `task docker:run` bind-mounts `./priv/data` for containers. WAL journal mode.
 - **Standard Ecto migrations** live in `priv/repo/migrations`. `Marketmailer.
   Application.start/2` runs pending migrations on every boot before the
   supervision tree starts, so `mix run` and containers never need a separate
