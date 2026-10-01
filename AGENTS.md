@@ -51,8 +51,12 @@ happens in `task dev` (interactive shell) or the test suite.
   `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"`,
   `lsof priv/data/marketmailer.db`.
 - If none exists, start it: `task start` (prod release daemon, survives
-  terminal close). `task stop` (`_build/prod/rel/marketmailer/bin/marketmailer stop`)
-  is the only intended off switch.
+  terminal close). `task stop` stops everything on this host — the prod
+  daemon plus any legacy detached-dev node (no pid archaeology needed) —
+  and is the only intended off switch. First cutover from the old dev
+  poller, or any full restart onto latest code: `task swap` (builds via
+  `live:update`, stops everything, seeds a fresh prod DB from the dev DB
+  when the paths differ, then starts).
 - Talk to the live node instead of booting a second one:
   `_build/prod/rel/marketmailer/bin/marketmailer remote`
   (it reads the deployment cookie itself). `task dev` boots a second,

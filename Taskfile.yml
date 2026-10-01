@@ -41,29 +41,39 @@ tasks:
         echo "started prod release (daemon)"
 
   stop:
-    desc: Stop the prod release daemon
+    desc: Stop everything (prod daemon + any legacy dev node)
     cmds:
       - |
-        # Match only release beams (bundled erts under prod/rel). See `start`
-        # for why this shell and all its ancestors must be excluded.
+        # See `start` for why this shell and all its ancestors must be
+        # excluded from pgrep -f results.
         drop="^$$\$"
         _p=$PPID
         while [ -n "$_p" ] && [ "$_p" != "1" ]; do
           drop="$drop|^${_p}\$"
           _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
         done
+        # Prod daemon first (graceful via its own script).
         LIVE=$(pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" | head -n 1 || true)
-        if [ -z "$LIVE" ]; then
-          echo "prod release not running — nothing to do"
-          exit 0
-        fi
-        BIN=_build/prod/rel/marketmailer/bin/marketmailer
-        if [ -x "$BIN" ]; then
-          "$BIN" stop
+        if [ -n "$LIVE" ]; then
+          BIN=_build/prod/rel/marketmailer/bin/marketmailer
+          if [ -x "$BIN" ]; then
+            "$BIN" stop
+          else
+            /bin/kill "$LIVE"
+          fi
+          echo "stopped prod release (was pid $LIVE)"
         else
-          /bin/kill "$LIVE"
+          echo "prod release not running — nothing to do"
         fi
-        echo "stopped prod release (was pid $LIVE)"
+        # Legacy detached-dev poller (removed workflow: elixir --sname
+        # marketmailer -S mix run). `task dev` shells carry no --sname in
+        # their command line, so they never match; release beams are
+        # excluded by the prod/rel filter (already stopped above).
+        for DEV in $(pgrep -f "sname marketmailer" | grep -Ev "$drop" | grep -Ev "prod/rel/marketmailer" || true); do
+          /bin/kill "$DEV" && echo "stopped legacy dev poller pid $DEV"
+        done
+        # Stale pidfile from the removed detached-dev workflow.
+        rm -f priv/data/marketmailer.pid
 
   start:live:
     desc: Alias for start (prod release detached)
@@ -71,10 +81,35 @@ tasks:
       - task: start
 
   stop:live:
-    desc: Alias for stop (prod release daemon)
+    desc: Alias for stop
     cmds:
       - task: stop
 
+  swap:
+    desc: Cut over to prod on latest code (build, stop everything, seed fresh DB, start)
+    cmds:
+      - task: live:update
+      - task: stop
+      - |
+        # Seed a fresh prod DB from the legacy dev DB so the first boot
+        # reuses warm etags/market cache instead of resweeping all of ESI.
+        # Only when prod has no DB yet, dev has one, and they differ.
+        # Dev is already stopped above, so plain cp is safe (copy -wal/-shm
+        # sidecars too when present — the WAL may hold committed data).
+        DEV_DB="priv/data/marketmailer.db"
+        PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
+        if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
+          mkdir -p "$(dirname "$PROD_DB")"
+          for suffix in "" "-wal" "-shm"; do
+            if [ -f "$DEV_DB$suffix" ]; then
+              cp "$DEV_DB$suffix" "$PROD_DB$suffix"
+            fi
+          done
+          echo "swap: seeded $PROD_DB from $DEV_DB"
+        else
+          echo "swap: no DB seed needed ($PROD_DB)"
+        fi
+      - task: start
 
   live:update:
     desc: Hot-upgrade prod when code changed (auto patch-bump, appup, build, unpack/install/commit); no-op otherwise
