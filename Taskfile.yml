@@ -65,6 +65,17 @@ tasks:
     cmds:
       - mix test.safe
 
+  update:
+    desc: Update all dependencies to latest allowed versions (mix deps.update --all)
+    cmds:
+      - mix deps.update --all
+
+  update:hex:
+    desc: Update Hex and Rebar themselves (mix local.hex)
+    cmds:
+      - mix local.hex --force
+      - mix local.rebar --force
+
   docker:build:
     desc: Build the marketmailer Docker image
     cmds:

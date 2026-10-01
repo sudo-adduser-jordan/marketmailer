@@ -36,7 +36,6 @@ Pending migrations run automatically on every boot, so containers and
 | --- | --- | --- |
 | `DISCORD_TOKEN` | No | Enables the Discord bot. If missing/invalid the bot is skipped with a warning and the rest of the app keeps running. |
 | `MARKETMAILER_DB` | No | Path to the SQLite file (default: `marketmailer.db`). |
-| `PLAYWRIGHT_EXECUTABLE` | No | Playwright CLI name when it is not `playwright` on PATH (used for Janice chart capture). |
 
 <!-- Invite the bot to your server: -->
 <!-- https://discord.com/oauth2/authorize?client_id=1473196121630314689 -->

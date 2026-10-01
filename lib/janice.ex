@@ -41,7 +41,7 @@ defmodule Janice.Supervisor do
 
 	@impl true
 	def init(opts) do
-		executable = Keyword.get(opts, :executable, System.get_env("PLAYWRIGHT_EXECUTABLE", "playwright"))
+		executable = Keyword.get(opts, :executable, "playwright")
 		connection_timeout = Keyword.get(opts, :connection_timeout, 5_000)
 
 		children = [

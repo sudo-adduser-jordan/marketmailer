@@ -26,7 +26,6 @@ ENV MIX_ENV=prod \
 	TERM=dumb \
 	MARKETMAILER_DB=marketmailer.db \
 	PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-	PLAYWRIGHT_EXECUTABLE=playwright \
 	PATH=/opt/playwright/node_modules/.bin:/usr/local/bin:${PATH}
 
 # Copy Node and the Playwright CLI from the Node image so the runtime does not
