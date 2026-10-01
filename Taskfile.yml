@@ -15,9 +15,45 @@ tasks:
       - mix setup
 
   start:
-    desc: Set up and run the app (blocks)
+    desc: Run dev poller detached (nohup, survives terminal close)
     cmds:
-      - mix start
+      - mix setup
+      - mkdir -p logs priv/data
+      - |
+        if pgrep -f "[m]arketmailer" > /dev/null; then
+          echo "poller already running; refusing second start"
+          exit 1
+        fi
+        nohup elixir --sname marketmailer -S mix run --no-halt >> logs/poller.log 2>&1 &
+        echo $! > priv/data/marketmailer.pid
+        echo "started dev poller pid $(cat priv/data/marketmailer.pid) logs/poller.log"
+
+  start:live:
+    desc: Run prod release detached (daemon, survives terminal close)
+    cmds:
+      - MIX_ENV=prod mix release
+      - |
+        if pgrep -f "[m]arketmailer" > /dev/null; then
+          echo "poller already running; refusing second start"
+          exit 1
+        fi
+        _build/prod/rel/marketmailer/bin/marketmailer daemon
+        echo "started prod release (daemon)"
+
+  live:update:
+    desc: Hot-upgrade the running deployment without restart (auto VSN from mix.exs)
+    cmds:
+      - MIX_ENV=prod mix release
+      - mkdir -p artifacts
+      - cp _build/prod/marketmailer-*.tar.gz artifacts/
+      - ls artifacts/
+      - |
+        VSN=$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\(.*\)".*/\1/p' mix.exs | head -n 1)
+        test -n "$VSN" || (echo "could not read version from mix.exs" && exit 1)
+        echo "hot-upgrading to $VSN"
+        _build/prod/rel/marketmailer/bin/castle unpack "$VSN"
+        _build/prod/rel/marketmailer/bin/castle install "$VSN"
+        _build/prod/rel/marketmailer/bin/castle commit
 
   dev:
     desc: Interactive shell with the app started
@@ -74,65 +110,6 @@ tasks:
     desc: Assemble the prod OTP release with Castle hot-upgrade support
     cmds:
       - MIX_ENV=prod mix release
-
-  upgrade:build:
-    desc: "Build the release tarball and stage it under artifacts/ for tar: baselines"
-    cmds:
-      - MIX_ENV=prod mix release
-      - mkdir -p artifacts
-      - cp _build/prod/marketmailer-*.tar.gz artifacts/
-      - ls artifacts/
-
-  upgrade:check:
-    desc: "Validate appup/relup for FROM -> TO (e.g. task upgrade:check FROM=0.1.0 TO=0.1.1)"
-    cmds:
-      - 'test -n "{{.FROM}}" -a -n "{{.TO}}" || (echo "usage: task upgrade:check FROM=<vsn> TO=<vsn>" && exit 1)'
-      - mix castle.appup --from tar:artifacts/marketmailer-{{.FROM}}.tar.gz --to tar:artifacts/marketmailer-{{.TO}}.tar.gz
-      - mix castle.relup --target _build/prod/rel/marketmailer/releases/{{.TO}}/marketmailer --fromto tar:artifacts/marketmailer-{{.FROM}}.tar.gz --dry-run
-
-  upgrade:install:
-    desc: Hot-upgrade the running deployment (bin/castle unpack/install/commit; needs VSN, e.g. task upgrade:install VSN=0.1.1)
-    cmds:
-      - 'test -n "{{.VSN}}" || (echo "usage: task upgrade:install VSN=<vsn>" && exit 1)'
-      - _build/prod/rel/marketmailer/bin/castle unpack {{.VSN}}
-      - _build/prod/rel/marketmailer/bin/castle install {{.VSN}}
-      - _build/prod/rel/marketmailer/bin/castle commit
-
-  upgrade:test:
-    desc: Recompile and run the isolated test suite (stubbed ESI, isolated priv/data/test.db)
-    cmds:
-      - mix compile --warnings-as-errors
-      - mix test.safe
-
-  live:start:
-    desc: Run the poller as a distributed node (attachable; blocks — upgrades via bin/castle)
-    cmds:
-      - elixir --sname marketmailer -S mix run --no-halt
-    interactive: true
-
-  live:start:release:
-    desc: Run the prod release in the foreground (RELEASE_NODE from env; blocks)
-    cmds:
-      - _build/prod/rel/marketmailer/bin/marketmailer foreground
-    interactive: true
-
-  live:attach:
-    desc: Attach to the live mix-run node (read-only inspection; upgrades via bin/castle, not recompile())
-    cmds:
-      - iex --sname debug --remsh marketmailer
-    interactive: true
-
-  live:remote:
-    desc: Attach to the running release (reads the deployment cookie itself; no setup)
-    cmds:
-      - _build/prod/rel/marketmailer/bin/marketmailer remote
-    interactive: true
-
-  upgrade:prod:
-    desc: Build the prod release image and run the Castle deployment (see Dockerfile header)
-    cmds:
-      - docker build -t marketmailer .
-      - docker run --rm -p 443:443 -v marketmailer-data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer
 
   update:
     desc: Update all dependencies to latest allowed versions (mix deps.update --all)

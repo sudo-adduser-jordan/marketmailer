@@ -9,14 +9,10 @@ the Jita buy wall). The Discord bot feature exists but is currently disabled.
 ```sh
 mix setup            # deps.get + ecto.create + ecto.migrate
 mix start            # setup + run --no-halt
-task live:start      # run the poller as a distributed node (attachable; upgrades via bin/castle)
-task live:start:release  # run the prod Castle release in the foreground (blocks)
-task live:attach     # attach to the live mix-run node (read-only inspection; no recompile() hot-load)
-task live:remote     # attach to the running release (bin/marketmailer remote; no setup)
+task start           # dev poller detached (nohup, survives terminal close)
+task start:live      # prod release detached (daemon, survives terminal close)
+task live:update     # hot-upgrade running deployment without restart (auto VSN)
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
-task upgrade:build   # build the release tarball and stage it under artifacts/
-task upgrade:install VSN=0.1.1  # bin/castle unpack/install/commit <vsn> (no restart)
-task upgrade:check   # mix castle.appup + castle.relup --dry-run
 iex -S mix run       # interactive with app started (migrates automatically)
 mix compile          # compile; use --warnings-as-errors for strict mode
 mix ecto.migrate     # manual migration run (also happens on every boot)
@@ -46,8 +42,8 @@ service, see below).
 - Before `mix test` / `mix run` / DB inspection, check for a poller:
   `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"`,
   `lsof priv/data/marketmailer.db`.
-- If none exists, start one: `task live:start` for a manual distributed
-  run (`task live:start:release` for the prod release), or install the
+- If none exists, start one: `task start` for a manual detached dev
+  run (`task start:live` for the detached prod release), or install the
   always-on unit: copy `marketmailer.service`
   to `~/.config/systemd/user/` (adjust paths), then create
   `~/.config/marketmailer/env` (needs `RELEASE_NODE`,
@@ -60,10 +56,11 @@ service, see below).
   from the repo. Stop is the only intended off switch:
   `systemctl --user stop marketmailer` / `rc-service marketmailer stop`.
 - Talk to the live node instead of booting a second one:
-  `task live:attach` for a remote shell on the mix-run poller
-  (`task live:remote` for the release — it reads the deployment cookie
-  itself). Upgrades go through Castle (`task upgrade:build`, then
-  `bin/castle unpack/install/commit <vsn>`); the old rpc beam-push
+  `iex --sname debug --remsh marketmailer` for a remote shell on the
+  mix-run poller (`_build/prod/rel/marketmailer/bin/marketmailer remote`
+  for the release — it reads the deployment cookie itself). Upgrades go
+  through Castle (`task live:update`, i.e. `bin/castle unpack/install/commit`
+  with the auto-derived `mix.exs` version); the old rpc beam-push
   (`mix upgrade.hot`) and `recompile()` hot-loading are removed.
   No cookie setup exists: mix-run nodes share `~/.erlang.cookie`
   automatically. Hot upgrade keeps processes, ETS, and
