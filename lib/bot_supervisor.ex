@@ -9,7 +9,7 @@ defmodule Marketmailer.BotSupervisor do
 		# (wrapped_token). It raises on a missing or invalid token, so catch it
 		# here and :ignore - the bot gets dropped and the rest of the tree runs.
 		bot = Supervisor.child_spec({Nostrum.Bot, opts}, restart: :temporary)
-		{:ok, Supervisor.init([bot], strategy: :one_for_one)}
+		Supervisor.init([bot], strategy: :one_for_one)
 	rescue
 		e ->
 			Marketmailer.Log.warning(
