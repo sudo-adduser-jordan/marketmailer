@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1170" height="760" viewBox="0 0 1170 760" font-family="sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#1e1e1e"/>
+    </marker>
+  </defs>
+  <rect width="1170" height="760" fill="#ffffff"/>
+  <text x="40" y="48" font-size="28" fill="#1e1e1e">Marketmailer — system design</text>
+
+  <g font-size="14" text-anchor="middle">
+    <rect x="40" y="80" width="230" height="150" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="155" y="108" font-weight="bold">ESI (external)</text>
+    <text x="155" y="130">/v1/markets/{region}/orders</text>
+    <text x="155" y="150">/universe/names</text>
+    <text x="155" y="170">system → constell. → region</text>
+    <text x="155" y="190">ETag / Expires / 304</text>
+
+    <rect x="300" y="80" width="270" height="150" rx="8" fill="#d0ebff" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="435" y="108" font-weight="bold">Region pollers</text>
+    <text x="435" y="130">RegionManager / region</text>
+    <text x="435" y="150">PageWorker / page (own TTL)</text>
+    <text x="435" y="170">Page 1 → X-Pages scale</text>
+    <text x="435" y="190">backoff + resume Expires</text>
+
+    <rect x="600" y="80" width="230" height="150" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="715" y="108" font-weight="bold">UpdateCoordinator</text>
+    <text x="715" y="130">region cycle tracker</text>
+    <text x="715" y="150">:updated / :not_modified</text>
+    <text x="715" y="170">:failed names pages</text>
+    <text x="715" y="190">sliding deadline</text>
+
+    <rect x="860" y="80" width="270" height="150" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="995" y="108" font-weight="bold">SQLite (WAL) + ETS</text>
+    <text x="995" y="130">priv/data/marketmailer.db</text>
+    <text x="995" y="150">/data/marketmailer.db (prod)</text>
+    <text x="995" y="170">market / etags / names</text>
+    <text x="995" y="190">systems / discord</text>
+
+    <rect x="40" y="260" width="230" height="150" rx="8" fill="#ffecd2" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="155" y="288" font-weight="bold">Name resolution (lazy)</text>
+    <text x="155" y="310">ESI.Names / SystemInfo</text>
+    <text x="155" y="330">backfill gaps then</text>
+    <text x="155" y="350">re-run query once</text>
+    <text x="155" y="370">no static dumps</text>
+
+    <rect x="300" y="260" width="270" height="150" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="435" y="288" font-weight="bold">Queries (lib/*.sql)</text>
+    <text x="435" y="310">getBestOrder.sql</text>
+    <text x="435" y="330">getItemsLessThan.sql</text>
+    <text x="435" y="350">getMarketItem.sql</text>
+    <text x="435" y="370">LEFT JOIN names/systems</text>
+
+    <rect x="600" y="260" width="230" height="150" rx="8" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="715" y="288" font-weight="bold">Discord bot</text>
+    <text x="715" y="310">BotSupervisor + Broadcaster</text>
+    <text x="715" y="330">Janice charts (Playwright)</text>
+    <text x="715" y="350">slash cmds + embeds</text>
+    <text x="715" y="370">skipped if no token</text>
+
+    <rect x="860" y="260" width="270" height="150" rx="8" fill="#ffe8cc" stroke="#1e1e1e" stroke-width="2"/>
+    <text x="995" y="288" font-weight="bold">Castle release</text>
+    <text x="995" y="310">mix release + artifacts/</text>
+    <text x="995" y="330">tar: baselines, appup.exs</text>
+    <text x="995" y="350">bin/castle unpack/install</text>
+    <text x="995" y="370">commit, restart_emulator</text>
+  </g>
+
+  <g stroke="#1e1e1e" stroke-width="2">
+    <line x1="270" y1="155" x2="298" y2="155" marker-end="url(#arrow)"/>
+    <line x1="570" y1="155" x2="598" y2="155" marker-end="url(#arrow)"/>
+    <line x1="830" y1="155" x2="858" y2="155" marker-end="url(#arrow)"/>
+    <line x1="270" y1="335" x2="298" y2="335" marker-end="url(#arrow)"/>
+    <line x1="570" y1="335" x2="598" y2="335" marker-end="url(#arrow)"/>
+    <line x1="995" y1="230" x2="995" y2="258" marker-end="url(#arrow)"/>
+  </g>
+  <g font-size="13">
+    <text x="40" y="250" fill="#555">poll → persist → track</text>
+    <text x="40" y="430" fill="#555">backfill → query → broadcast • deploy via Castle</text>
+  </g>
+
+  <rect x="40" y="440" width="1090" height="120" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="585" y="468" font-size="14" text-anchor="middle" font-weight="bold">Supervision: Marketmailer.Supervisor → Database, EtagCache, Registry, TaskSup, UpdateCoordinator, Broadcaster, Janice.Supervisor,</text>
+  <text x="585" y="488" font-size="14" text-anchor="middle">PageSup (DynamicSupervisor), RegionManagerSupervisor → RegionManager/region → PageWorker/page, BotSupervisor</text>
+  <text x="585" y="508" font-size="14" text-anchor="middle">Log: JSON console (info+) + logs/errors.jsonl (warning+, 5×10MB). ETS: :market_cache, :esi_error_state.</text>
+
+  <rect x="40" y="580" width="1090" height="110" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="585" y="608" font-size="14" text-anchor="middle" font-weight="bold">Ops: task live:start (mix --sname, ~/.erlang.cookie) + live:attach vs live:start:release + live:remote (release COOKIE)</text>
+  <text x="585" y="628" font-size="14" text-anchor="middle">Docker: -v marketmailer-data:/data, MARKETMAILER_DB=/data/marketmailer.db</text>
+  <text x="585" y="648" font-size="14" text-anchor="middle">test: MIX_ENV=test, priv/data/test.db, stubbed ESI</text>
+</svg>

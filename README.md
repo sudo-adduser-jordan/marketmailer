@@ -49,6 +49,21 @@ Pending migrations run automatically on every boot, so containers and
 - **Name resolution** — type/system/station names resolve lazily from ESI
   into local cache tables; no static data dumps needed.
 
+## System design
+
+![System design](assets/system-design.svg)
+
+Editable source: [docs/system-design.excalidraw](docs/system-design.excalidraw) —
+open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
+`assets/` after edits.
+
+Flow: per-page `PageWorker`s poll ESI with their own ETag/Expires TTL
+(unchanged pages stay cheap `304`s), upsert into SQLite + ETS, report to
+`UpdateCoordinator`; SQL queries `LEFT JOIN` the lazy `names`/`systems`
+caches (backfilled from ESI, then re-run once); results go to Discord
+embeds/broadcasts. See `AGENTS.md` for architecture, database, and logging
+internals.
+
 ## Docker
 
 ```sh
