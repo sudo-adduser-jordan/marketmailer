@@ -17,6 +17,11 @@ mix ecto.migrate     # manual migration run (also happens on every boot)
 Docker: `sudo docker build -t marketmailer .` then see the header of the
 `Dockerfile` for run examples.
 
+Live-process check: before `mix test` / `mix run` / DB inspection, check for
+a running poller (`ps aux | grep -F marketmailer`, `lsof marketmailer.db`).
+Dev tests must not hit live ESI or the live `marketmailer.db` while the
+poller runs — use stubbed ESI fixtures and a separate `MARKETMAILER_DB`.
+
 `mix format` is aliased to `format --check-formatted` and never writes.
 To actually format files: `mix format --no-check-formatted`.
 Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
@@ -102,8 +107,11 @@ then pipe to jq:
   `Market.Database` access modules
 - `lib/names.ex` - `ESI.Names`, `ESI.SystemInfo`, `Universe.Database`
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
-- `lib/manager.ex`, `lib/worker.ex`, `lib/supervisor.ex` - region/page worker
-  tree (per-region GenServers, dynamic page scaling, exponential backoff)
+- `lib/manager.ex`, `lib/supervisor.ex` - per-region sequential workers (one
+  GenServer per region sweeps pages 1..N in order; boot jitter staggers the
+  initial sweep; persist failures report `:failed` instead of crashing)
+- `lib/update_coordinator.ex` - region cycle tracker (sliding deadline per
+  activity; timeout failures name the pending pages, not `page: nil`)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
 - `lib/discord.ex` - nostrum consumer, slash commands, embed builders
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
