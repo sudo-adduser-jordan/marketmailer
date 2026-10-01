@@ -22,3 +22,5 @@ config :marketmailer, :bot_options, %{
 }
 
 config :marketmailer, ecto_repos: [Database]
+
+import_config "#{config_env()}.exs"
