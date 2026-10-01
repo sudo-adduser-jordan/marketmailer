@@ -11,7 +11,7 @@ mix setup            # deps.get + ecto.create + ecto.migrate
 mix start            # setup + run --no-halt
 task start           # dev poller detached (nohup, survives terminal close)
 task start:live      # prod release detached (daemon, survives terminal close)
-task live:update     # hot-upgrade running deployment without restart (auto VSN)
+task live:update     # auto hot-upgrade when code changed (patch-bump + appup + release + unpack/install/commit); no-op otherwise
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
 iex -S mix run       # interactive with app started (migrates automatically)
 mix compile          # compile; use --warnings-as-errors for strict mode
@@ -19,12 +19,21 @@ mix ecto.migrate     # manual migration run (also happens on every boot)
 ```
 
 Hot upgrades use Castle OTP releases (`{:castle, "~> 1.0"}`, release
-`marketmailer`, `appup.exs` + `:appup` compiler): bump `mix.exs` version per
-hot-upgradeable change (SemVer — patch = hot-loadable logic, minor =
-feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape),
-add the appup entry (`mix castle.appup.gen`), list the shipped tarball in
-`upgrade_from` (`tar:artifacts/...`), `mix release`, then
-`bin/castle unpack/install/commit`. Restarts before `commit` return to the
+`marketmailer`, `appup.exs` + `:appup` compiler). `task live:update` automates
+the whole flow: no-op when the tree matches the newest shipped baseline
+(`artifacts/*.tar.gz`, gitignored local staging); otherwise it patch-bumps
+`mix.exs` (a shipped version is frozen — same-version upgrades can never
+install), drafts the appup edge from that baseline (`mix castle.appup.gen`),
+verifies coverage, builds (`mix release --overwrite`), stages the tarball,
+then `bin/castle unpack/install/commit` if the prod daemon is running
+(builds + tells you to run `task start:live` if it isn't). `mix.exs`
+`upgrade_from` always excludes the version being built (self-relups are
+rejected). SemVer — patch = hot-loadable logic, minor =
+feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape.
+Non-code dirt alone never bumps (docs need nothing; release config applies
+at boot, so config-only changes need `task stop:live` + `task start:live`).
+If appup coverage fails (migration, state-shape change), commit and restart
+instead of hot upgrade. Restarts before `commit` return to the
 previous permanent version; `restart_emulator` upgrades exit the emulator,
 so re-run `task start:live` to come back up on the new version. No version bump is needed
 for changes delivered via restart instead of hot upgrade.

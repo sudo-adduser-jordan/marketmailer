@@ -4,7 +4,7 @@ defmodule Marketmailer.MixProject do
 	def project do
 		[
 			app: :marketmailer,
-			version: "0.1.1",
+			version: "0.1.2",
 			elixir: "~> 1.19",
 			appup: "appup.exs",
 			compilers: Mix.compilers() ++ [:appup],
@@ -63,12 +63,20 @@ defmodule Marketmailer.MixProject do
 		]
 	end
 
-	# Baseline release tarballs kept under artifacts/. Add a `tar:` entry
-	# for each shipped version you want to support hot upgrades from.
-	# Missing files are skipped so a fresh checkout still assembles.
+	# Newest shipped tarball older than the version being built (linear
+	# deploys upgrade from the previous release; a relup from a version
+	# to itself can never be installed, so the version being built is
+	# always excluded). Missing files are skipped so a fresh checkout
+	# still assembles; empty means a plain build with no upgrade path.
 	defp upgrade_baselines do
+		vsn = Mix.Project.config()[:version]
+
 		Path.wildcard("artifacts/marketmailer-*.tar.gz")
-		|> Enum.map(&("tar:" <> &1))
+		|> Enum.map(&(&1 |> Path.basename(".tar.gz") |> String.trim_leading("marketmailer-")))
+		|> Enum.filter(&(Version.compare(&1, vsn) == :lt))
+		|> Enum.sort({:desc, Version})
+		|> Enum.take(1)
+		|> Enum.map(&("tar:artifacts/marketmailer-#{&1}.tar.gz"))
 	end
 
 	defp aliases do

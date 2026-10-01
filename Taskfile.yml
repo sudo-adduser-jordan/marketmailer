@@ -141,19 +141,126 @@ tasks:
         echo "stopped prod release (was pid $LIVE)"
 
   live:update:
-    desc: Hot-upgrade the running deployment without restart (auto VSN from mix.exs)
+    desc: Hot-upgrade prod when code changed (auto patch-bump, appup, build, unpack/install/commit); no-op otherwise
     cmds:
-      - MIX_ENV=prod mix release
-      - mkdir -p artifacts
-      - cp _build/prod/marketmailer-*.tar.gz artifacts/
-      - ls artifacts/
       - |
         VSN=$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\(.*\)".*/\1/p' mix.exs | head -n 1)
         test -n "$VSN" || (echo "could not read version from mix.exs" && exit 1)
-        echo "hot-upgrading to $VSN"
-        _build/prod/rel/marketmailer/bin/castle unpack "$VSN"
-        _build/prod/rel/marketmailer/bin/castle install "$VSN"
-        _build/prod/rel/marketmailer/bin/castle commit
+        BIN=_build/prod/rel/marketmailer/bin/marketmailer
+        CASTLE=_build/prod/rel/marketmailer/bin/castle
+        # Shipped baselines (local staging, gitignored). Linear deploys
+        # upgrade from the newest tarball older than the version being
+        # built; that single baseline gets the appup edge and the relup.
+        ALL_TARS=$(ls artifacts/marketmailer-*.tar.gz 2>/dev/null | sort -V || true)
+        DIRTY=$(git status --porcelain || true)
+        if [ -z "$ALL_TARS" ]; then
+          echo "live:update: no shipped baseline — first build, no upgrade path"
+          MIX_ENV=prod mix release --overwrite
+          mkdir -p artifacts
+          cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
+          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz — run task start:live to launch it"
+          exit 0
+        fi
+        FROM_TAR=""
+        for tar in $ALL_TARS; do
+          ver=$(basename "$tar" .tar.gz | sed 's/^marketmailer-//')
+          if [ "$ver" != "$VSN" ] && [ "$(printf '%s\n%s\n' "$ver" "$VSN" | sort -V | head -n 1)" = "$ver" ]; then
+            FROM_TAR="$tar"
+          fi
+        done
+        if [ -z "$FROM_TAR" ]; then
+          echo "live:update: no baseline older than $VSN — building without upgrade path"
+          MIX_ENV=prod mix release --overwrite
+          mkdir -p artifacts
+          cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
+          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz"
+          exit 0
+        fi
+        FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
+        mix compile >/dev/null 2>&1 || (echo "live:update: compile failed" && exit 1)
+        if mix castle.appup --from "tar:$FROM_TAR" >/dev/null 2>&1; then
+          if [ ! -f "artifacts/marketmailer-$VSN.tar.gz" ]; then
+            echo "live:update: version $VSN not built yet — building (no version change needed)"
+            echo "live:update: building prod release $VSN"
+            MIX_ENV=prod mix release --overwrite
+            mkdir -p artifacts
+            cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
+            echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz"
+          else
+            if [ -n "$DIRTY" ]; then
+              echo "live:update: non-code changes only — no hot-upgrade needed"
+              echo "(release config applies at boot: task stop:live + task start:live; docs need nothing)"
+            else
+              echo "live:update: no changes (version $VSN matches $FROM_TAR) — nothing to do"
+            fi
+            exit 0
+          fi
+        else
+          echo "live:update: code differs from $FROM_TAR"
+          # A version whose tarball already shipped is frozen: bump patch so
+          # the relup has a from->to transition (same-version upgrades can
+          # never install).
+          if [ -f "artifacts/marketmailer-$VSN.tar.gz" ]; then
+            NEW_VSN=$(echo "$VSN" | awk -F. '{printf "%s.%s.%d", $1, $2, $3+1}')
+            case "$NEW_VSN" in
+              *.*.*) ;;
+              *) echo "live:update: cannot bump version '$VSN'" && exit 1 ;;
+            esac
+            echo "live:update: $VSN already shipped — bumping mix.exs to $NEW_VSN"
+            sed -i "s/^\([[:space:]]*version:[[:space:]]*\)\".*\"/\1\"$NEW_VSN\"/" mix.exs
+            VSN="$NEW_VSN"
+          fi
+          # Newest tarball older than the (possibly bumped) version.
+          FROM_TAR=$(ls artifacts/marketmailer-*.tar.gz 2>/dev/null | sort -V | tail -n 1)
+          FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
+          # gen drafts edges under the file's top-level tag, which must name
+          # the version being built (mix release refuses anything else).
+          TOP_TAG=$(sed -n 's/^  ~c"\(.*\)",$/\1/p' appup.exs | head -n 1)
+          if [ -n "$TOP_TAG" ] && [ "$TOP_TAG" != "$VSN" ]; then
+            echo "live:update: retargeting appup.exs $TOP_TAG -> $VSN"
+            sed -i "s/^  ~c\"$TOP_TAG\",$/  ~c\"$VSN\",/" appup.exs
+          fi
+          mix castle.appup.gen --from "tar:$FROM_TAR" || (echo "live:update: appup gen failed for $FROM_TAR" && exit 1)
+          if ! mix castle.appup --from "tar:$FROM_TAR" >/dev/null 2>&1; then
+            echo "live:update: appup coverage check failed for $FROM_TAR"
+            mix castle.appup --from "tar:$FROM_TAR" || true
+            echo "change needs manual review (migration, state-shape change, or restart_emulator?)"
+            echo "commit mix.exs + appup.exs and restart instead: task stop:live + task start:live"
+            exit 1
+          fi
+          echo "live:update: building prod release $VSN"
+          MIX_ENV=prod mix release --overwrite
+          mkdir -p artifacts
+          cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
+          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz"
+        fi
+        # See `start` for why this shell and all its ancestors must be
+        # excluded from pgrep -f results.
+        drop="^$$\$"
+        _p=$PPID
+        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
+          drop="$drop|^${_p}\$"
+          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
+        done
+        if ! pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
+          echo "live:update: prod release not running — built $VSN, run task start:live to launch it"
+          echo "live:update: remember to commit mix.exs + appup.exs"
+          exit 0
+        fi
+        # The relup only spans FROM_VER -> VSN: refuse to install onto a node
+        # that skipped the baseline instead of failing opaquely in castle.
+        RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
+        if [ -n "$RUN_VSN" ] && [ "$RUN_VSN" != "$FROM_VER" ] && [ "$RUN_VSN" != "$VSN" ]; then
+          echo "live:update: prod runs $RUN_VSN but the relup spans $FROM_VER -> $VSN"
+          echo "step through $FROM_VER first, or restart: task stop:live + task start:live"
+          exit 1
+        fi
+        echo "live:update: hot-upgrading to $VSN"
+        "$CASTLE" unpack "$VSN" && "$CASTLE" install "$VSN" && "$CASTLE" commit || (
+          echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start:live)"
+          exit 1
+        )
+        echo "live:update: now on $VSN — remember to commit mix.exs + appup.exs"
 
   dev:
     desc: Interactive shell with the app started
