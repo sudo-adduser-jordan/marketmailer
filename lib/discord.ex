@@ -21,6 +21,21 @@ defmodule Discord.Messages do
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
+	# Version badge — SemVer from mix.exs, read at runtime so Castle hot
+	# upgrades show the new version without a restart.
+	defp with_version(%Embed{} = embed) do
+		%{embed | footer: %Embed.Footer{text: "Marketmailer v#{app_version()}"}}
+	end
+
+	defp app_version do
+		case Application.spec(:marketmailer, :vsn) do
+			nil -> Mix.Project.config()[:version] || "0.0.0"
+			vsn when is_list(vsn) -> List.to_string(vsn)
+			vsn when is_binary(vsn) -> vsn
+			_ -> Mix.Project.config()[:version] || "0.0.0"
+		end
+	end
+
 	def get_canvas_graph(type_id, opts \\ []), do: Janice.Capture.capture(type_id, opts)
 
 	def format_margin do
@@ -44,6 +59,7 @@ defmodule Discord.Messages do
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
 		}
+		|> with_version()
 	end
 
 	def error(_interaction) do
@@ -62,6 +78,7 @@ defmodule Discord.Messages do
 				url: @icon_
 			}
 		}
+		|> with_version()
 	end
 
 	def market_update_failed_embed(summary, reason \\ :refresh_failed) do
@@ -96,6 +113,7 @@ defmodule Discord.Messages do
 				url: @icon_
 			}
 		}
+		|> with_version()
 	end
 
 	defp format_failure(%{page: page, reason: reason}) do
@@ -125,6 +143,7 @@ defmodule Discord.Messages do
 				url: @icon_
 			}
 		}
+		|> with_version()
 	end
 
 	def market_list_embed(items) do
@@ -152,6 +171,7 @@ defmodule Discord.Messages do
 				url: @icon_
 			}
 		}
+		|> with_version()
 	end
 
 	defp list_line(item, i) do
@@ -209,6 +229,7 @@ defmodule Discord.Messages do
 				profit_field(item)
 			]
 		}
+		|> with_version()
 	end
 
 	defp profit_field(item) do
@@ -242,6 +263,7 @@ defmodule Discord.Messages do
 				url: @icon_database
 			}
 		}
+		|> with_version()
 	end
 
 	def channel_removed(interaction) do
@@ -259,6 +281,7 @@ defmodule Discord.Messages do
 				url: @icon_database
 			}
 		}
+		|> with_version()
 	end
 
 	def list_channel(record) do
@@ -285,6 +308,7 @@ defmodule Discord.Messages do
 				url: @icon_database
 			}
 		}
+		|> with_version()
 	end
 end
 

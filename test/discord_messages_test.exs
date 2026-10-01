@@ -64,4 +64,36 @@ defmodule Discord.MessagesTest do
 
 		assert embed.thumbnail.url == "attachment://janice-1001.png"
 	end
+
+	test "all embeds carry a SemVer version badge in the footer" do
+		item = %MarketView{
+			type_id: 1_001,
+			item_name: "Tritanium",
+			region_name: "The Forge",
+			system_name: "Jita",
+			security_status: 0.0,
+			price: 10.0,
+			instant_sell_profit: nil
+		}
+
+		embeds = [
+			Discord.Messages.server_only(%{}),
+			Discord.Messages.error(%{}),
+			Discord.Messages.market_update_failed_embed(%{region: "?", failures: []}),
+			Discord.Messages.market_not_found_embed("Rifter"),
+			Discord.Messages.market_list_embed([]),
+			Discord.Messages.market_embed(item),
+			Discord.Messages.add_channel(%{channel_id: 123}),
+			Discord.Messages.channel_removed(%{channel_id: 123}),
+			Discord.Messages.list_channel(%{channel_id: 123}),
+			Discord.Messages.list_channel(nil)
+		]
+
+		assert length(embeds) == 10
+
+		for embed <- embeds do
+			assert %Embed{footer: %Embed.Footer{text: text}} = embed
+			assert text =~ ~r/^Marketmailer v\d+\.\d+\.\d+$/
+		end
+	end
 end
