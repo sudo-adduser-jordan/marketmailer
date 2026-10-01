@@ -7,30 +7,61 @@ defmodule Marketmailer.Application do
 	def start(_type, _args) do
 		configure_file_logger()
 		Marketmailer.Log.info("app_start", %{booted_at: DateTime.utc_now()}, "marketmailer starting")
-		:ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
-		:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
+		ensure_ets(:market_cache, [:named_table, :set, :public, read_concurrency: true])
+		ensure_ets(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 
 		:ok = migrate()
 
-		children = [
-			Database,
-			EtagCache,
-			{Registry, keys: :unique, name: Marketmailer.Registry},
-			{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
-			{Task.Supervisor, name: Marketmailer.TaskSup},
-			Market.UpdateCoordinator,
-			Discord.Broadcaster,
-			Janice.Supervisor,
-			Marketmailer.RegionManagerSupervisor,
-			{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}
-		]
+		children =
+			[
+				Database,
+				EtagCache,
+				{Registry, keys: :unique, name: Marketmailer.Registry},
+				{Task.Supervisor, name: Marketmailer.TaskSup},
+				Market.UpdateCoordinator,
+				Discord.Broadcaster,
+				Janice.Supervisor
+			] ++ poller_children()
 
 		opts = [
 			strategy: :one_for_one,
 			name: Marketmailer.Supervisor
 		]
 
-		Supervisor.start_link(children, opts)
+		{:ok, pid} = Supervisor.start_link(children, opts)
+
+		# Fire-and-forget: one bulk universe/names call caching every polled
+		# region id, so failure embeds can print names from the local table.
+		# Skipped when pollers are disabled (e.g. `config/test.exs`).
+		if pollers_enabled?() do
+			Task.start(fn ->
+				Universe.Database.seed_region_names(Marketmailer.RegionManagerSupervisor.region_ids())
+			end)
+		end
+
+		{:ok, pid}
+	end
+
+	# Test env (`config/test.exs`: `start_pollers: false`) boots only the
+	# database/cache leaves so `mix test` never hits live ESI or Discord.
+	defp poller_children do
+		if pollers_enabled?() do
+			[
+				Marketmailer.RegionManagerSupervisor,
+				{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}
+			]
+		else
+			[]
+		end
+	end
+
+	defp pollers_enabled?, do: Application.get_env(:marketmailer, :start_pollers, true)
+
+	defp ensure_ets(name, opts) do
+		case :ets.whereis(name) do
+			:undefined -> :ets.new(name, opts)
+			_tid -> :ok
+		end
 	end
 
 	# Runs pending priv/repo/migrations on every boot so `mix run`/containers

@@ -73,8 +73,9 @@ defmodule ESI do
 		end
 	end
 
-	def fetch(region, page \\ 1) do
+	def fetch(region, page \\ 1, opts \\ []) do
 		url = "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
+		http_fun = Keyword.get(opts, :http_fun, &Req.get/2)
 		acquire(url)
 		etag = Etag.Database.get_etag(url)
 
@@ -82,7 +83,7 @@ defmodule ESI do
 			[{"User-Agent", @user_agent}] ++
 				if etag, do: [{"If-None-Match", etag}], else: []
 
-		case Req.get(url, headers: headers, pool_timeout: :infinity) do
+		case http_fun.(url, headers: headers, pool_timeout: :infinity) do
 			{:ok, %{status: 200} = response} ->
 				clear_maintenance()
 				release(response.headers, url)
