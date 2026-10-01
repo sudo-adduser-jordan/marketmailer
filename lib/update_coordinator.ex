@@ -61,7 +61,7 @@ defmodule Market.UpdateCoordinator do
 				region_state
 			end
 
-		region_state = schedule_timer(region, region_state, state.cycle_timeout)
+		region_state = refresh_timer(region, region_state, state.cycle_timeout)
 		{:noreply, put_region(state, region, region_state)}
 	end
 
@@ -102,11 +102,13 @@ defmodule Market.UpdateCoordinator do
 	def handle_info({:cycle_timeout, region, timer_token}, state) do
 		case Map.get(state.regions, region) do
 			%{timer: {^timer_token, _timer_handle}} = region_state ->
+				failures = pending_failures(region_state)
+
 				failure = %{
 					region: region,
 					cycle_id: region_state.cycle_id,
 					pages: region_state.expected_pages,
-					failures: [%{page: nil, reason: :cycle_timeout}]
+					failures: failures
 				}
 
 				log_failure(failure)
@@ -189,7 +191,7 @@ defmodule Market.UpdateCoordinator do
 
 			{event, new_cycle(expected_pages)}
 		else
-			{nil, schedule_timer(region, region_state, timeout)}
+			{nil, refresh_timer(region, region_state, timeout)}
 		end
 	end
 
@@ -215,7 +217,27 @@ defmodule Market.UpdateCoordinator do
 		%{region_state | timer: {timer_token, timer_handle}}
 	end
 
-	defp schedule_timer(_region, region_state, _timeout), do: region_state
+	# Sliding deadline: every activity pushes the timeout out so a slow but
+	# progressing sequential sweep doesn't trip a fixed-from-start timer.
+	defp refresh_timer(region, %{timer: nil} = region_state, timeout), do: schedule_timer(region, region_state, timeout)
+
+	defp refresh_timer(region, region_state, timeout) do
+		cancel_timer(region_state)
+		schedule_timer(region, %{region_state | timer: nil}, timeout)
+	end
+
+	# Timeout payload names the pages that never reported, so the Discord
+	# embed shows "Page 3: cycle_timeout" instead of "Page ?".
+	defp pending_failures(%{expected_pages: nil}), do: [%{page: nil, reason: :cycle_timeout}]
+
+	defp pending_failures(%{expected_pages: expected, results: results}) when is_integer(expected) and expected > 0 do
+		pending = for page <- 1..expected//1, not Map.has_key?(results, page), do: page
+
+		case pending do
+			[] -> [%{page: nil, reason: :cycle_timeout}]
+			pages -> Enum.map(pages, &%{page: &1, reason: :cycle_timeout})
+		end
+	end
 
 	defp cancel_timer(%{timer: nil}), do: :ok
 

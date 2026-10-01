@@ -66,8 +66,8 @@ defmodule Market.UpdateCoordinatorTest do
 		Market.UpdateCoordinator.page_started(6, 1, server)
 		Market.UpdateCoordinator.page_result(6, 1, :updated, %{pages: 2}, server)
 
-		assert_receive {:region_refresh_failed, summary}, 250
+		assert_receive {:region_refresh_failed, summary}, 500
 		assert summary.region == 6
-		assert summary.failures == [%{page: nil, reason: :cycle_timeout}]
+		assert summary.failures == [%{page: 2, reason: :cycle_timeout}]
 	end
 end
