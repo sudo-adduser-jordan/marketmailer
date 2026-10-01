@@ -103,7 +103,7 @@ defmodule Marketmailer.Application do
 		end
 	end
 
-	# Every error-level event is appended as pretty JSON to ./logs/errors.jsonl.
+	# Every warning/error-level event is appended as pretty JSON to ./logs/errors.jsonl.
 	# logs/ is removed and recreated on every boot so each run starts clean.
 	# Rotation keeps the five most recent 10 MB archives, compressed on rotate.
 	# A failed handler never stops the app - it only warns (logger_std_h
@@ -122,7 +122,7 @@ defmodule Marketmailer.Application do
 				compress_on_rotate: true,
 				filesync_repeat_interval: 1_000
 			},
-			level: :error,
+			level: :warning,
 			formatter: {Marketmailer.Log.Format, [pretty: true, color: false]}
 		}
 

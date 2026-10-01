@@ -56,7 +56,7 @@ defmodule Marketmailer.Log.Format do
 		* console - `{Marketmailer.Log.Format, [pretty: true, color: true]}` -
 			keys colored per level, values by type for terminal reading.
 		* file - `{Marketmailer.Log.Format, [pretty: true, color: false]}` -
-			plain records in `logs/errors.jsonl`.
+			plain records in `logs/errors.jsonl` (warning and above).
 
 	Records are 4-space indented, back-to-back (no blank line between them),
 	with a stable field order: `level`, `commit`, `ts`, `pid`, `event`, domain

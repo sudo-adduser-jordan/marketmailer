@@ -6,7 +6,7 @@ config :logger, :default_handler,
 	level: :info,
 	formatter: {Marketmailer.Log.Format, [pretty: true, color: true]}
 
-# Error-level events also go to logs/errors.jsonl (see lib/app.ex).
+# Warning/error-level events also go to logs/errors.jsonl (see lib/app.ex).
 
 config :marketmailer, Database,
 	database: System.get_env("MARKETMAILER_DB", "marketmailer.db"),

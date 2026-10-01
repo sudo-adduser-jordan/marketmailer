@@ -83,7 +83,7 @@ queryable fields, no sensitive data in fields). Everything funnels through
   indent) with keys colored per level and values colored by type
   (strings/numbers/booleans) (`config.exs`,
   `:default_handler` level `:info`).
-- **File** — error-level events only, plain pretty JSON to `./logs/errors.jsonl`
+- **File** — warning-level events and above, plain pretty JSON to `./logs/errors.jsonl`
   (rotation: 5 × 10 MB, gz on rotate). `logs/` is removed and recreated on
   every boot.
 
