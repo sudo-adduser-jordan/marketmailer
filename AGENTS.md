@@ -30,9 +30,10 @@ is always on unless deliberately stopped (systemd user unit, see below).
   `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix"`,
   `lsof marketmailer.db`.
 - If none exists, start one: `task live:start` for a manual distributed
-  run, or install the always-on unit: copy `deploy/marketmailer.service`
-  to `~/.config/systemd/user/` (adjust paths), copy `deploy/env.example`
-  to `~/.config/marketmailer/env`, then
+  run, or install the always-on unit: copy `marketmailer.service`
+  to `~/.config/systemd/user/` (adjust paths), then create
+  `~/.config/marketmailer/env` (needs `MARKETMAILER_COOKIE`,
+  `MARKETMAILER_DB`, `DISCORD_TOKEN`), then
   `systemctl --user daemon-reload && systemctl --user enable --now marketmailer`.
   The unit file in the repo is a template only — never enable/start it
   from the repo. Stop is the only intended off switch:
@@ -150,5 +151,5 @@ then pipe to jq:
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
 - `lib/mix/tasks/` - `test.safe` (live-poller guard), `upgrade.hot`
   (compile + rpc hot-load into the live node, no restart)
-- `deploy/` - `marketmailer.service` template (always-on user unit, never
-  loaded from the repo) + `env.example` for `~/.config/marketmailer/env`
+- `marketmailer.service` (repo root) - always-on user-unit template (never
+  loaded from the repo); env file at `~/.config/marketmailer/env`

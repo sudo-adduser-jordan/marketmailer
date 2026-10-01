@@ -8,7 +8,7 @@ defmodule Mix.Tasks.Upgrade.Hot do
 
 	The live node must be distributed with a matching cookie
 	(`MARKETMAILER_COOKIE` env or `~/.config/marketmailer/cookie`; see
-	`task live:start` and `deploy/marketmailer.service`).
+	`task live:start` and `marketmailer.service`).
 
 	Processes keep their current state: safe for logic-only changes. State
 	shape changes (GenServer state, ETS tuple shapes) need a poller restart.
