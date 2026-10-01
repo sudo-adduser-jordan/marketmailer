@@ -45,7 +45,7 @@ service, see below).
 
 - Before `mix test` / `mix run` / DB inspection, check for a poller:
   `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"`,
-  `lsof marketmailer.db`.
+  `lsof priv/data/marketmailer.db`.
 - If none exists, start one: `task live:start` for a manual distributed
   run (`task live:start:release` for the prod release), or install the
   always-on unit: copy `marketmailer.service`
@@ -71,11 +71,11 @@ service, see below).
   need a poller restart.
 - Safety while a poller runs: dev tests run fine alongside it — the suite
   uses stubbed ESI fixtures, `start_pollers: false`, and an isolated DB
-  (`test.db` default, per-suite tmp files). Read-only inspection of the
+  (`priv/data/test.db` default, per-suite tmp files). Read-only inspection of the
   live DB is fine (WAL mode allows concurrent readers); never write to it
   from dev/test tooling. `mix test.safe` allows a live poller when the
   test DB is isolated and refuses only on a DB collision
-  (`MARKETMAILER_DB=marketmailer.db` while a poller holds it).
+  (`MARKETMAILER_DB=priv/data/marketmailer.db` while a poller holds it).
 
 `mix format` is aliased to `format --check-formatted` and never writes.
 To actually format files: `mix format --no-check-formatted`.
@@ -85,8 +85,9 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
 
 ## Database policy
 
-- **SQLite only** (`ecto_sqlite3`). File: `marketmailer.db` at the working
-  directory (gitignored), override with `MARKETMAILER_DB` env var - useful for
+- **SQLite only** (`ecto_sqlite3`). File: `priv/data/marketmailer.db`
+  (gitignored, `priv/data/.gitkeep` keeps the directory), override with
+  `MARKETMAILER_DB` env var - useful for
   mounting a Docker volume. WAL journal mode.
 - **Standard Ecto migrations** live in `priv/repo/migrations`. `Marketmailer.
   Application.start/2` runs pending migrations on every boot before the

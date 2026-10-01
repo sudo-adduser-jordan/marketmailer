@@ -9,7 +9,7 @@ config :logger, :default_handler,
 # Warning/error-level events also go to logs/errors.jsonl (see lib/app.ex).
 
 config :marketmailer, Database,
-	database: System.get_env("MARKETMAILER_DB", "marketmailer.db"),
+	database: System.get_env("MARKETMAILER_DB", "priv/data/marketmailer.db"),
 	priv: "priv/repo",
 	journal_mode: :wal,
 	busy_timeout: 5000,

@@ -27,7 +27,7 @@ mix start
 
 Pending migrations run automatically on every boot, so containers and
 `mix run` never need a separate migrate step. The database file is
-`marketmailer.db` in the working directory (gitignored); override with
+`priv/data/marketmailer.db` (gitignored); override with
 `MARKETMAILER_DB` (useful for mounting a Docker volume).
 
 ## Configuration
@@ -35,7 +35,7 @@ Pending migrations run automatically on every boot, so containers and
 | Variable | Required | Description |
 | --- | --- | --- |
 | `DISCORD_TOKEN` | No | Enables the Discord bot. If missing/invalid the bot is skipped with a warning and the rest of the app keeps running. |
-| `MARKETMAILER_DB` | No | Path to the SQLite file (default: `marketmailer.db`). |
+| `MARKETMAILER_DB` | No | Path to the SQLite file (default: `priv/data/marketmailer.db`). |
 
 <!-- Invite the bot to your server: -->
 <!-- https://discord.com/oauth2/authorize?client_id=1473196121630314689 -->

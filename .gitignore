@@ -26,13 +26,11 @@ marketmailer-*.tar
 
 .env
 
-# sqlite database files
-/marketmailer.db
-/marketmailer.db-shm
-/marketmailer.db-wal
-/test.db
-/test.db-shm
-/test.db-wal
+# sqlite database files (live + test defaults under priv/data/)
+/priv/data/*.db
+/priv/data/*.db-shm
+/priv/data/*.db-wal
+!/priv/data/.gitkeep
 
 # structured JSON logs (errors.jsonl + rotated archives)
 /logs/

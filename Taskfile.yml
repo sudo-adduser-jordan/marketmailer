@@ -61,7 +61,7 @@ tasks:
       - mix test
 
   test:safe:
-    desc: Test in MIX_ENV=test alongside a live poller when DB-isolated (stubbed ESI, test.db)
+    desc: Test in MIX_ENV=test alongside a live poller when DB-isolated (stubbed ESI, priv/data/test.db)
     cmds:
       - mix test.safe
 
@@ -94,7 +94,7 @@ tasks:
       - _build/prod/rel/marketmailer/bin/castle commit
 
   upgrade:test:
-    desc: Recompile and run the isolated test suite (stubbed ESI, isolated test.db)
+    desc: Recompile and run the isolated test suite (stubbed ESI, isolated priv/data/test.db)
     cmds:
       - mix compile --warnings-as-errors
       - mix test.safe

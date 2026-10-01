@@ -7,11 +7,11 @@ defmodule Mix.Tasks.Test.Safe do
 
 	The suite never touches the live poller: `config/test.exs` disables
 	pollers (`start_pollers: false`), stubs ESI (maintenance ETS + fixtures),
-	and defaults to an isolated `test.db` (or per-suite tmp files). A live
+	and defaults to an isolated `priv/data/test.db` (or per-suite tmp files). A live
 	poller — `mix run` or a Castle release (`bin/marketmailer`) — is therefore
 	allowed to keep running as long as the test DB file is isolated from the
-	live `marketmailer.db`. Refusal happens only on a DB collision (e.g.
-	`MARKETMAILER_DB=marketmailer.db` while a poller holds it).
+	live `priv/data/marketmailer.db`. Refusal happens only on a DB collision (e.g.
+	`MARKETMAILER_DB=priv/data/marketmailer.db` while a poller holds it).
 
 	A stale `-wal`/`-shm` sidecar alone is only a warning: WAL files can
 	linger after an unclean shutdown without any live holder.
@@ -19,13 +19,13 @@ defmodule Mix.Tasks.Test.Safe do
 
 	use Mix.Task
 
-	@live_db "marketmailer.db"
+	@live_db "priv/data/marketmailer.db"
 
 	@impl true
 	def run(args) do
 		# What the test run will actually use: explicit env wins, otherwise
-		# config/test.exs defaults to test.db (never the live default).
-		test_db = System.get_env("MARKETMAILER_DB", "test.db")
+		# config/test.exs defaults to priv/data/test.db (never the live default).
+		test_db = System.get_env("MARKETMAILER_DB", "priv/data/test.db")
 
 		cond do
 			!poller_running?() ->
@@ -40,7 +40,7 @@ defmodule Mix.Tasks.Test.Safe do
 					"Refusing: a live poller seems to be running and the test DB " <>
 						"#{test_db} collides with the live #{@live_db} " <>
 						"(see `ps aux | grep -F marketmailer`). Unset MARKETMAILER_DB " <>
-						"(tests default to isolated test.db) or point it at a tmp file."
+						"(tests default to isolated priv/data/test.db) or point it at a tmp file."
 				)
 
 				exit({:shutdown, 1})

@@ -4,7 +4,7 @@ defmodule Etag.ExpiryTest do
 	use ExUnit.Case, async: false
 
 	setup_all do
-		# Use the app-booted test repo (pollers disabled, isolated test.db):
+		# Use the app-booted test repo (pollers disabled, isolated priv/data/test.db):
 		# reconfiguring Database here would poison the shared repo for the
 		# rest of the suite. Migration is idempotent. Market.DatabaseTest
 		# stops/restarts the shared repo in its lifecycle, so wait for it.

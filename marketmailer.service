@@ -16,7 +16,7 @@ EnvironmentFile=-%h/.config/marketmailer/env
 # Release distribution + app config come from the EnvironmentFile:
 #   RELEASE_DISTRIBUTION=sname
 #   RELEASE_NODE=marketmailer
-#   MARKETMAILER_DB=/absolute/path/marketmailer.db (defaults to /data/marketmailer.db in containers, ./marketmailer.db under mix)
+#   MARKETMAILER_DB=/absolute/path/marketmailer.db (defaults to /data/marketmailer.db in containers, ./priv/data/marketmailer.db under mix)
 #   DISCORD_TOKEN=... (bot is skipped with a warning when missing/invalid)
 # Restart=on-failure is required: Castle `restart_emulator` upgrades exit the
 # emulator and rely on the supervisor to start the new version.
