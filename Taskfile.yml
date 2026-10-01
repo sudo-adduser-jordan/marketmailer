@@ -1,0 +1,71 @@
+version: "3"
+
+dotenv: [".env"]
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  setup:
+    desc: Install deps and set up the database (deps.get + ecto.create + ecto.migrate)
+    cmds:
+      - mix setup
+
+  start:
+    desc: Set up and run the app (blocks)
+    cmds:
+      - mix start
+
+  dev:
+    desc: Interactive shell with the app started
+    cmds:
+      - iex -S mix run
+    interactive: true
+
+  compile:
+    desc: Compile the project
+    cmds:
+      - mix compile
+
+  compile:strict:
+    desc: Compile with warnings as errors
+    cmds:
+      - mix compile --warnings-as-errors
+
+  format:
+    desc: Check formatting (does not write)
+    cmds:
+      - mix format
+
+  format:write:
+    desc: Write formatting in place
+    cmds:
+      - mix format --no-check-formatted
+
+  migrate:
+    desc: Run pending Ecto migrations
+    cmds:
+      - mix ecto.migrate
+
+  rollback:
+    desc: Roll back the last Ecto migration
+    cmds:
+      - mix ecto.rollback
+
+  test:
+    desc: Run the test suite
+    cmds:
+      - mix test
+
+  docker:build:
+    desc: Build the marketmailer Docker image
+    cmds:
+      - docker build -t marketmailer .
+
+  docker:run:
+    desc: Run the marketmailer Docker image (SQLite volume at marketmailer-data:/data)
+    cmds:
+      - docker run --rm -p 443:443 -v marketmailer-data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer
