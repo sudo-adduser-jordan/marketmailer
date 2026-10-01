@@ -85,7 +85,7 @@ defmodule ESI do
 			[{"User-Agent", @user_agent}] ++
 				if etag, do: [{"If-None-Match", etag}], else: []
 
-		case http_fun.(url, headers: headers, pool_timeout: :infinity) do
+		case http_fun.(url, headers: headers, pool_timeout: :infinity, retry_log_level: :info) do
 			{:ok, %{status: 200} = response} ->
 				clear_maintenance()
 				release(response.headers, url)
