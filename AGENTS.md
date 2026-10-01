@@ -25,8 +25,8 @@ feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape),
 add the appup entry (`mix castle.appup.gen`), list the shipped tarball in
 `upgrade_from` (`tar:artifacts/...`), `mix release`, then
 `bin/castle unpack/install/commit`. Restarts before `commit` return to the
-previous permanent version; `restart_emulator` upgrades rely on the
-systemd/OpenRC supervisor to restart the process. No version bump is needed
+previous permanent version; `restart_emulator` upgrades exit the emulator,
+so re-run `task start:live` to come back up on the new version. No version bump is needed
 for changes delivered via restart instead of hot upgrade.
 
 Docker: `sudo docker build -t marketmailer .` then see the header of the
@@ -36,25 +36,17 @@ Docker: `sudo docker build -t marketmailer .` then see the header of the
 
 Develop against a live running poller, not a cold boot — expiry timers,
 ETS caches, and supervision state only exist in a running VM. The poller
-is always on unless deliberately stopped (systemd user unit or OpenRC
-service, see below).
+is always on unless deliberately stopped (detached `task start` /
+`task start:live` processes).
 
 - Before `mix test` / `mix run` / DB inspection, check for a poller:
   `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"`,
   `lsof priv/data/marketmailer.db`.
 - If none exists, start one: `task start` for a manual detached dev
-  run (`task start:live` for the detached prod release), or install the
-  always-on unit: copy `marketmailer.service`
-  to `~/.config/systemd/user/` (adjust paths), then create
-  `~/.config/marketmailer/env` (needs `RELEASE_NODE`,
-  `MARKETMAILER_DB`, `DISCORD_TOKEN`), then
-  `systemctl --user daemon-reload && systemctl --user enable --now marketmailer`.
-  OpenRC: copy `marketmailer.openrc` to `/etc/init.d/marketmailer`
-  (chmod +x) and `marketmailer.openrc.conf.example` to
-  `/etc/conf.d/marketmailer`, then `rc-update add marketmailer default`.
-  The unit files in the repo are templates only — never enable/start them
-  from the repo. Stop is the only intended off switch:
-  `systemctl --user stop marketmailer` / `rc-service marketmailer stop`.
+  run (`task start:live` for the detached prod release). Stop is the
+  only intended off switch: `kill $(cat priv/data/marketmailer.pid)` for
+  the dev poller / `_build/prod/rel/marketmailer/bin/marketmailer stop`
+  for the release.
 - Talk to the live node instead of booting a second one:
   `iex --sname debug --remsh marketmailer` for a remote shell on the
   mix-run poller (`_build/prod/rel/marketmailer/bin/marketmailer remote`
@@ -173,10 +165,6 @@ then pipe to jq:
 - `lib/mix/tasks/` - `test.safe` (runs the suite in `MIX_ENV=test`;
   allows a live poller when the test DB is isolated, refuses only on DB
   collision)
-- `marketmailer.service` (repo root) - always-on systemd user-unit template
-  (never loaded from the repo); env file at `~/.config/marketmailer/env`
-- `marketmailer.openrc` + `marketmailer.openrc.conf.example` - OpenRC
-  service + conf templates (`/etc/init.d/marketmailer`, `/etc/conf.d/marketmailer`)
 - `appup.exs` - Castle appup source (SemVer; bump `mix.exs` version + add an
   entry per hot-upgradeable change); `config/runtime.exs` - release runtime
   config resolved by Castle before boot/install; `artifacts/` - staged
