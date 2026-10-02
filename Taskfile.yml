@@ -226,6 +226,10 @@ tasks:
           exit 1
         fi
         echo "live:update: hot-upgrading to $VSN"
+        # castle unpack reads the tarball from the release's own releases/
+        # dir, but `mix release` leaves it at _build/prod/. Stage it over
+        # (this path mismatch is what used to fail unpack with :no_such_file).
+        cp "artifacts/marketmailer-$VSN.tar.gz" "_build/prod/rel/marketmailer/releases/"
         "$CASTLE" unpack "$VSN" && "$CASTLE" install "$VSN" && "$CASTLE" commit || (
           echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start)"
           exit 1
