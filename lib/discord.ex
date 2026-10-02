@@ -81,50 +81,6 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	def market_update_failed_embed(summary, reason \\ :refresh_failed) do
-		region_id = Map.get(summary, :region, "?")
-		region_name = Map.get(summary, :region_name) || Universe.Database.get_name(region_id)
-		failures = Map.get(summary, :failures, [])
-
-		header =
-			if region_name do
-				"**#{region_name} (#{region_id})**"
-			else
-				"**Region #{region_id}**"
-			end
-
-		details =
-			case failures do
-				[] -> "Reason: #{format_reason(reason)}"
-				failures -> Enum.map_join(failures, "\n", &format_failure/1)
-			end
-
-		%Embed{
-			title: "Market update failed",
-			description: "#{header}\n#{details}",
-			color: @color_error,
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: %Embed.Author{
-				name: "Marketmailer - Update Failure",
-				url: "https://discord.com",
-				icon_url: @icon_error
-			},
-			thumbnail: %Embed.Thumbnail{
-				url: @icon_
-			}
-		}
-		|> with_version()
-	end
-
-	defp format_failure(%{page: page, reason: reason}) do
-		"Page #{page || "?"}: #{format_reason(reason)}"
-	end
-
-	defp format_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
-	defp format_reason(reason) when is_integer(reason), do: Integer.to_string(reason)
-	defp format_reason(reason) when is_binary(reason), do: String.slice(reason, 0, 120)
-	defp format_reason(_reason), do: "unknown error"
-
 	def market_not_found_embed(item_name) do
 		item_name = if is_binary(item_name), do: String.trim(item_name), else: ""
 		item_name = if item_name == "", do: "that item", else: item_name

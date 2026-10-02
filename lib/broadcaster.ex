@@ -1,6 +1,9 @@
 defmodule Discord.Broadcaster do
 	@moduledoc """
 	Listens for completed market refreshes and sends embeds to registered channels.
+	Failed refreshes are log-only (the coordinator already emits a
+	`region_refresh_failed` warning to `logs/errors.jsonl`); nothing is sent
+	to Discord for them so one flaky page cannot spam every channel.
 	"""
 
 	use GenServer
@@ -38,11 +41,15 @@ defmodule Discord.Broadcaster do
 
 	@impl true
 	def handle_info({:region_refresh_complete, summary}, state) do
-		start_refresh(summary, :success, state)
+		start_refresh(summary, state)
 	end
 
-	def handle_info({:region_refresh_failed, summary}, state) do
-		start_refresh(summary, :failure, state)
+	# Failures are intentionally log-only: UpdateCoordinator already logs
+	# `region_refresh_failed`. Sending an embed per failed cycle spammed
+	# every registered channel on transient 429/503/timeouts and on every
+	# 10-minute cycle_timeout.
+	def handle_info({:region_refresh_failed, _summary}, state) do
+		{:noreply, state}
 	end
 
 	def handle_info({:broadcast_done, key, result}, state) do
@@ -54,7 +61,7 @@ defmodule Discord.Broadcaster do
 	@impl true
 	def handle_cast(message, state), do: handle_info(message, state)
 
-	defp start_refresh(summary, kind, state) do
+	defp start_refresh(summary, state) do
 		key = {Map.get(summary, :region), Map.get(summary, :cycle_id)}
 
 		if MapSet.member?(state.pending, key) or MapSet.member?(state.seen, key) do
@@ -63,19 +70,19 @@ defmodule Discord.Broadcaster do
 			state = %{state | pending: MapSet.put(state.pending, key)}
 
 			if state.async do
-				start_async_refresh(state, key, summary, kind)
+				start_async_refresh(state, key, summary)
 			else
-				result = safely_process_refresh(summary, kind, state)
+				result = safely_process_refresh(summary, state)
 				{:noreply, complete_refresh(state, key, result)}
 			end
 		end
 	end
 
-	defp start_async_refresh(state, key, summary, kind) do
+	defp start_async_refresh(state, key, summary) do
 		owner = self()
 
 		case Task.Supervisor.start_child(state.task_supervisor, fn ->
-					 result = safely_process_refresh(summary, kind, state)
+					 result = safely_process_refresh(summary, state)
 					 send(owner, {:broadcast_done, key, result})
 				 end) do
 			{:ok, _pid} ->
@@ -116,15 +123,18 @@ defmodule Discord.Broadcaster do
 		%{state | pending: MapSet.delete(state.pending, key), seen: seen}
 	end
 
-	defp safely_process_refresh(summary, kind, state) do
-		process_refresh(summary, kind, state)
+	defp safely_process_refresh(summary, state) do
+		process_refresh(summary, state)
 	rescue
 		error -> {:error, Exception.message(error)}
 	catch
 		:exit, reason -> {:error, inspect(reason)}
 	end
 
-	defp process_refresh(summary, :success, state) do
+	# Discord only announces success. An empty/invalid market result means
+	# "nothing worth posting", not something every channel should be pinged
+	# about — log it and stay silent.
+	defp process_refresh(summary, state) do
 		case fetch_channels(state) do
 			{:ok, []} ->
 				{:ok, :no_channels}
@@ -135,23 +145,18 @@ defmodule Discord.Broadcaster do
 						{embed, file} = success_payload(item, state)
 						deliver_all(channels, embed, file, state)
 
-					{:error, :no_market_item} ->
-						failure_all(channels, summary, :no_market_item, state)
-
 					{:error, reason} ->
-						failure_all(channels, summary, reason, state)
+						Marketmailer.Log.warning(
+							"broadcast_no_market_item",
+							%{region: Map.get(summary, :region), reason: inspect(reason)},
+							"Skipping Discord broadcast: no market item"
+						)
+
+						{:ok, :no_market_item}
 				end
 
 			{:error, reason} ->
 				{:error, reason}
-		end
-	end
-
-	defp process_refresh(summary, :failure, state) do
-		case fetch_channels(state) do
-			{:ok, []} -> {:ok, :no_channels}
-			{:ok, channels} -> failure_all(channels, summary, :refresh_failed, state)
-			{:error, reason} -> {:error, reason}
 		end
 	end
 
@@ -219,11 +224,6 @@ defmodule Discord.Broadcaster do
 					{:error, reason}
 			end
 		end)
-	end
-
-	defp failure_all(channels, summary, reason, state) do
-		embed = Messages.market_update_failed_embed(summary, reason)
-		deliver_all(channels, embed, nil, state)
 	end
 
 	defp message_payload(embed, nil), do: %{embeds: [embed], allowed_mentions: :none}

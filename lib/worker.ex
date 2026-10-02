@@ -96,7 +96,7 @@ defmodule Marketmailer.PageWorker do
 
 					{:error, reason} ->
 						Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: reason})
-						schedule_next(backoff_ms(state.errors))
+						schedule_next(backoff_ms(state.errors, {id, page}))
 						{:noreply, %{state | errors: state.errors + 1}}
 				end
 
@@ -136,7 +136,7 @@ defmodule Marketmailer.PageWorker do
 				{:noreply, %{state | errors: 0}}
 
 			{:error, reason} ->
-				delay = backoff_ms(errs)
+				delay = backoff_ms(errs, {id, page})
 				schedule_next(delay)
 
 				Marketmailer.Log.warning(
@@ -198,6 +198,42 @@ defmodule Marketmailer.PageWorker do
 	# so one failure cannot fill the error-log rotation with placeholders.
 	defp first_line(e), do: e |> Exception.message() |> String.split("\n") |> List.first()
 
+	# Transport-level failures (DNS, TCP reset, TLS close, timeouts, no
+	# route to host) mean the pipe is down, not that ESI rejected us. Report
+	# a stable :offline reason so coordinator logs stay greppable instead of
+	# a different struct dump per HTTP client, and keep counting against the
+	# exponential backoff so a dead link backs off to 5m instead of hammering
+	# it once a minute from every page worker.
+	defp failure_reason(%{reason: inner}) when is_atom(inner) do
+		if inner in [:nxdomain, :econnrefused, :econnreset, :etimedout, :timeout, :closed, :ehostunreach, :enetunreach] do
+			:offline
+		else
+			inner
+		end
+	end
+
+	defp failure_reason(%{__exception__: true} = error) do
+		module = error.__struct__ |> Module.split() |> List.last() |> String.downcase()
+
+		if String.contains?(module, ["transport", "mint", "finch", "req", "http", "connection"]) or
+				 Exception.message(error)
+				 |> String.downcase()
+				 |> String.contains?([
+					 "nxdomain",
+					 "network",
+					 "connection",
+					 "closed",
+					 "timeout",
+					 "unreachable",
+					 "econnrefused",
+					 "ehostunreach"
+				 ]) do
+			:offline
+		else
+			:unknown
+		end
+	end
+
 	defp failure_reason(reason) when is_atom(reason) or is_binary(reason), do: reason
 	defp failure_reason(reason) when is_integer(reason), do: reason
 	defp failure_reason(_reason), do: :unknown
@@ -223,7 +259,14 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
-	defp backoff_ms(errors), do: (60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
+
+	# Exponential backoff (1m, 2m, 4m, capped at 5m) plus per-page jitter so
+	# every worker does not reconnect in the same millisecond when the link
+	# or ESI comes back.
+	defp backoff_ms(errors, jitter_key) do
+		base = (60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
+		base + :erlang.phash2(jitter_key, 30_000)
+	end
 
 	def format_ttl(ttl_ms) do
 		total_seconds = div(ttl_ms, 1_000)

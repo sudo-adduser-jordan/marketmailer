@@ -34,42 +34,29 @@ defmodule Discord.BroadcasterTest do
 		assert Process.alive?(broadcaster)
 	end
 
-	test "broadcasts a failure embed for a failed refresh", %{coordinator: coordinator} do
-		test_pid = self()
-
+	test "ignores a failed refresh without notifying Discord", %{coordinator: coordinator} do
 		_broadcaster =
 			start_broadcaster(coordinator, [300], market_item(), fn channel, payload ->
-				send(test_pid, {:sent, channel, payload})
+				send(self(), {:sent, channel, payload})
 				{:ok, :sent}
 			end)
 
 		Market.UpdateCoordinator.page_started(11, 1, coordinator)
 		Market.UpdateCoordinator.page_result(11, 1, :failed, %{pages: 1, reason: :timeout}, coordinator)
 
-		assert_receive {:sent, 300, payload}
-		assert payload.allowed_mentions == :none
-		assert [embed] = payload.embeds
-		assert embed.title == "Market update failed"
-		assert embed.description =~ "Region 11"
-		assert embed.description =~ "timeout"
-		refute Map.has_key?(payload, :files)
+		refute_receive {:sent, _channel, _payload}, 150
 	end
 
-	test "sends a failure embed when the market query has no item", %{coordinator: coordinator} do
-		test_pid = self()
-
+	test "stays silent when the market query has no item", %{coordinator: coordinator} do
 		_broadcaster =
 			start_broadcaster(coordinator, [400], [], fn channel, payload ->
-				send(test_pid, {:sent, channel, payload})
+				send(self(), {:sent, channel, payload})
 				{:ok, :sent}
 			end)
 
 		complete_cycle(coordinator, 12, :updated)
 
-		assert_receive {:sent, 400, payload}
-		assert [embed] = payload.embeds
-		assert embed.title == "Market update failed"
-		assert embed.description =~ "no_market_item"
+		refute_receive {:sent, _channel, _payload}, 150
 	end
 
 	test "does nothing when no channels are registered", %{coordinator: coordinator} do
