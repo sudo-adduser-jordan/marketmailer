@@ -214,8 +214,9 @@ defmodule Discord.Messages do
 	defp price_value(price), do: ansi_block(@ansi_green, "#{format_isk(price)} ISK")
 
 	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
-		market_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
-		reference_url = "https://everef.net/types/#{item.type_id}"
+		janice_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
+		eve_ref_url = "https://everef.net/types/#{item.type_id}"
+		eve_tycoon_url = "https://evetycoon.com/market/#{item.type_id}"
 		# Per-item icon from the EVE image server; Discord loads it, so the
 		# lookup stays a single instant DB query with no capture/fetch.
 		type_icon = "https://images.evetech.net/types/#{item.type_id}/icon?size=64"
@@ -223,7 +224,7 @@ defmodule Discord.Messages do
 		%Embed{
 			title: item.item_name || "Market order",
 			description: "
-						[Market](#{market_url}) [Reference](#{reference_url})
+						[Janice](#{janice_url}) [Eve Ref](#{eve_ref_url}) [Eve Tycoon](#{eve_tycoon_url})
 						",
 			# url: "https://discord.com",
 			color: embed_color(item.instant_sell_profit),

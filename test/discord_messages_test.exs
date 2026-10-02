@@ -34,6 +34,9 @@ defmodule Discord.MessagesTest do
 		assert fields["Buy"] == "```ansi\n\e[32m110.00 ISK\e[0m\n```"
 		assert fields["Margin"] == "```ansi\n\e[32m+1000.00 ISK\e[0m\n```"
 		assert embed.description =~ "janice.e-351.com/i/1001/market/2"
+		assert embed.description =~ "[Janice](https://janice.e-351.com/i/1001/market/2)"
+		assert embed.description =~ "[Eve Ref](https://everef.net/types/1001)"
+		assert embed.description =~ "[Eve Tycoon](https://evetycoon.com/market/1001)"
 		assert embed.color == 0x43B581
 	end
 
