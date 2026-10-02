@@ -102,7 +102,9 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	def market_list_embed(items) do
+	def market_list_embed(nil), do: market_list_embed([])
+
+	def market_list_embed(items) when is_list(items) do
 		lines = items |> Enum.with_index(1) |> Enum.map(fn {item, i} -> list_line(item, i) end)
 		description = truncate_lines(lines, "")
 
@@ -130,11 +132,18 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	defp list_line(item, i) do
-		name = item[:item] || "?"
-		location = item[:location_name] || item[:system_name] || "?"
+	def market_list_embed(_), do: market_list_embed([])
 
-		"#{i}. **#{name}** — sell #{format_isk(item[:sell_price])} / buy #{format_isk(item[:buy_price])} | +#{format_isk(item[:margin])} ISK @ #{location}"
+	defp list_field(item, atom_key, string_key) do
+		atom_val = if is_map(item), do: Map.get(item, atom_key)
+		if atom_val == nil, do: if(is_map(item), do: Map.get(item, string_key)), else: atom_val
+	end
+
+	defp list_line(item, i) do
+		name = list_field(item, :item, "item") || "?"
+		location = list_field(item, :location_name, "location_name") || list_field(item, :system_name, "system_name") || "?"
+
+		"#{i}. **#{name}** — sell #{format_isk(list_field(item, :sell_price, "sell_price"))} / buy #{format_isk(list_field(item, :buy_price, "buy_price"))} | +#{format_isk(list_field(item, :margin, "margin"))} ISK @ #{location}"
 	end
 
 	# Embed descriptions cap at 4096 chars; drop lines that would overflow.
@@ -151,7 +160,9 @@ defmodule Discord.Messages do
 	end
 
 	defp format_isk(nil), do: "?"
-	defp format_isk(number) when is_number(number), do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
+
+	defp format_isk(number) when is_number(number),
+		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
 
 	defp format_isk(binary) when is_binary(binary) do
 		case Float.parse(String.trim(binary)) do
@@ -491,9 +502,17 @@ defmodule Discord.Consumer do
 							type: InteractionCallbackType.deferred_channel_message_with_source()
 						}
 
-						case Api.Interaction.create_response(interaction, response) do
-							:ok -> start_list_task(bot_name, interaction)
-							{:error, reason} -> log_discord_warning("list_market_defer_failed", reason, interaction)
+						try do
+							case Api.Interaction.create_response(interaction, response) do
+								:ok -> start_list_task(bot_name, interaction)
+								{:ok, _} -> start_list_task(bot_name, interaction)
+								{:error, reason} -> list_defer_fallback(interaction, reason)
+							end
+						rescue
+							error ->
+								list_defer_fallback(interaction, Exception.message(error))
+						catch
+							_, reason -> list_defer_fallback(interaction, reason)
 						end
 				end
 		end
@@ -595,7 +614,7 @@ defmodule Discord.Consumer do
 	defp start_list_task(bot_name, interaction) do
 		task =
 			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
-				edit_response(bot_name, interaction, %{embeds: [Messages.market_list_embed(safe_get_items())]})
+				run_list_task(bot_name, interaction)
 			end)
 
 		case task do
@@ -604,14 +623,66 @@ defmodule Discord.Consumer do
 
 			{:error, reason} ->
 				log_discord_warning("list_market_task_failed", reason, interaction)
-				edit_response(bot_name, interaction, %{embeds: [Messages.market_list_embed([])]})
+				try_edit_empty_list(bot_name, interaction)
+		end
+	rescue
+		error ->
+			log_discord_warning("list_market_task_failed", Exception.message(error), interaction)
+			try_edit_empty_list(bot_name, interaction)
+	catch
+		_, reason ->
+			log_discord_warning("list_market_task_failed", reason, interaction)
+			try_edit_empty_list(bot_name, interaction)
+	end
+
+	# The deferred task must never die silently (Discord would leave the
+	# interaction on "thinking..." then "interaction failed"): any lookup,
+	# render, or edit crash still produces the empty-list embed.
+	defp run_list_task(bot_name, interaction) do
+		embed =
+			try do
+				Messages.market_list_embed(safe_get_items())
+			rescue
+				_ -> Messages.market_list_embed([])
+			catch
+				_, _ -> Messages.market_list_embed([])
+			end
+
+		edit_response(bot_name, interaction, %{embeds: [embed]})
+	rescue
+		_ ->
+			try_edit_empty_list(bot_name, interaction)
+	catch
+		_, _ -> try_edit_empty_list(bot_name, interaction)
+	end
+
+	defp try_edit_empty_list(bot_name, interaction) do
+		edit_response(bot_name, interaction, %{embeds: [Messages.market_list_embed([])]})
+	rescue
+		error -> log_discord_warning("list_market_fallback_failed", Exception.message(error), interaction)
+	catch
+		_, reason -> log_discord_warning("list_market_fallback_failed", reason, interaction)
+	end
+
+	defp list_defer_fallback(interaction, reason) do
+		log_discord_warning("list_market_defer_failed", reason, interaction)
+
+		try do
+			respond(interaction, Messages.market_list_embed(safe_get_items()))
+		rescue
+			error -> log_discord_warning("list_market_defer_fallback_failed", Exception.message(error), interaction)
+		catch
+			_, fallback_reason -> log_discord_warning("list_market_defer_fallback_failed", fallback_reason, interaction)
 		end
 	end
 
 	# Never let a DB/ESI failure crash the interaction handler with no
 	# response: log once and fall back to the empty list embed.
 	defp safe_get_items do
-		Market.Database.get_items_less_than_jita_buy()
+		case Market.Database.get_items_less_than_jita_buy() do
+			items when is_list(items) -> items
+			_ -> []
+		end
 	rescue
 		error ->
 			Marketmailer.Log.warning(
@@ -633,11 +704,17 @@ defmodule Discord.Consumer do
 	end
 
 	defp edit_response(bot_name, interaction, payload) do
-		case Bot.with_bot(bot_name, fn -> Api.Interaction.edit_response(interaction, payload) end) do
+		Bot.with_bot(bot_name, fn -> Api.Interaction.edit_response(interaction, payload) end)
+		|> case do
 			:ok -> :ok
 			{:ok, _message} -> :ok
 			{:error, reason} -> log_discord_warning("check_market_edit_failed", reason, interaction)
+			other -> log_discord_warning("check_market_edit_failed", other, interaction)
 		end
+	rescue
+		error -> log_discord_warning("check_market_edit_failed", Exception.message(error), interaction)
+	catch
+		_, reason -> log_discord_warning("check_market_edit_failed", reason, interaction)
 	end
 
 	defp active_bot_name do

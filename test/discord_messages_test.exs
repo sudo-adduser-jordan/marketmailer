@@ -94,6 +94,26 @@ defmodule Discord.MessagesTest do
 		assert embed.thumbnail.url == "https://images.evetech.net/types/81008/icon?size=64"
 	end
 
+	test "list embed never crashes on nil, non-list, or string-keyed rows" do
+		assert Discord.Messages.market_list_embed(nil).description =~ "No items"
+		assert Discord.Messages.market_list_embed(:boom).description =~ "No items"
+
+		embed =
+			Discord.Messages.market_list_embed([
+				%{
+					"item" => "Tritanium",
+					"sell_price" => "10",
+					"buy_price" => 110.0,
+					"margin" => 100.0,
+					"location_name" => "Jita IV"
+				},
+				%{item: "Plex", sell_price: nil, buy_price: nil, margin: nil, system_name: "Jita"}
+			])
+
+		assert embed.description =~ "Tritanium"
+		assert embed.description =~ "Plex"
+	end
+
 	test "colors location by security and keeps station-system-region order" do
 		base = %MarketView{
 			type_id: 1_001,
@@ -111,13 +131,13 @@ defmodule Discord.MessagesTest do
 		fields = fn embed -> Map.new(embed.fields, &{&1.name, &1.value}) end
 
 		assert fields.(high)["Location"] ==
-						"```ansi\n\e[32mJita IV - Moon 4 - Jita - The Forge (0.9)\e[0m\n```"
+						 "```ansi\n\e[32mJita IV - Moon 4 - Jita - The Forge (0.9)\e[0m\n```"
 
 		assert fields.(low)["Location"] ==
-						"```ansi\n\e[33mJita IV - Moon 4 - Jita - The Forge (0.3)\e[0m\n```"
+						 "```ansi\n\e[33mJita IV - Moon 4 - Jita - The Forge (0.3)\e[0m\n```"
 
 		assert fields.(null)["Location"] ==
-						"```ansi\n\e[31mJita IV - Moon 4 - Jita - The Forge (-0.5)\e[0m\n```"
+						 "```ansi\n\e[31mJita IV - Moon 4 - Jita - The Forge (-0.5)\e[0m\n```"
 	end
 
 	test "all embeds carry a SemVer version badge in the footer" do
