@@ -182,7 +182,7 @@ defmodule Discord.Broadcaster do
 		case invoke(fn -> state.capture_fun.(item.type_id) end) do
 			{:ok, {:ok, png}} when is_binary(png) ->
 				filename = Janice.Capture.filename(item.type_id)
-				{Messages.market_embed(item, "attachment://#{filename}"), %{name: filename, body: png}}
+				{Messages.market_embed(item, nil, "attachment://#{filename}"), %{name: filename, body: png}}
 
 			{:ok, _other} ->
 				fallback_payload(item)
@@ -194,7 +194,9 @@ defmodule Discord.Broadcaster do
 
 	defp fallback_payload(item) do
 		filename = Janice.Capture.fallback_filename()
-		{Messages.market_embed(item, "attachment://#{filename}"), %{name: filename, body: Janice.Capture.fallback_image()}}
+
+		{Messages.market_embed(item, nil, "attachment://#{filename}"),
+		 %{name: filename, body: Janice.Capture.fallback_image()}}
 	rescue
 		_ -> {Messages.market_embed(item), nil}
 	end

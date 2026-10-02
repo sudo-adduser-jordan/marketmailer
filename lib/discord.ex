@@ -153,7 +153,7 @@ defmodule Discord.Messages do
 	defp format_isk(nil), do: "?"
 	defp format_isk(number), do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
 
-	def market_embed(item, thumbnail_url \\ nil) do
+	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
 		market_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
 		reference_url = "https://everef.net/types/#{item.type_id}"
 		# Per-item icon from the EVE image server; Discord loads it, so the
@@ -177,7 +177,7 @@ defmodule Discord.Messages do
 				url: thumbnail_url || type_icon
 			},
 			image: %Embed.Image{
-				url: @icon_market
+				url: image_url || @icon_market
 			},
 			fields: [
 				%Embed.Field{
@@ -510,7 +510,7 @@ defmodule Discord.Consumer do
 		case Janice.Capture.capture(item.type_id) do
 			{:ok, png} ->
 				filename = Janice.Capture.filename(item.type_id)
-				embed = Messages.market_embed(item, "attachment://#{filename}")
+				embed = Messages.market_embed(item, nil, "attachment://#{filename}")
 				edit_response(bot_name, interaction, %{embeds: [embed], files: [%{name: filename, body: png}]})
 
 			{:error, reason} ->
@@ -526,7 +526,7 @@ defmodule Discord.Consumer do
 
 	defp edit_fallback_response(bot_name, interaction, item) do
 		filename = Janice.Capture.fallback_filename()
-		embed = Messages.market_embed(item, "attachment://#{filename}")
+		embed = Messages.market_embed(item, nil, "attachment://#{filename}")
 
 		edit_response(bot_name, interaction, %{
 			embeds: [embed],

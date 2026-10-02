@@ -62,7 +62,7 @@ defmodule Discord.MessagesTest do
 		assert unknown_embed.color == 0x7289DA
 	end
 
-	test "uses an attachment URL when a Janice graph is supplied" do
+	test "places the Janice graph in the image slot, keeping the item icon" do
 		item = %MarketView{
 			type_id: 1_001,
 			item_name: "Tritanium",
@@ -72,9 +72,10 @@ defmodule Discord.MessagesTest do
 			price: 10.0
 		}
 
-		embed = Discord.Messages.market_embed(item, "attachment://janice-1001.png")
+		embed = Discord.Messages.market_embed(item, nil, "attachment://janice-1001.png")
 
-		assert embed.thumbnail.url == "attachment://janice-1001.png"
+		assert embed.image.url == "attachment://janice-1001.png"
+		assert embed.thumbnail.url == "https://images.evetech.net/types/1001/icon?size=64"
 	end
 
 	test "defaults the thumbnail to the item's EVE image-server icon" do

@@ -28,7 +28,7 @@ defmodule Discord.BroadcasterTest do
 		assert_receive {:sent, 200, second_payload}
 		assert first_payload.allowed_mentions == :none
 		assert [embed] = first_payload.embeds
-		assert embed.thumbnail.url == "attachment://janice-1001.png"
+		assert embed.image.url == "attachment://janice-1001.png"
 		assert [%{name: "janice-1001.png", body: <<137, 80, 78, 71>>}] = first_payload.files
 		assert second_payload == first_payload
 		assert Process.alive?(broadcaster)
@@ -130,7 +130,7 @@ defmodule Discord.BroadcasterTest do
 
 		assert_receive {:sent, 900, payload}
 		assert [embed] = payload.embeds
-		assert embed.thumbnail.url == "attachment://#{Janice.Capture.fallback_filename()}"
+		assert embed.image.url == "attachment://#{Janice.Capture.fallback_filename()}"
 		assert [%{name: name, body: body}] = payload.files
 		assert name == Janice.Capture.fallback_filename()
 		assert binary_part(body, 0, 4) == <<137, 80, 78, 71>>
