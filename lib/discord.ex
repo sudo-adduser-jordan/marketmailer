@@ -390,8 +390,23 @@ defmodule Discord.Consumer do
 				end
 
 			"list_market" ->
-				items = Market.Database.get_items_less_than_jita_buy()
-				respond(interaction, Messages.market_list_embed(items))
+				case active_bot_name() do
+					# No bot runtime (tests, dev shell): synchronous immediate reply.
+					nil ->
+						respond(interaction, Messages.market_list_embed(safe_get_items()))
+
+					# Same 3s-ack rationale as check_market: the list query
+					# also backfills names/systems over synchronous ESI.
+					bot_name ->
+						response = %{
+							type: InteractionCallbackType.deferred_channel_message_with_source()
+						}
+
+						case Api.Interaction.create_response(interaction, response) do
+							:ok -> start_list_task(bot_name, interaction)
+							{:error, reason} -> log_discord_warning("list_market_defer_failed", reason, interaction)
+						end
+				end
 		end
 	end
 
@@ -457,6 +472,46 @@ defmodule Discord.Consumer do
 
 	defp edit_not_found(bot_name, interaction, item_name) do
 		edit_response(bot_name, interaction, %{embeds: [Messages.market_not_found_embed(item_name)]})
+	end
+
+	defp start_list_task(bot_name, interaction) do
+		task =
+			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
+				edit_response(bot_name, interaction, %{embeds: [Messages.market_list_embed(safe_get_items())]})
+			end)
+
+		case task do
+			{:ok, _pid} ->
+				:ok
+
+			{:error, reason} ->
+				log_discord_warning("list_market_task_failed", reason, interaction)
+				edit_response(bot_name, interaction, %{embeds: [Messages.market_list_embed([])]})
+		end
+	end
+
+	# Never let a DB/ESI failure crash the interaction handler with no
+	# response: log once and fall back to the empty list embed.
+	defp safe_get_items do
+		Market.Database.get_items_less_than_jita_buy()
+	rescue
+		error ->
+			Marketmailer.Log.warning(
+				"list_market_lookup_failed",
+				%{reason: Exception.message(error)},
+				"list_market lookup failed; replying empty list"
+			)
+
+			[]
+	catch
+		_, reason ->
+			Marketmailer.Log.warning(
+				"list_market_lookup_failed",
+				%{reason: inspect(reason)},
+				"list_market lookup failed; replying empty list"
+			)
+
+			[]
 	end
 
 	defp capture_and_edit(bot_name, interaction, item) do

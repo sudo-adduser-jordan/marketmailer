@@ -257,8 +257,21 @@ defmodule Market.Database do
 						backfill_market_type_names()
 
 						case load_rows("getMarketItem.sql", params) do
-							[] -> nil
-							[item | _] -> item
+							[] ->
+								resolve_name_via_ids(item_name)
+
+								case load_rows("getMarketItem.sql", params) do
+									[] ->
+										nil
+
+									[item | _] ->
+										backfill([item])
+										load_rows("getMarketItem.sql", params) |> List.first()
+								end
+
+							[item | _] ->
+								backfill([item])
+								load_rows("getMarketItem.sql", params) |> List.first()
 						end
 
 					[item | _] ->
@@ -399,6 +412,48 @@ defmodule Market.Database do
 		end
 
 		ids |> ESI.Names.resolve() |> Universe.Database.upsert_names()
+	end
+
+	# Targeted name -> id discovery for cold caches. The bounded bulk
+	# backfill above takes the first 1_000 missing ids ordered by type_id,
+	# so a high id like PLEX (44992) may sit outside its window for many
+	# lookups. One POST /universe/ids for the exact query string discovers
+	# the type id directly (verified: ["plex"] -> 44992). Skipped when
+	# pollers are disabled so the test suite stays offline (config/test.exs).
+	defp resolve_name_via_ids(item_name) do
+		if Application.get_env(:marketmailer, :start_pollers, true) do
+			query =
+				item_name |> to_string() |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim()
+
+			if query == "" do
+				:ok
+			else
+				case ESI.Ids.resolve_inventory_type(query) do
+					[] -> :ok
+					entries -> Universe.Database.upsert_names(entries)
+				end
+			end
+		else
+			:ok
+		end
+	rescue
+		error ->
+			Marketmailer.Log.warning(
+				"market_ids_lookup_failed",
+				%{reason: Exception.message(error)},
+				"Targeted type-id lookup failed: #{Exception.message(error)}"
+			)
+
+			:ok
+	catch
+		_, reason ->
+			Marketmailer.Log.warning(
+				"market_ids_lookup_failed",
+				%{reason: inspect(reason)},
+				"Targeted type-id lookup failed: #{inspect(reason)}"
+			)
+
+			:ok
 	end
 
 	# Fills the lazy EVE caches (names/systems) for anything the query could not

@@ -36,6 +36,60 @@ defmodule ESI.Names do
 	end
 end
 
+defmodule ESI.Ids do
+	@moduledoc """
+	Targeted EVE name -> id lookup via ESI's universe/ids endpoint.
+	Used when the lazy id -> name backfill cannot cover a query string
+	(e.g. PLEX missing from a cold names cache and sitting outside the
+	bounded bulk-backfill window): one small POST discovers the type id
+	directly. Only inventory_types are cached; characters, corporations
+	and other categories are ignored.
+	"""
+
+	@url "https://esi.evetech.net/v3/universe/ids/"
+
+	def resolve_inventory_type(name) when is_binary(name) do
+		case resolve([name]) do
+			[%{id: _, name: _} | _] = entries -> entries
+			_ -> []
+		end
+	end
+
+	def resolve(names) when is_list(names) do
+		names =
+			names |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq()
+
+		case names do
+			[] -> []
+			_ -> fetch(names)
+		end
+	end
+
+	defp fetch(names) do
+		ESI.acquire(@url)
+
+		case Req.post(@url, json: names) do
+			{:ok, %{status: 200, body: body} = response} when is_map(body) ->
+				ESI.release(response.headers, @url)
+
+				body
+				|> Map.get("inventory_types", [])
+				|> Enum.map(fn entry -> %{id: entry["id"], name: entry["name"]} end)
+
+			{:ok, %{status: status} = response} ->
+				ESI.release(response.headers, @url)
+				Marketmailer.Log.warning("ids_resolve_error", %{status: status}, "ESI.Ids #{status}")
+
+				[]
+
+			{:error, error} ->
+				Marketmailer.Log.error("ids_http_error", %{error: inspect(error)}, "ESI.Ids HTTP error: #{inspect(error)}")
+
+				[]
+		end
+	end
+end
+
 defmodule ESI.SystemInfo do
 	@moduledoc """
 	Resolves solar system metadata (name, security status, region name) lazily
