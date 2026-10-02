@@ -1,6 +1,36 @@
 {
-  ~c"0.1.7",
+  ~c"0.1.8",
   [
+    {~c"0.1.7",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Janice.ChartPool: added by this transition.
+       {:add_module, Janice.ChartPool},
+       # Janice.Playwright: behaviour Janice.Capture. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Janice.Playwright},
+       # Janice.Supervisor: behaviour Supervisor. The update re-runs init/1 and updates
+       # the child specs. The children themselves are not upgraded; give them their own
+       # instructions.
+       {:update, Janice.Supervisor, :supervisor},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.PageWorker, {:advanced, []}}
+     ]},
     {~c"0.1.6",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
@@ -166,6 +196,37 @@
      ]}
   ],
   [
+    {~c"0.1.7",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Janice.Playwright: behaviour Janice.Capture. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Janice.Playwright},
+       # Janice.Supervisor: behaviour Supervisor. The update re-runs init/1 and updates
+       # the child specs. The children themselves are not upgraded; give them their own
+       # instructions.
+       {:update, Janice.Supervisor, :supervisor},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.PageWorker, {:advanced, []}},
+       # Janice.ChartPool: removed by this transition. delete_module purges the module
+       # and loads nothing, so never use it for a module the target build still has.
+       {:delete_module, Janice.ChartPool}
+     ]},
     {~c"0.1.6",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
