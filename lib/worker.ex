@@ -156,20 +156,40 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	# A DB crash must report :failed so the region cycle completes instead of
-	# hanging on a page that started but never reports.
+	# hanging on a page that started but never reports. Disk-full is an error
+	# (not a warning) and skips the etag write so no further DB writes run.
 	defp persist_orders(data, ctx) do
-		Market.Database.upsert_orders(data)
-		Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
-		:ok
+		case Market.Database.upsert_orders(data) do
+			{:error, e} ->
+				{:error, persist_failure_reason(e, ctx, length(data))}
+
+			_count ->
+				Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
+				:ok
+		end
 	rescue
 		e ->
+			{:error, persist_failure_reason(e, ctx, length(data))}
+	end
+
+	defp persist_failure_reason(e, ctx, order_count) do
+		if Market.DbWriter.disk_full?(e) do
+			Marketmailer.Log.error(
+				"disk_full",
+				%{region: ctx |> Map.get(:url), reason: first_line(e), orders: order_count},
+				"Disk full; skipping persist for #{ctx.url}"
+			)
+
+			:disk_full
+		else
 			Marketmailer.Log.warning(
 				"page_persist_failed",
-				%{region: ctx |> Map.get(:url), reason: first_line(e), orders: length(data)},
+				%{region: ctx |> Map.get(:url), reason: first_line(e), orders: order_count},
 				"Persist failed for #{ctx.url}"
 			)
 
-			{:error, :persist_failed}
+			:persist_failed
+		end
 	end
 
 	# 304 path must not crash the GenServer when the pool is saturated:
@@ -184,13 +204,23 @@ defmodule Marketmailer.PageWorker do
 		:ok
 	rescue
 		e ->
-			Marketmailer.Log.warning(
-				"page_persist_failed",
-				%{region: ctx |> Map.get(:url), reason: first_line(e)},
-				"Persist failed for #{ctx.url}"
-			)
+			if Market.DbWriter.disk_full?(e) do
+				Marketmailer.Log.error(
+					"disk_full",
+					%{region: ctx |> Map.get(:url), reason: first_line(e)},
+					"Disk full; skipping etag persist for #{ctx.url}"
+				)
 
-			{:error, :persist_failed}
+				{:error, :disk_full}
+			else
+				Marketmailer.Log.warning(
+					"page_persist_failed",
+					%{region: ctx |> Map.get(:url), reason: first_line(e)},
+					"Persist failed for #{ctx.url}"
+				)
+
+				{:error, :persist_failed}
+			end
 	end
 
 	# Exqlite embeds the full SQL statement in the exception message (a

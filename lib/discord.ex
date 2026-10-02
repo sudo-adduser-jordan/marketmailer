@@ -366,9 +366,27 @@ defmodule Discord.Consumer do
 			"check_market" ->
 				item_name = option_value(interaction, "item")
 
-				case Market.Database.get_market_item(item_name) do
-					nil -> respond(interaction, Messages.market_not_found_embed(item_name))
-					item -> respond_market(interaction, item)
+				case active_bot_name() do
+					# No bot runtime (tests, dev shell): synchronous immediate reply.
+					nil ->
+						case safe_get_market_item(item_name) do
+							nil -> respond(interaction, Messages.market_not_found_embed(item_name))
+							item -> respond(interaction, Messages.market_embed(item))
+						end
+
+					# Prod: ack within Discord's 3s window first. The DB lookup
+					# plus lazy ESI backfill (17k+ missing type names = ~36
+					# /universe/names chunks) runs in the task, with ~15m to
+					# edit instead of 3s to reply.
+					bot_name ->
+						response = %{
+							type: InteractionCallbackType.deferred_channel_message_with_source()
+						}
+
+						case Api.Interaction.create_response(interaction, response) do
+							:ok -> start_lookup_task(bot_name, interaction, item_name)
+							{:error, reason} -> log_discord_warning("check_market_defer_failed", reason, interaction)
+						end
 				end
 
 			"list_market" ->
@@ -390,27 +408,10 @@ defmodule Discord.Consumer do
 
 	defp option_value(_interaction, _name), do: nil
 
-	defp respond_market(interaction, item) do
-		case active_bot_name() do
-			nil ->
-				respond(interaction, Messages.market_embed(item))
-
-			bot_name ->
-				response = %{
-					type: InteractionCallbackType.deferred_channel_message_with_source()
-				}
-
-				case Api.Interaction.create_response(interaction, response) do
-					:ok -> start_capture_task(bot_name, interaction, item)
-					{:error, reason} -> log_discord_warning("check_market_defer_failed", reason, interaction)
-				end
-		end
-	end
-
-	defp start_capture_task(bot_name, interaction, item) do
+	defp start_lookup_task(bot_name, interaction, item_name) do
 		task =
 			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
-				capture_and_edit(bot_name, interaction, item)
+				lookup_and_edit(bot_name, interaction, item_name)
 			end)
 
 		case task do
@@ -419,8 +420,43 @@ defmodule Discord.Consumer do
 
 			{:error, reason} ->
 				log_discord_warning("check_market_task_failed", reason, interaction)
-				edit_fallback_response(bot_name, interaction, item)
+				edit_not_found(bot_name, interaction, item_name)
 		end
+	end
+
+	defp lookup_and_edit(bot_name, interaction, item_name) do
+		case safe_get_market_item(item_name) do
+			nil -> edit_not_found(bot_name, interaction, item_name)
+			item -> capture_and_edit(bot_name, interaction, item)
+		end
+	end
+
+	# Never let a DB/ESI failure crash the interaction handler with no
+	# response: log once and fall back to the not-found embed.
+	defp safe_get_market_item(item_name) do
+		Market.Database.get_market_item(item_name)
+	rescue
+		error ->
+			Marketmailer.Log.warning(
+				"check_market_lookup_failed",
+				%{reason: Exception.message(error)},
+				"check_market lookup failed; replying not-found"
+			)
+
+			nil
+	catch
+		_, reason ->
+			Marketmailer.Log.warning(
+				"check_market_lookup_failed",
+				%{reason: inspect(reason)},
+				"check_market lookup failed; replying not-found"
+			)
+
+			nil
+	end
+
+	defp edit_not_found(bot_name, interaction, item_name) do
+		edit_response(bot_name, interaction, %{embeds: [Messages.market_not_found_embed(item_name)]})
 	end
 
 	defp capture_and_edit(bot_name, interaction, item) do

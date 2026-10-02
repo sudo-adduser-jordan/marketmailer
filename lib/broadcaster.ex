@@ -34,6 +34,7 @@ defmodule Discord.Broadcaster do
 			 market_fun: Keyword.get(opts, :market_fun, &Market.Database.get_best_order/0),
 			 capture_fun: Keyword.get(opts, :capture_fun, &Janice.Capture.capture/1),
 			 deliver_fun: Keyword.get(opts, :deliver_fun, &deliver/2),
+			 prune_fun: Keyword.get(opts, :prune_fun, &DiscordDatabase.delete_by_channel/1),
 			 pending: MapSet.new(),
 			 seen: MapSet.new()
 		 }}
@@ -220,7 +221,12 @@ defmodule Discord.Broadcaster do
 					result
 
 				{:error, reason} ->
-					log_broadcast_failure("channel_send_failed", reason)
+					if unknown_channel?(reason) do
+						prune_bad_channel(state, channel, reason)
+					else
+						log_broadcast_failure("channel_send_failed", reason)
+					end
+
 					{:error, reason}
 			end
 		end)
@@ -260,5 +266,36 @@ defmodule Discord.Broadcaster do
 			%{reason: inspect(reason)},
 			"Discord market broadcast failed"
 		)
+	end
+
+	# Discord 404/10003 Unknown Channel means the channel was deleted or the
+	# bot lost access: drop the registration so later cycles stop retrying it.
+	defp unknown_channel?(reason) do
+		text = inspect(reason)
+		String.contains?(text, "10003") or String.contains?(text, "Unknown Channel")
+	end
+
+	defp prune_bad_channel(state, channel, reason) do
+		state.prune_fun.(channel)
+
+		Marketmailer.Log.warning(
+			"channel_pruned",
+			%{channel_id: channel, reason: inspect(reason)},
+			"Removed unknown Discord channel #{channel}"
+		)
+	rescue
+		e ->
+			Marketmailer.Log.warning(
+				"channel_prune_failed",
+				%{channel_id: channel, reason: Exception.message(e)},
+				"Failed to remove unknown Discord channel #{channel}"
+			)
+	catch
+		_, caught ->
+			Marketmailer.Log.warning(
+				"channel_prune_failed",
+				%{channel_id: channel, reason: inspect(caught)},
+				"Failed to remove unknown Discord channel #{channel}"
+			)
 	end
 end

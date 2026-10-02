@@ -53,13 +53,41 @@ defmodule Market.DbWriter do
 		{:ok, fun.()}
 	rescue
 		e ->
-			if retryable?(e) and delays != [] do
-				[wait | rest] = delays
-				Process.sleep(wait + :rand.uniform(10))
-				run(fun, rest)
-			else
+			if disk_full?(e) do
+				Marketmailer.Log.error(
+					"disk_full",
+					%{reason: Exception.message(e)},
+					"Database or disk is full; skipping write"
+				)
+
 				{:error, e}
+			else
+				if retryable?(e) and delays != [] do
+					[wait | rest] = delays
+					Process.sleep(wait + :rand.uniform(10))
+					run(fun, rest)
+				else
+					{:error, e}
+				end
 			end
+	end
+
+	# SQLite reports ENOSPC/readonly as "database or disk is full". Writes
+	# must stop there: retrying only burns the queue while the disk stays full.
+	def disk_full?(%Exqlite.Error{} = e), do: String.contains?(Exception.message(e), "database or disk is full")
+
+	def disk_full?(%DBConnection.ConnectionError{} = e),
+		do: String.contains?(Exception.message(e), "database or disk is full")
+
+	def disk_full?(e) when is_binary(e), do: String.contains?(e, "database or disk is full")
+	def disk_full?(e) when is_atom(e), do: e == :disk_full
+
+	def disk_full?(e) do
+		e |> Exception.message() |> String.contains?("database or disk is full")
+	rescue
+		_ -> false
+	catch
+		_, _ -> false
 	end
 
 	defp retryable?(%Exqlite.Error{} = e), do: String.starts_with?(Exception.message(e), "Database busy")

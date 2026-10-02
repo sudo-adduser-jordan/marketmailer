@@ -127,16 +127,17 @@ defmodule Etag.Database do
 	def upsert_etag(url, etag, expires_at \\ nil) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Market.DbWriter.write(fn ->
-			Database.insert_all(
-				"etags",
-				[%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
-				on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
-				conflict_target: :url
-			)
-		end)
-
-		:ets.insert(:market_cache, {url, etag, expires_at})
+		case Market.DbWriter.write(fn ->
+					 Database.insert_all(
+						 "etags",
+						 [%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
+						 on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
+						 conflict_target: :url
+					 )
+				 end) do
+			{:error, e} -> raise e
+			_ -> :ets.insert(:market_cache, {url, etag, expires_at})
+		end
 	end
 end
 
@@ -149,6 +150,12 @@ defmodule Discord.Database do
 
 	def registered_channels do
 		Database.all(from channel in Discord, select: channel.channel_id, order_by: [asc: channel.guild_id])
+	end
+
+	def delete_by_channel(channel_id) do
+		Market.DbWriter.write(fn ->
+			Database.delete_all(from channel in Discord, where: channel.channel_id == ^channel_id)
+		end)
 	end
 
 	def upsert(guild_id, channel_id) do
@@ -227,26 +234,46 @@ defmodule Market.Database do
 	def get_best_order do
 		backfill(load_rows("getBestOrder.sql"))
 		load_rows("getBestOrder.sql")
+	rescue
+		e ->
+			Marketmailer.Log.warning(
+				"query_failed",
+				%{file: "getBestOrder.sql", reason: Exception.message(e)},
+				"Market query failed for getBestOrder.sql"
+			)
+
+			[]
 	end
 
 	def get_market_item(item_name) when is_binary(item_name) do
 		normalized = normalize_item_name(item_name)
 
 		if normalized != "" do
-			params = [normalized, "%#{escape_like(normalized)}%", normalized]
+			try do
+				params = [normalized, "%#{escape_like(normalized)}%", normalized]
 
-			case load_rows("getMarketItem.sql", params) do
-				[] ->
-					backfill_market_type_names()
+				case load_rows("getMarketItem.sql", params) do
+					[] ->
+						backfill_market_type_names()
 
-					case load_rows("getMarketItem.sql", params) do
-						[] -> nil
-						[item | _] -> item
-					end
+						case load_rows("getMarketItem.sql", params) do
+							[] -> nil
+							[item | _] -> item
+						end
 
-				[item | _] ->
-					backfill([item])
-					load_rows("getMarketItem.sql", params) |> List.first()
+					[item | _] ->
+						backfill([item])
+						load_rows("getMarketItem.sql", params) |> List.first()
+				end
+			rescue
+				e ->
+					Marketmailer.Log.warning(
+						"query_failed",
+						%{file: "getMarketItem.sql", reason: Exception.message(e)},
+						"Market query failed for getMarketItem.sql"
+					)
+
+					nil
 			end
 		end
 	end
@@ -267,30 +294,65 @@ defmodule Market.Database do
 	def get_items_less_than_jita_buy do
 		backfill(load_rows("getItemsLessThan.sql"))
 		load_rows("getItemsLessThan.sql")
+	rescue
+		e ->
+			Marketmailer.Log.warning(
+				"query_failed",
+				%{file: "getItemsLessThan.sql", reason: Exception.message(e)},
+				"Market query failed for getItemsLessThan.sql"
+			)
+
+			[]
 	end
 
 	def get_list_less_than_jita_buy, do: []
 
 	# Runs a query file from lib/ and returns one map/struct per row.
+	# Never raises into the Discord interaction handler: a DB error logs
+	# once and yields [], which the caller renders as the not-found embed.
 	defp load_rows(file, params \\ []) do
-		{:ok, %{rows: rows, columns: cols}} = Database.query(read_sql(file), params)
+		case Database.query(read_sql(file), params) do
+			{:ok, %{rows: rows, columns: cols}} ->
+				Enum.map(rows, fn row ->
+					data = cols |> Enum.map(&String.to_atom/1) |> Enum.zip(row) |> Map.new()
 
-		Enum.map(rows, fn row ->
-			data = cols |> Enum.map(&String.to_atom/1) |> Enum.zip(row) |> Map.new()
+					if file in ["getBestOrder.sql", "getMarketItem.sql"] do
+						struct = Ecto.Repo.Schema.load(Ecto.Adapters.SQLite3, MarketView, data)
+						Map.put(struct, :instant_sell_profit, data[:instant_sell_profit])
+					else
+						data
+					end
+				end)
 
-			if file in ["getBestOrder.sql", "getMarketItem.sql"] do
-				struct = Ecto.Repo.Schema.load(Ecto.Adapters.SQLite3, MarketView, data)
-				Map.put(struct, :instant_sell_profit, data[:instant_sell_profit])
-			else
-				data
-			end
-		end)
+			{:error, reason} ->
+				Marketmailer.Log.warning(
+					"market_query_failed",
+					%{file: file, reason: inspect(reason)},
+					"Market query #{file} failed: #{inspect(reason)}"
+				)
+
+				[]
+		end
+	rescue
+		e ->
+			Marketmailer.Log.warning(
+				"market_query_failed",
+				%{file: file, reason: Exception.message(e)},
+				"Market query #{file} failed: #{Exception.message(e)}"
+			)
+
+			[]
 	end
 
 	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
 
 	# A name lookup cannot discover an unresolved type id from the market query
 	# itself, so fill the type-name cache before retrying an item lookup.
+	# Bounded: a cold names cache can hold ~17k missing ids (~36 ESI chunks),
+	# so resolve at most @backfill_max_ids per lookup and leave the rest for
+	# later lookups instead of stalling one interaction behind every chunk.
+	@backfill_max_ids 1_000
+
 	defp backfill_market_type_names do
 		query =
 			from market in @table,
@@ -298,12 +360,45 @@ defmodule Market.Database do
 				on: name.id == market.type_id,
 				where: is_nil(name.id),
 				select: market.type_id,
-				distinct: true
+				distinct: true,
+				order_by: market.type_id,
+				limit: @backfill_max_ids + 1
 
 		case Database.all(query) do
 			[] -> :ok
-			ids -> ids |> ESI.Names.resolve() |> Universe.Database.upsert_names()
+			ids when length(ids) > @backfill_max_ids -> resolve_names(Enum.take(ids, @backfill_max_ids), true)
+			ids -> resolve_names(ids, false)
 		end
+	rescue
+		error ->
+			Marketmailer.Log.warning(
+				"market_backfill_failed",
+				%{reason: Exception.message(error)},
+				"Type-name backfill failed: #{Exception.message(error)}"
+			)
+
+			:ok
+	catch
+		_, reason ->
+			Marketmailer.Log.warning(
+				"market_backfill_failed",
+				%{reason: inspect(reason)},
+				"Type-name backfill failed: #{inspect(reason)}"
+			)
+
+			:ok
+	end
+
+	defp resolve_names(ids, truncated?) do
+		if truncated? do
+			Marketmailer.Log.info(
+				"market_backfill_truncated",
+				%{resolved: length(ids)},
+				"Type-name backfill truncated to #{length(ids)} ids; remainder left for later lookups"
+			)
+		end
+
+		ids |> ESI.Names.resolve() |> Universe.Database.upsert_names()
 	end
 
 	# Fills the lazy EVE caches (names/systems) for anything the query could not
