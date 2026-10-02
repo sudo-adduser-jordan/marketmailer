@@ -21,10 +21,12 @@ defmodule Discord.Messages do
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
-	# Version badge — SemVer from mix.exs, read at runtime so Castle hot
-	# upgrades show the new version without a restart.
-	defp with_version(%Embed{} = embed) do
-		%{embed | footer: %Embed.Footer{text: "v#{app_version()}"}}
+	# Footer carries both date and version — date left, version right,
+	# joined with a middle dot so Discord renders a single footer line.
+	defp with_version(%Embed{timestamp: ts} = embed) do
+		date = ts || DateTime.utc_now() |> DateTime.to_iso8601()
+
+		%{embed | footer: %Embed.Footer{text: "#{date} • v#{app_version()}"}, timestamp: nil}
 	end
 
 	defp app_version do

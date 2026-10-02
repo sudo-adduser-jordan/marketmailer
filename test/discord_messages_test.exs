@@ -199,8 +199,8 @@ defmodule Discord.MessagesTest do
 		assert length(embeds) == 9
 
 		for embed <- embeds do
-			assert %Embed{footer: %Embed.Footer{text: text}} = embed
-			assert text =~ ~r/^v\d+\.\d+\.\d+$/
+			assert %Embed{footer: %Embed.Footer{text: text}, timestamp: nil} = embed
+			assert text =~ ~r/^.+ • v\d+\.\d+\.\d+$/
 		end
 	end
 end
