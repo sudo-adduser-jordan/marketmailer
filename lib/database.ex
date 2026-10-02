@@ -230,26 +230,39 @@ defmodule Market.Database do
 	end
 
 	def get_market_item(item_name) when is_binary(item_name) do
-		item_name = String.trim(item_name)
+		normalized = normalize_item_name(item_name)
 
-		if item_name != "" do
-			case load_rows("getMarketItem.sql", [item_name]) do
+		if normalized != "" do
+			params = [normalized, "%#{escape_like(normalized)}%", normalized]
+
+			case load_rows("getMarketItem.sql", params) do
 				[] ->
 					backfill_market_type_names()
 
-					case load_rows("getMarketItem.sql", [item_name]) do
+					case load_rows("getMarketItem.sql", params) do
 						[] -> nil
 						[item | _] -> item
 					end
 
 				[item | _] ->
 					backfill([item])
-					load_rows("getMarketItem.sql", [item_name]) |> List.first()
+					load_rows("getMarketItem.sql", params) |> List.first()
 			end
 		end
 	end
 
 	def get_market_item(_item_name), do: nil
+
+	# Flatten for matching: trim, collapse all whitespace runs to one space,
+	# downcase. Returns "" for non-matching input.
+	defp normalize_item_name(name) do
+		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()
+	end
+
+	# Escape LIKE wildcards so user input only ever matches literally.
+	defp escape_like(value) do
+		value |> String.replace("\\", "\\\\") |> String.replace("%", "\\%") |> String.replace("_", "\\_")
+	end
 
 	def get_items_less_than_jita_buy do
 		backfill(load_rows("getItemsLessThan.sql"))

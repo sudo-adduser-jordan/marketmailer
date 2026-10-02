@@ -35,6 +35,11 @@ LEFT JOIN names tn ON tn.id = m.type_id
 LEFT JOIN names ln ON ln.id = m.location_id
 LEFT JOIN systems sy ON sy.system_id = m.system_id
 WHERE m.is_buy_order = 0
-  AND LOWER(tn.name) = LOWER(?)
-ORDER BY m.price ASC, m.order_id ASC
+  AND tn.name IS NOT NULL
+  AND (LOWER(TRIM(tn.name)) = ? OR LOWER(tn.name) LIKE ? ESCAPE '\')
+ORDER BY
+  CASE WHEN LOWER(TRIM(tn.name)) = ? THEN 0 ELSE 1 END,
+  LENGTH(tn.name) ASC,
+  m.price ASC,
+  m.order_id ASC
 LIMIT 1;
