@@ -117,6 +117,27 @@ defmodule Discord.MessagesTest do
 		assert embed.description =~ "Plex"
 	end
 
+	test "disambiguation embed lists candidates with a re-run hint" do
+		embed =
+			Discord.Messages.market_disambiguation_embed("trit", [
+				%{item_name: "Tritanium"},
+				%{item_name: "Tritanium Blueprint"}
+			])
+
+		assert embed.title == "Multiple items found"
+		assert embed.description =~ "Multiple items match **trit**:"
+		assert embed.description =~ "1. **Tritanium**"
+		assert embed.description =~ "2. **Tritanium Blueprint**"
+		assert embed.description =~ "Re-run `/check_market` with the exact name."
+	end
+
+	test "disambiguation embed falls back when nothing matches" do
+		embed = Discord.Messages.market_disambiguation_embed("zzz", [])
+
+		assert embed.title == "Multiple items found"
+		assert embed.description =~ "No cached market order was found for **zzz**."
+	end
+
 	test "colors location by security and keeps station-system-region order" do
 		base = %MarketView{
 			type_id: 1_001,

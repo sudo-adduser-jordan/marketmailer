@@ -102,6 +102,55 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
+	def market_disambiguation_embed(item_name, candidates) do
+		searched = if is_binary(item_name), do: String.trim(item_name), else: ""
+		searched = if searched == "", do: "that item", else: searched
+
+		names =
+			candidates
+			|> List.wrap()
+			|> Enum.map(&candidate_name/1)
+			|> Enum.reject(&is_nil/1)
+			|> Enum.map(&String.trim/1)
+			|> Enum.reject(&(&1 == ""))
+			|> Enum.uniq()
+			|> Enum.take(10)
+
+		lines = names |> Enum.with_index(1) |> Enum.map(fn {name, i} -> "#{i}. **#{name}**" end)
+		list = truncate_lines(lines, "")
+
+		description =
+			if list == "" do
+				"No cached market order was found for **#{searched}**."
+			else
+				"Multiple items match **#{searched}**:\n#{list}\n\nRe-run `/check_market` with the exact name."
+			end
+
+		%Embed{
+			title: "Multiple items found",
+			description: description,
+			color: @color_info,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: %Embed.Author{
+				name: "Marketmailer",
+				url: "https://discord.com",
+				icon_url: @icon_success
+			},
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			}
+		}
+		|> with_version()
+	end
+
+	defp candidate_name(%{item_name: name}) when is_binary(name), do: name
+	defp candidate_name(%{item: name}) when is_binary(name), do: name
+	defp candidate_name(%{name: name}) when is_binary(name), do: name
+	defp candidate_name(%{"item_name" => name}) when is_binary(name), do: name
+	defp candidate_name(%{"item" => name}) when is_binary(name), do: name
+	defp candidate_name(%{"name" => name}) when is_binary(name), do: name
+	defp candidate_name(_), do: nil
+
 	def market_list_embed(nil), do: market_list_embed([])
 
 	def market_list_embed(items) when is_list(items) do
@@ -471,22 +520,24 @@ defmodule Discord.Consumer do
 
 			"check_market" ->
 				item_name = option_value(interaction, "item")
+				candidates = safe_suggest_items(item_name, 10)
 
 				# Instant DB-only lookup: single SELECT, no ESI/Janice, so the
 				# direct reply stays inside Discord's 3s window. Found and
 				# not-found both answer immediately with no thinking state.
 				# The Janice chart follows as an async edit (with the failure
 				# image as fallback) so a slow capture never blocks the reply.
+				# Free text is always accepted; an inexact multi-match replies
+				# with the candidate list instead of a possibly wrong detail.
 				case safe_get_market_item(item_name) do
 					nil ->
-						respond(interaction, Messages.market_not_found_embed(item_name))
+						reply_for_missing_item(interaction, item_name, candidates)
 
 					item ->
-						respond(interaction, Messages.market_embed(item))
-
-						case active_bot_name() do
-							nil -> :ok
-							bot_name -> start_chart_task(bot_name, interaction, item)
+						if exact_item_match?(item_name, item, candidates) or length(candidates) <= 1 do
+							reply_with_detail(interaction, item)
+						else
+							respond(interaction, Messages.market_disambiguation_embed(item_name, candidates))
 						end
 				end
 
@@ -563,6 +614,65 @@ defmodule Discord.Consumer do
 
 			nil
 	end
+
+	defp safe_suggest_items(item_name, limit) when is_binary(item_name) and is_integer(limit) do
+		case Market.Database.suggest_items(item_name, limit) do
+			items when is_list(items) -> items
+			_ -> []
+		end
+	rescue
+		_ -> []
+	catch
+		_, _ -> []
+	end
+
+	defp safe_suggest_items(_item_name, _limit), do: []
+
+	defp reply_with_detail(interaction, item) do
+		respond(interaction, Messages.market_embed(item))
+
+		case active_bot_name() do
+			nil -> :ok
+			bot_name -> start_chart_task(bot_name, interaction, item)
+		end
+	end
+
+	# No direct row: a single candidate resolves to its detail, several
+	# become the disambiguation list, none stays the not-found embed.
+	defp reply_for_missing_item(interaction, item_name, [single]) do
+		case safe_get_market_item(candidate_name(single)) do
+			nil -> respond(interaction, Messages.market_disambiguation_embed(item_name, [single]))
+			item -> reply_with_detail(interaction, item)
+		end
+	end
+
+	defp reply_for_missing_item(interaction, item_name, candidates) do
+		if is_list(candidates) and candidates != [] do
+			respond(interaction, Messages.market_disambiguation_embed(item_name, candidates))
+		else
+			respond(interaction, Messages.market_not_found_embed(item_name))
+		end
+	end
+
+	defp candidate_name(%{item_name: name}) when is_binary(name), do: name
+	defp candidate_name(%{item: name}) when is_binary(name), do: name
+	defp candidate_name(%{name: name}) when is_binary(name), do: name
+	defp candidate_name(%{"item_name" => name}) when is_binary(name), do: name
+	defp candidate_name(%{"item" => name}) when is_binary(name), do: name
+	defp candidate_name(%{"name" => name}) when is_binary(name), do: name
+	defp candidate_name(_), do: nil
+
+	defp exact_item_match?(input, item, candidates) do
+		normalize_item(input) != "" and
+			(normalize_item(input) == normalize_item(item.item_name) or
+				 Enum.any?(candidates, fn candidate -> normalize_item(input) == normalize_item(candidate_name(candidate)) end))
+	end
+
+	defp normalize_item(name) when is_binary(name) do
+		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()
+	end
+
+	defp normalize_item(_), do: ""
 
 	# Janice chart follows the instant reply as an async edit: success
 	# attaches the captured chart, failure attaches the bundled failure
