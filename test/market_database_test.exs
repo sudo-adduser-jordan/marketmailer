@@ -80,7 +80,7 @@ defmodule Market.DatabaseTest do
 
 		Database.insert_all("names", [
 			%{id: 44_992, name: "PLEX"},
-			%{id: 2_001, name: "Jita IV - Moon 4"}
+			%{id: 60_003_760, name: "Jita IV - Moon 4"}
 		])
 
 		Database.insert_all("systems", [
@@ -99,7 +99,7 @@ defmodule Market.DatabaseTest do
 				duration: 1,
 				is_buy_order: 0,
 				issued: "2026-09-24T00:00:00Z",
-				location_id: 2_001,
+				location_id: 60_003_760,
 				min_volume: 1,
 				price: 10.0,
 				range: "station",
@@ -115,7 +115,7 @@ defmodule Market.DatabaseTest do
 				duration: 1,
 				is_buy_order: 1,
 				issued: "2026-09-24T00:00:00Z",
-				location_id: 2_001,
+				location_id: 60_003_760,
 				min_volume: 1,
 				price: 110.0,
 				range: "station",
@@ -144,7 +144,7 @@ defmodule Market.DatabaseTest do
 
 		Database.insert_all("names", [
 			%{id: 81_008, name: "Squall"},
-			%{id: 2_001, name: "Jita IV - Moon 4"}
+			%{id: 60_003_760, name: "Jita IV - Moon 4"}
 		])
 
 		Database.insert_all("systems", [
@@ -163,7 +163,7 @@ defmodule Market.DatabaseTest do
 				duration: 1,
 				is_buy_order: 0,
 				issued: "2026-09-24T00:00:00Z",
-				location_id: 2_001,
+				location_id: 60_003_760,
 				min_volume: 1,
 				price: 10.0,
 				range: "station",
@@ -179,7 +179,7 @@ defmodule Market.DatabaseTest do
 				duration: 1,
 				is_buy_order: 1,
 				issued: "2026-09-24T00:00:00Z",
-				location_id: 2_001,
+				location_id: 60_003_760,
 				min_volume: 1,
 				price: 110.0,
 				range: "station",
@@ -209,6 +209,72 @@ defmodule Market.DatabaseTest do
 		assert MarketDatabase.get_market_item("Empty Item") == nil
 		assert MarketDatabase.get_market_item("") == nil
 		assert MarketDatabase.get_market_item(nil) == nil
+	end
+
+	test "suggests only items with a cached Jita 4-4 sell order" do
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("names", [
+			%{id: 81_008, name: "Squall"},
+			%{id: 1_001, name: "Tritanium"},
+			%{id: 9_999, name: "Squalene"}
+		])
+
+		Database.insert_all("market", [
+			%{
+				order_id: 401,
+				duration: 1,
+				is_buy_order: 0,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 60_003_760,
+				min_volume: 1,
+				price: 10.0,
+				range: "station",
+				system_id: 30_000_142,
+				type_id: 81_008,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			},
+			%{
+				order_id: 402,
+				duration: 1,
+				is_buy_order: 0,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 60_003_760,
+				min_volume: 1,
+				price: 12.0,
+				range: "station",
+				system_id: 30_000_142,
+				type_id: 1_001,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			},
+			%{
+				order_id: 403,
+				duration: 1,
+				is_buy_order: 0,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 123_456,
+				min_volume: 1,
+				price: 5.0,
+				range: "station",
+				system_id: 30_000_143,
+				type_id: 9_999,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			}
+		])
+
+		assert [%{item_name: "Squall"}] = MarketDatabase.suggest_items("squ")
+		assert [%{item_name: "Squall"}] = MarketDatabase.suggest_items("  SQUA  ")
+		assert MarketDatabase.suggest_items("") == []
+		assert MarketDatabase.suggest_items(nil) == []
 	end
 
 	test "reads ordered undercutting rows from the market list view" do
@@ -277,7 +343,7 @@ defmodule Market.DatabaseTest do
 		Database.insert_all("names", [
 			%{id: 1_001, name: "Tritanium"},
 			%{id: 1_002, name: "Tritanium Blueprint"},
-			%{id: 2_001, name: "Jita IV - Moon 4"}
+			%{id: 60_003_760, name: "Jita IV - Moon 4"}
 		])
 
 		Database.insert_all("systems", [
@@ -303,7 +369,7 @@ defmodule Market.DatabaseTest do
 			"duration" => 1,
 			"is_buy_order" => false,
 			"issued" => "2026-09-24T00:00:00Z",
-			"location_id" => 2_001,
+			"location_id" => 60_003_760,
 			"min_volume" => 1,
 			"price" => price,
 			"range" => "station",
@@ -320,7 +386,7 @@ defmodule Market.DatabaseTest do
 			duration: 1,
 			is_buy_order: is_buy_order,
 			issued: "2026-09-24T00:00:00Z",
-			location_id: 2_001,
+			location_id: 60_003_760,
 			min_volume: 1,
 			price: price,
 			range: "station",

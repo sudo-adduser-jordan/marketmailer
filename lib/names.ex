@@ -184,6 +184,39 @@ defmodule Universe.Database do
 		_, _ -> :ok
 	end
 
+	# Fills the `names` cache for every type with cached market rows. Runs
+	# once per boot in the background (see Application.start/2): bounded per
+	# boot so a cold cache warms over a few restarts instead of stalling one
+	# behind ~36 ESI chunks. Keeps single-item lookups a pure DB query.
+	@seed_type_names_per_boot 5_000
+
+	def seed_missing_type_names(limit \\ @seed_type_names_per_boot) do
+		missing =
+			try do
+				Database.all(
+					from market in "market",
+						left_join: name in "names",
+						on: name.id == market.type_id,
+						where: is_nil(name.id),
+						select: market.type_id,
+						distinct: true,
+						order_by: market.type_id,
+						limit: ^limit
+				)
+			rescue
+				_ -> []
+			end
+
+		case ESI.Names.resolve(missing) do
+			[] -> :ok
+			entries -> upsert_names(entries)
+		end
+	rescue
+		_ -> :ok
+	catch
+		_, _ -> :ok
+	end
+
 	def upsert_names([]), do: :ok
 
 	def upsert_names(entries),

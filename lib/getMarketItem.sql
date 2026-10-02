@@ -1,5 +1,5 @@
--- Cheapest cached sell order for a named EVE item.
--- 30000142 is the Jita solarSystemID.
+-- Cheapest cached sell order for a named EVE item, always at Jita 4-4
+-- (station 60003760). 30000142 is the Jita solarSystemID.
 WITH JitaBestBuy AS (
     SELECT
         type_id,
@@ -35,6 +35,7 @@ LEFT JOIN names tn ON tn.id = m.type_id
 LEFT JOIN names ln ON ln.id = m.location_id
 LEFT JOIN systems sy ON sy.system_id = m.system_id
 WHERE m.is_buy_order = 0
+  AND m.location_id = 60003760
   AND tn.name IS NOT NULL
   AND (LOWER(TRIM(tn.name)) = ? OR LOWER(tn.name) LIKE ? ESCAPE '\')
 ORDER BY

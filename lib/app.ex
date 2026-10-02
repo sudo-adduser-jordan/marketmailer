@@ -31,12 +31,13 @@ defmodule Marketmailer.Application do
 
 		{:ok, pid} = Supervisor.start_link(children, opts)
 
-		# Fire-and-forget: one bulk universe/names call caching every polled
-		# region id, so failure embeds can print names from the local table.
-		# Skipped when pollers are disabled (e.g. `config/test.exs`).
+		# Fire-and-forget: bulk universe/names calls caching every polled
+		# region id plus every traded type id, so single-item lookups stay
+		# pure DB queries. Skipped when pollers are disabled (e.g. `config/test.exs`).
 		if pollers_enabled?() do
 			Task.start(fn ->
 				Universe.Database.seed_region_names(Marketmailer.RegionManagerSupervisor.region_ids())
+				Universe.Database.seed_missing_type_names()
 			end)
 		end
 

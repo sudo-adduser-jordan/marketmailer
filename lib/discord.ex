@@ -325,7 +325,8 @@ defmodule Discord.Consumer do
 						type: ApplicationCommandOptionType.string(),
 						name: "item",
 						description: "EVE item name",
-						required: true
+						required: true,
+						autocomplete: true
 					}
 				]
 			},
@@ -338,6 +339,23 @@ defmodule Discord.Consumer do
 		]
 
 		Api.ApplicationCommand.bulk_overwrite_global_commands(server_commands ++ market_commands)
+	end
+
+	# Autocomplete must come before the command clause below: autocomplete
+	# interactions carry the same command name in data.
+	def handle_event(
+				{:INTERACTION_CREATE, %Interaction{type: 4, data: %{name: "check_market"}} = interaction, _}
+			) do
+		partial = focused_option_value(interaction, "item")
+
+		choices =
+			for %{item_name: name} <- Market.Database.suggest_items(partial || ""),
+					do: %{name: name, value: name}
+
+		Api.Interaction.create_response(interaction, %{
+			type: InteractionCallbackType.application_command_autocomplete_result(),
+			data: %{choices: Enum.take(choices, 25)}
+		})
 	end
 
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
@@ -410,6 +428,16 @@ defmodule Discord.Consumer do
 	end
 
 	defp option_value(_interaction, _name), do: nil
+
+	# The partially typed value of the focused autocomplete option.
+	defp focused_option_value(%{data: %{options: options}}, name) when is_list(options) do
+		Enum.find_value(options, fn
+			%{name: ^name, value: value} -> value
+			_ -> nil
+		end)
+	end
+
+	defp focused_option_value(_interaction, _name), do: nil
 
 	defp safe_get_market_item(item_name) do
 		Market.Database.get_market_item(item_name)

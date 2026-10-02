@@ -266,6 +266,28 @@ defmodule Market.Database do
 
 	def get_market_item(_item_name), do: nil
 
+	# Up to `limit` distinct item names with a cached Jita 4-4 sell order
+	# matching the typed prefix. Pure DB read for autocomplete; blank input
+	# yields no suggestions.
+	def suggest_items(prefix, limit \\ 25)
+
+	def suggest_items(prefix, limit) when is_binary(prefix) and is_integer(limit) do
+		normalized = normalize_item_name(prefix)
+
+		if normalized == "" do
+			[]
+		else
+			escaped = escape_like(normalized)
+			load_rows("suggestItems.sql", ["%#{escaped}%", "#{escaped}%", limit])
+		end
+	rescue
+		_ -> []
+	catch
+		_, _ -> []
+	end
+
+	def suggest_items(_prefix, _limit), do: []
+
 	# Flatten for matching: trim, collapse all whitespace runs to one space,
 	# downcase. Returns "" for non-matching input.
 	defp normalize_item_name(name) do
