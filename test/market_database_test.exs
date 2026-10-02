@@ -139,6 +139,70 @@ defmodule Market.DatabaseTest do
 		end
 	end
 
+	test "finds Squall by case-insensitive name from cached rows" do
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("names", [
+			%{id: 81_008, name: "Squall"},
+			%{id: 2_001, name: "Jita IV - Moon 4"}
+		])
+
+		Database.insert_all("systems", [
+			%{system_id: 30_000_142, name: "Jita", security_status: 0.9, region_name: "The Forge"},
+			%{
+				system_id: 30_000_143,
+				name: "Rens",
+				security_status: 0.7,
+				region_name: "Heimatar"
+			}
+		])
+
+		Database.insert_all("market", [
+			%{
+				order_id: 301,
+				duration: 1,
+				is_buy_order: 0,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 2_001,
+				min_volume: 1,
+				price: 10.0,
+				range: "station",
+				system_id: 30_000_143,
+				type_id: 81_008,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			},
+			%{
+				order_id: 302,
+				duration: 1,
+				is_buy_order: 1,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 2_001,
+				min_volume: 1,
+				price: 110.0,
+				range: "station",
+				system_id: 30_000_142,
+				type_id: 81_008,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			}
+		])
+
+		for query <- ["squall", "SQUALL", "  Squall  "] do
+			item = MarketDatabase.get_market_item(query)
+
+			assert %MarketView{} = item
+			assert item.type_id == 81_008
+			assert item.item_name == "Squall"
+			assert item.price == 10.0
+			assert item.instant_sell_profit == 1_000.0
+		end
+	end
+
 	test "returns nil for a known type with no market order" do
 		Database.insert_all("names", [%{id: 2_001, name: "Empty Item"}])
 

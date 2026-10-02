@@ -156,6 +156,9 @@ defmodule Discord.Messages do
 	def market_embed(item, thumbnail_url \\ nil) do
 		market_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
 		reference_url = "https://everef.net/types/#{item.type_id}"
+		# Per-item icon from the EVE image server; Discord loads it, so the
+		# lookup stays a single instant DB query with no capture/fetch.
+		type_icon = "https://images.evetech.net/types/#{item.type_id}/icon?size=64"
 
 		%Embed{
 			title: item.item_name || "Market order",
@@ -171,7 +174,7 @@ defmodule Discord.Messages do
 				icon_url: @icon_success
 			},
 			thumbnail: %Embed.Thumbnail{
-				url: thumbnail_url || @icon_
+				url: thumbnail_url || type_icon
 			},
 			image: %Embed.Image{
 				url: @icon_market
@@ -366,27 +369,12 @@ defmodule Discord.Consumer do
 			"check_market" ->
 				item_name = option_value(interaction, "item")
 
-				case active_bot_name() do
-					# No bot runtime (tests, dev shell): synchronous immediate reply.
-					nil ->
-						case safe_get_market_item(item_name) do
-							nil -> respond(interaction, Messages.market_not_found_embed(item_name))
-							item -> respond(interaction, Messages.market_embed(item))
-						end
-
-					# Prod: ack within Discord's 3s window first. The DB lookup
-					# plus lazy ESI backfill (17k+ missing type names = ~36
-					# /universe/names chunks) runs in the task, with ~15m to
-					# edit instead of 3s to reply.
-					bot_name ->
-						response = %{
-							type: InteractionCallbackType.deferred_channel_message_with_source()
-						}
-
-						case Api.Interaction.create_response(interaction, response) do
-							:ok -> start_lookup_task(bot_name, interaction, item_name)
-							{:error, reason} -> log_discord_warning("check_market_defer_failed", reason, interaction)
-						end
+				# Instant DB-only lookup: single SELECT, no ESI/Janice, so the
+				# direct reply stays inside Discord's 3s window. Found and
+				# not-found both answer immediately with no thinking state.
+				case safe_get_market_item(item_name) do
+					nil -> respond(interaction, Messages.market_not_found_embed(item_name))
+					item -> respond(interaction, Messages.market_embed(item))
 				end
 
 			"list_market" ->
@@ -423,31 +411,6 @@ defmodule Discord.Consumer do
 
 	defp option_value(_interaction, _name), do: nil
 
-	defp start_lookup_task(bot_name, interaction, item_name) do
-		task =
-			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
-				lookup_and_edit(bot_name, interaction, item_name)
-			end)
-
-		case task do
-			{:ok, _pid} ->
-				:ok
-
-			{:error, reason} ->
-				log_discord_warning("check_market_task_failed", reason, interaction)
-				edit_not_found(bot_name, interaction, item_name)
-		end
-	end
-
-	defp lookup_and_edit(bot_name, interaction, item_name) do
-		case safe_get_market_item(item_name) do
-			nil -> edit_not_found(bot_name, interaction, item_name)
-			item -> capture_and_edit(bot_name, interaction, item)
-		end
-	end
-
-	# Never let a DB/ESI failure crash the interaction handler with no
-	# response: log once and fall back to the not-found embed.
 	defp safe_get_market_item(item_name) do
 		Market.Database.get_market_item(item_name)
 	rescue
@@ -468,10 +431,6 @@ defmodule Discord.Consumer do
 			)
 
 			nil
-	end
-
-	defp edit_not_found(bot_name, interaction, item_name) do
-		edit_response(bot_name, interaction, %{embeds: [Messages.market_not_found_embed(item_name)]})
 	end
 
 	defp start_list_task(bot_name, interaction) do
@@ -512,39 +471,6 @@ defmodule Discord.Consumer do
 			)
 
 			[]
-	end
-
-	defp capture_and_edit(bot_name, interaction, item) do
-		case Janice.Capture.capture(item.type_id) do
-			{:ok, png} ->
-				filename = Janice.Capture.filename(item.type_id)
-				thumbnail = "attachment://#{filename}"
-				embed = Messages.market_embed(item, thumbnail)
-				file = %{name: filename, body: png}
-				edit_response(bot_name, interaction, %{embeds: [embed], files: [file]})
-
-			{:error, reason} ->
-				Marketmailer.Log.warning(
-					"janice_capture_failed",
-					%{type_id: item.type_id, reason: inspect(reason)},
-					"Janice chart capture failed; using the fallback chart image"
-				)
-
-				edit_fallback_response(bot_name, interaction, item)
-		end
-	end
-
-	defp edit_fallback_response(bot_name, interaction, item) do
-		filename = Janice.Capture.fallback_filename()
-		embed = Messages.market_embed(item, "attachment://#{filename}")
-		file = %{name: filename, body: Janice.Capture.fallback_image()}
-		edit_response(bot_name, interaction, %{embeds: [embed], files: [file]})
-	rescue
-		_ -> edit_market_response(bot_name, interaction, item)
-	end
-
-	defp edit_market_response(bot_name, interaction, item) do
-		edit_response(bot_name, interaction, %{embeds: [Messages.market_embed(item)]})
 	end
 
 	defp edit_response(bot_name, interaction, payload) do

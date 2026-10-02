@@ -187,8 +187,6 @@ defmodule Discord.Database do
 end
 
 defmodule Market.Database do
-	import Ecto.Query
-
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
 	@table "market"
 
@@ -252,32 +250,7 @@ defmodule Market.Database do
 			try do
 				params = [normalized, "%#{escape_like(normalized)}%", normalized]
 
-				case load_rows("getMarketItem.sql", params) do
-					[] ->
-						backfill_market_type_names()
-
-						case load_rows("getMarketItem.sql", params) do
-							[] ->
-								resolve_name_via_ids(item_name)
-
-								case load_rows("getMarketItem.sql", params) do
-									[] ->
-										nil
-
-									[item | _] ->
-										backfill([item])
-										load_rows("getMarketItem.sql", params) |> List.first()
-								end
-
-							[item | _] ->
-								backfill([item])
-								load_rows("getMarketItem.sql", params) |> List.first()
-						end
-
-					[item | _] ->
-						backfill([item])
-						load_rows("getMarketItem.sql", params) |> List.first()
-				end
+				load_rows("getMarketItem.sql", params) |> List.first()
 			rescue
 				e ->
 					Marketmailer.Log.warning(
@@ -358,103 +331,6 @@ defmodule Market.Database do
 	end
 
 	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
-
-	# A name lookup cannot discover an unresolved type id from the market query
-	# itself, so fill the type-name cache before retrying an item lookup.
-	# Bounded: a cold names cache can hold ~17k missing ids (~36 ESI chunks),
-	# so resolve at most @backfill_max_ids per lookup and leave the rest for
-	# later lookups instead of stalling one interaction behind every chunk.
-	@backfill_max_ids 1_000
-
-	defp backfill_market_type_names do
-		query =
-			from market in @table,
-				left_join: name in "names",
-				on: name.id == market.type_id,
-				where: is_nil(name.id),
-				select: market.type_id,
-				distinct: true,
-				order_by: market.type_id,
-				limit: @backfill_max_ids + 1
-
-		case Database.all(query) do
-			[] -> :ok
-			ids when length(ids) > @backfill_max_ids -> resolve_names(Enum.take(ids, @backfill_max_ids), true)
-			ids -> resolve_names(ids, false)
-		end
-	rescue
-		error ->
-			Marketmailer.Log.warning(
-				"market_backfill_failed",
-				%{reason: Exception.message(error)},
-				"Type-name backfill failed: #{Exception.message(error)}"
-			)
-
-			:ok
-	catch
-		_, reason ->
-			Marketmailer.Log.warning(
-				"market_backfill_failed",
-				%{reason: inspect(reason)},
-				"Type-name backfill failed: #{inspect(reason)}"
-			)
-
-			:ok
-	end
-
-	defp resolve_names(ids, truncated?) do
-		if truncated? do
-			Marketmailer.Log.info(
-				"market_backfill_truncated",
-				%{resolved: length(ids)},
-				"Type-name backfill truncated to #{length(ids)} ids; remainder left for later lookups"
-			)
-		end
-
-		ids |> ESI.Names.resolve() |> Universe.Database.upsert_names()
-	end
-
-	# Targeted name -> id discovery for cold caches. The bounded bulk
-	# backfill above takes the first 1_000 missing ids ordered by type_id,
-	# so a high id like PLEX (44992) may sit outside its window for many
-	# lookups. One POST /universe/ids for the exact query string discovers
-	# the type id directly (verified: ["plex"] -> 44992). Skipped when
-	# pollers are disabled so the test suite stays offline (config/test.exs).
-	defp resolve_name_via_ids(item_name) do
-		if Application.get_env(:marketmailer, :start_pollers, true) do
-			query =
-				item_name |> to_string() |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim()
-
-			if query == "" do
-				:ok
-			else
-				case ESI.Ids.resolve_inventory_type(query) do
-					[] -> :ok
-					entries -> Universe.Database.upsert_names(entries)
-				end
-			end
-		else
-			:ok
-		end
-	rescue
-		error ->
-			Marketmailer.Log.warning(
-				"market_ids_lookup_failed",
-				%{reason: Exception.message(error)},
-				"Targeted type-id lookup failed: #{Exception.message(error)}"
-			)
-
-			:ok
-	catch
-		_, reason ->
-			Marketmailer.Log.warning(
-				"market_ids_lookup_failed",
-				%{reason: inspect(reason)},
-				"Targeted type-id lookup failed: #{inspect(reason)}"
-			)
-
-			:ok
-	end
 
 	# Fills the lazy EVE caches (names/systems) for anything the query could not
 	# resolve locally; the caller re-runs the query afterwards.

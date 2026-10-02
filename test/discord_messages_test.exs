@@ -45,6 +45,21 @@ defmodule Discord.MessagesTest do
 		assert embed.thumbnail.url == "attachment://janice-1001.png"
 	end
 
+	test "defaults the thumbnail to the item's EVE image-server icon" do
+		item = %MarketView{
+			type_id: 81_008,
+			item_name: "Squall",
+			region_name: "The Forge",
+			system_name: "Jita",
+			security_status: 0.0,
+			price: 10.0
+		}
+
+		embed = Discord.Messages.market_embed(item)
+
+		assert embed.thumbnail.url == "https://images.evetech.net/types/81008/icon?size=64"
+	end
+
 	test "all embeds carry a SemVer version badge in the footer" do
 		item = %MarketView{
 			type_id: 1_001,
