@@ -56,6 +56,7 @@ defmodule Marketmailer.Application do
 	# drains the tick is a single indexed no-op query.
 	defp seed_type_names_forever do
 		count = Universe.Database.missing_type_name_count()
+		started = System.monotonic_time(:millisecond)
 
 		Marketmailer.Log.info(
 			"type_names_tick",
@@ -64,6 +65,13 @@ defmodule Marketmailer.Application do
 		)
 
 		if count != 0, do: Universe.Database.seed_missing_type_names(500)
+
+		Marketmailer.Log.info(
+			"type_names_tick_done",
+			%{missing: count, elapsed_ms: System.monotonic_time(:millisecond) - started},
+			"type-name fill tick done"
+		)
+
 		Process.sleep(60_000)
 		seed_type_names_forever()
 	end
