@@ -1,8 +1,6 @@
 defmodule Discord.BroadcasterTest do
 	use ExUnit.Case, async: false
 
-	alias MarketView
-
 	setup do
 		unique = System.unique_integer([:positive])
 		coordinator = :"broadcaster_coordinator_#{unique}"
@@ -12,12 +10,12 @@ defmodule Discord.BroadcasterTest do
 		{:ok, coordinator: coordinator, task_supervisor: task_supervisor}
 	end
 
-	test "broadcasts a successful market embed with an attachment to every channel", %{coordinator: coordinator} do
+	test "broadcasts the undercut list to every channel", %{coordinator: coordinator} do
 		test_pid = self()
 		channel_ids = [100, 200]
 
 		broadcaster =
-			start_broadcaster(coordinator, channel_ids, market_item(), fn channel, payload ->
+			start_broadcaster(coordinator, channel_ids, market_list(), fn channel, payload ->
 				send(test_pid, {:sent, channel, payload})
 				{:ok, :sent}
 			end)
@@ -28,15 +26,16 @@ defmodule Discord.BroadcasterTest do
 		assert_receive {:sent, 200, second_payload}
 		assert first_payload.allowed_mentions == :none
 		assert [embed] = first_payload.embeds
-		assert embed.image.url == "attachment://janice-1001.png"
-		assert [%{name: "janice-1001.png", body: <<137, 80, 78, 71>>}] = first_payload.files
+		assert embed.title == "Items undercutting the Jita buy wall"
+		assert embed.description =~ "Tritanium"
+		refute Map.has_key?(first_payload, :files)
 		assert second_payload == first_payload
 		assert Process.alive?(broadcaster)
 	end
 
 	test "ignores a failed refresh without notifying Discord", %{coordinator: coordinator} do
 		_broadcaster =
-			start_broadcaster(coordinator, [300], market_item(), fn channel, payload ->
+			start_broadcaster(coordinator, [300], market_list(), fn channel, payload ->
 				send(self(), {:sent, channel, payload})
 				{:ok, :sent}
 			end)
@@ -47,7 +46,7 @@ defmodule Discord.BroadcasterTest do
 		refute_receive {:sent, _channel, _payload}, 150
 	end
 
-	test "stays silent when the market query has no item", %{coordinator: coordinator} do
+	test "stays silent when the market query has no items", %{coordinator: coordinator} do
 		_broadcaster =
 			start_broadcaster(coordinator, [400], [], fn channel, payload ->
 				send(self(), {:sent, channel, payload})
@@ -61,7 +60,7 @@ defmodule Discord.BroadcasterTest do
 
 	test "does nothing when no channels are registered", %{coordinator: coordinator} do
 		broadcaster =
-			start_broadcaster(coordinator, [], market_item(), fn _channel, _payload ->
+			start_broadcaster(coordinator, [], market_list(), fn _channel, _payload ->
 				flunk("delivery should not be called")
 			end)
 
@@ -75,7 +74,7 @@ defmodule Discord.BroadcasterTest do
 		test_pid = self()
 
 		broadcaster =
-			start_broadcaster(coordinator, [500], market_item(), fn channel, payload ->
+			start_broadcaster(coordinator, [500], market_list(), fn channel, payload ->
 				send(test_pid, {:sent, channel, payload})
 				{:ok, :sent}
 			end)
@@ -92,7 +91,7 @@ defmodule Discord.BroadcasterTest do
 		test_pid = self()
 
 		broadcaster =
-			start_broadcaster(coordinator, [600], market_item(), fn channel, _payload ->
+			start_broadcaster(coordinator, [600], market_list(), fn channel, _payload ->
 				send(test_pid, {:attempted, channel})
 				{:error, :forbidden}
 			end)
@@ -104,36 +103,23 @@ defmodule Discord.BroadcasterTest do
 	end
 
 	test "handles a missing Discord bot without crashing", %{coordinator: coordinator} do
-		broadcaster = start_broadcaster(coordinator, [700], market_item(), nil)
+		broadcaster = start_broadcaster(coordinator, [700], market_list(), nil)
 
 		complete_cycle(coordinator, 16, :updated)
 
 		assert Process.alive?(broadcaster)
 	end
 
-	test "attaches the fallback chart image when capture fails", %{coordinator: coordinator} do
-		test_pid = self()
-
+	test "stays silent when the market query returns an invalid shape", %{coordinator: coordinator} do
 		_broadcaster =
-			start_broadcaster(
-				coordinator,
-				[900],
-				market_item(),
-				fn channel, payload ->
-					send(test_pid, {:sent, channel, payload})
-					{:ok, :sent}
-				end,
-				capture_fun: fn _type_id -> {:error, :timeout} end
-			)
+			start_broadcaster(coordinator, [900], %{unexpected: :shape}, fn channel, payload ->
+				send(self(), {:sent, channel, payload})
+				{:ok, :sent}
+			end)
 
 		complete_cycle(coordinator, 19, :updated)
 
-		assert_receive {:sent, 900, payload}
-		assert [embed] = payload.embeds
-		assert embed.image.url == "attachment://#{Janice.Capture.fallback_filename()}"
-		assert [%{name: name, body: body}] = payload.files
-		assert name == Janice.Capture.fallback_filename()
-		assert binary_part(body, 0, 4) == <<137, 80, 78, 71>>
+		refute_receive {:sent, _channel, _payload}, 150
 	end
 
 	test "keeps the broadcaster alive after an async refresh completes", %{
@@ -146,7 +132,7 @@ defmodule Discord.BroadcasterTest do
 			start_broadcaster(
 				coordinator,
 				[800],
-				market_item(),
+				market_list(),
 				fn channel, _payload ->
 					send(test_pid, {:sent, channel})
 					{:ok, :sent}
@@ -166,7 +152,6 @@ defmodule Discord.BroadcasterTest do
 	defp start_broadcaster(coordinator, channels, market_result, deliver_fun, opts \\ []) do
 		name = :"broadcaster_#{System.unique_integer([:positive])}"
 		deliver_opts = if deliver_fun, do: [deliver_fun: deliver_fun], else: []
-		capture_fun = Keyword.get(opts, :capture_fun, fn _type_id -> {:ok, <<137, 80, 78, 71>>} end)
 
 		pid =
 			start_supervised!(
@@ -177,8 +162,7 @@ defmodule Discord.BroadcasterTest do
 					 async: Keyword.get(opts, :async, false),
 					 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 					 channels_fun: fn -> channels end,
-					 market_fun: fn -> market_result end,
-					 capture_fun: capture_fun
+					 market_fun: fn -> market_result end
 				 ] ++ deliver_opts}
 			)
 
@@ -190,15 +174,16 @@ defmodule Discord.BroadcasterTest do
 		Market.UpdateCoordinator.page_result(region, 1, status, %{pages: 1}, coordinator)
 	end
 
-	defp market_item do
+	defp market_list do
 		[
-			%MarketView{
-				type_id: 1_001,
-				item_name: "Tritanium",
-				region_name: "The Forge",
-				system_name: "Jita",
-				security_status: 0.0,
-				price: 10.0
+			%{
+				item: "Tritanium",
+				sell_price: 10.0,
+				buy_price: 110.0,
+				margin: 100.0,
+				location_name: "Jita IV - Moon 4",
+				system_name: "Rens",
+				type_id: 1_001
 			}
 		]
 	end

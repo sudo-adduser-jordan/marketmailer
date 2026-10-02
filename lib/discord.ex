@@ -551,8 +551,8 @@ defmodule Discord.Consumer do
 					nil ->
 						respond(interaction, Messages.market_list_embed(safe_get_items()))
 
-					# Same 3s-ack rationale as check_market: the list query
-					# also backfills names/systems over synchronous ESI.
+					# Deferred ack first: the list query scans the full
+					# undercut view, so it runs in the async task below.
 					bot_name ->
 						response = %{
 							type: InteractionCallbackType.deferred_channel_message_with_source()

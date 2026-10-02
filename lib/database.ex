@@ -300,7 +300,10 @@ defmodule Market.Database do
 	end
 
 	def get_items_less_than_jita_buy do
-		backfill(load_rows("getItemsLessThan.sql"))
+		# No backfill here (unlike get_best_order/0): this fans out to up to
+		# 100 rows, so synchronous ESI per missing system would park the
+		# deferred list_market interaction on "thinking...". Gaps render as
+		# "?" and warm via the background seed tick instead.
 		load_rows("getItemsLessThan.sql")
 	rescue
 		e ->

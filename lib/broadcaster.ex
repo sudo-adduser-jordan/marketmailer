@@ -1,9 +1,10 @@
 defmodule Discord.Broadcaster do
 	@moduledoc """
-	Listens for completed market refreshes and sends embeds to registered channels.
-	Failed refreshes are log-only (the coordinator already emits a
-	`region_refresh_failed` warning to `logs/errors.jsonl`); nothing is sent
-	to Discord for them so one flaky page cannot spam every channel.
+	Listens for completed market refreshes and broadcasts the undercut list
+	to registered channels. Failed refreshes are log-only (the coordinator
+	already emits a `region_refresh_failed` warning to `logs/errors.jsonl`);
+	nothing is sent to Discord for them so one flaky page cannot spam every
+	channel.
 	"""
 
 	use GenServer
@@ -31,8 +32,7 @@ defmodule Discord.Broadcaster do
 			 async: Keyword.get(opts, :async, true),
 			 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 			 channels_fun: Keyword.get(opts, :channels_fun, &DiscordDatabase.registered_channels/0),
-			 market_fun: Keyword.get(opts, :market_fun, &Market.Database.get_best_order/0),
-			 capture_fun: Keyword.get(opts, :capture_fun, &Janice.Capture.capture/1),
+			 market_fun: Keyword.get(opts, :market_fun, &Market.Database.get_items_less_than_jita_buy/0),
 			 deliver_fun: Keyword.get(opts, :deliver_fun, &deliver/2),
 			 prune_fun: Keyword.get(opts, :prune_fun, &DiscordDatabase.delete_by_channel/1),
 			 pending: MapSet.new(),
@@ -141,16 +141,16 @@ defmodule Discord.Broadcaster do
 				{:ok, :no_channels}
 
 			{:ok, channels} ->
-				case fetch_market_item(state) do
-					{:ok, item} ->
-						{embed, file} = success_payload(item, state)
-						deliver_all(channels, embed, file, state)
+				case fetch_market_list(state) do
+					{:ok, items} ->
+						embed = Messages.market_list_embed(items)
+						deliver_all(channels, embed, nil, state)
 
 					{:error, reason} ->
 						Marketmailer.Log.warning(
 							"broadcast_no_market_item",
 							%{region: Map.get(summary, :region), reason: inspect(reason)},
-							"Skipping Discord broadcast: no market item"
+							"Skipping Discord broadcast: no market items"
 						)
 
 						{:ok, :no_market_item}
@@ -169,46 +169,13 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
-	defp fetch_market_item(state) do
+	defp fetch_market_list(state) do
 		case invoke(state.market_fun) do
-			{:ok, [item | _]} -> {:ok, item}
+			{:ok, [_ | _] = items} -> {:ok, items}
 			{:ok, []} -> {:error, :no_market_item}
 			{:ok, _other} -> {:error, :invalid_market_result}
 			{:error, reason} -> {:error, reason}
 		end
-	end
-
-	defp success_payload(item, state) do
-		case invoke(fn -> state.capture_fun.(item.type_id) end) do
-			{:ok, {:ok, png}} when is_binary(png) ->
-				filename = Janice.Capture.filename(item.type_id)
-				{Messages.market_embed(item, nil, "attachment://#{filename}"), %{name: filename, body: png}}
-
-			{:ok, _other} ->
-				fallback_payload(item)
-
-			{:error, reason} ->
-				capture_failure(item, reason)
-		end
-	end
-
-	defp fallback_payload(item) do
-		filename = Janice.Capture.fallback_filename()
-
-		{Messages.market_embed(item, nil, "attachment://#{filename}"),
-		 %{name: filename, body: Janice.Capture.fallback_image()}}
-	rescue
-		_ -> {Messages.market_embed(item), nil}
-	end
-
-	defp capture_failure(item, reason) do
-		Marketmailer.Log.warning(
-			"janice_broadcast_capture_failed",
-			%{type_id: item.type_id, reason: inspect(reason)},
-			"Broadcast chart capture failed; using the fallback chart image"
-		)
-
-		fallback_payload(item)
 	end
 
 	defp deliver_all(channels, embed, file, state) do
