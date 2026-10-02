@@ -9,6 +9,7 @@ defmodule Marketmailer.Application do
 		Marketmailer.Log.info("app_start", %{booted_at: DateTime.utc_now()}, "marketmailer starting")
 		ensure_ets(:market_cache, [:named_table, :set, :public, read_concurrency: true])
 		ensure_ets(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
+		ensure_ets(:janice_chart_cache, [:named_table, :set, :public])
 
 		:ok = migrate()
 

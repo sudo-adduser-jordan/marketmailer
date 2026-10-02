@@ -52,6 +52,32 @@ defmodule Janice.CaptureTest do
 		assert {:error, :playwright_unavailable} = Janice.Playwright.capture(1_001, timeout: 10)
 	end
 
+	test "serves fresh cached charts without launching a browser" do
+		ensure_cache_table()
+		ensure_playwright_supervisor_absent()
+		:ets.insert(:janice_chart_cache, {1_001, <<137, 80, 78, 71>>, System.monotonic_time(:millisecond)})
+
+		assert {:ok, <<137, 80, 78, 71>>} = Janice.Playwright.capture(1_001, timeout: 10)
+	end
+
+	test "ignores expired cache entries" do
+		ensure_cache_table()
+		ensure_playwright_supervisor_absent()
+
+		stale = System.monotonic_time(:millisecond) - Janice.Playwright.cache_ttl_ms() - 1
+		:ets.insert(:janice_chart_cache, {1_001, <<137, 80, 78, 71>>, stale})
+
+		assert {:error, :playwright_unavailable} = Janice.Playwright.capture(1_001, timeout: 10)
+	end
+
+	defp ensure_cache_table do
+		if :ets.whereis(:janice_chart_cache) == :undefined do
+			:ets.new(:janice_chart_cache, [:named_table, :set, :public])
+		end
+
+		:ok
+	end
+
 	test "supervisor degrades to the static fallback when Playwright is missing" do
 		assert :ignore = Janice.Supervisor.start_link(executable: "definitely-missing-playwright")
 	end
