@@ -326,7 +326,10 @@ defmodule Market.Database do
 
 					if file in ["getBestOrder.sql", "getMarketItem.sql"] do
 						struct = Ecto.Repo.Schema.load(Ecto.Adapters.SQLite3, MarketView, data)
-						Map.put(struct, :instant_sell_profit, data[:instant_sell_profit])
+
+						struct
+						|> Map.put(:instant_sell_profit, data[:instant_sell_profit])
+						|> Map.put(:buy_price, data[:buy_price])
 					else
 						data
 					end

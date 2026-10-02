@@ -11,23 +11,55 @@ defmodule Discord.MessagesTest do
 		assert embed.description == "No cached market order was found for **Rifter**."
 	end
 
-	test "uses the item name and sell price for a market embed" do
+	test "uses location, sell, buy and margin fields for a market embed" do
 		item = %MarketView{
 			type_id: 1_001,
 			item_name: "Tritanium",
 			region_name: "The Forge",
 			system_name: "Jita",
-			security_status: 0.0,
+			location_name: "Jita IV - Moon 4",
+			security_status: 0.9,
 			price: 10.0,
-			instant_sell_profit: nil
+			buy_price: 110.0,
+			instant_sell_profit: 1_000.0
 		}
 
 		embed = Discord.Messages.market_embed(item)
-		price_field = Enum.find(embed.fields, &(&1.name == "Sell price"))
+		fields = Map.new(embed.fields, &{&1.name, &1.value})
 
 		assert %Embed{title: "Tritanium"} = embed
-		assert price_field.value == "10.00 ISK"
+		assert fields["Location"] == "The Forge - Jita - Jita IV - Moon 4 (0.9)"
+		assert fields["Sell"] == "10.00 ISK"
+		assert fields["Buy"] == "110.00 ISK"
+		assert fields["Margin"] == "```diff\n+1000.00 ISK\n```"
 		assert embed.description =~ "janice.e-351.com/i/1001/market/2"
+		assert embed.color == 0x43B581
+	end
+
+	test "colors loss red and unknown margin neutral" do
+		loss = %MarketView{
+			type_id: 1_001,
+			item_name: "Tritanium",
+			price: 120.0,
+			buy_price: 110.0,
+			instant_sell_profit: -100.0
+		}
+
+		loss_embed = Discord.Messages.market_embed(loss)
+		loss_fields = Map.new(loss_embed.fields, &{&1.name, &1.value})
+
+		assert loss_fields["Margin"] == "```diff\n-100.00 ISK\n```"
+		assert loss_embed.color == 0xF04747
+
+		unknown = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0}
+
+		unknown_embed = Discord.Messages.market_embed(unknown)
+		unknown_fields = Map.new(unknown_embed.fields, &{&1.name, &1.value})
+
+		assert unknown_fields["Buy"] == "? ISK"
+		assert unknown_fields["Margin"] == "```diff\n? ISK\n```"
+		assert unknown_fields["Location"] =~ "?"
+		assert unknown_embed.color == 0x7289DA
 	end
 
 	test "uses an attachment URL when a Janice graph is supplied" do

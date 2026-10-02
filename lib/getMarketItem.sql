@@ -28,6 +28,7 @@ SELECT
     'SELL' AS order_type,
     m.duration,
     m."range",
+    jb.jita_buy_price AS buy_price,
     ((jb.jita_buy_price - m.price) * MIN(COALESCE(m.volume_remain, 0), COALESCE(jb.jita_total_demand, 0))) AS instant_sell_profit
 FROM market m
 LEFT JOIN JitaBestBuy jb ON jb.type_id = m.type_id

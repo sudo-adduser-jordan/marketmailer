@@ -51,6 +51,7 @@ defmodule MarketView do
 
 	schema "marketView" do
 		field :instant_sell_profit, :float, virtual: true
+		field :buy_price, :float, virtual: true
 
 		field :issued, :string
 		field :type_id, :integer

@@ -233,6 +233,67 @@ defmodule Universe.Database do
 		_, _ -> :ok
 	end
 
+	# Same steady fill for station/location names shown on the check embed.
+	# Player-owned structures never resolve via universe/names; those ids
+	# simply stay missing and keep the "?" station label.
+	def seed_missing_location_names(limit \\ 500) do
+		missing =
+			try do
+				Database.all(
+					from market in "market",
+						left_join: name in "names",
+						on: name.id == market.location_id,
+						where: is_nil(name.id),
+						select: market.location_id,
+						distinct: true,
+						order_by: market.location_id,
+						limit: ^limit
+				)
+			rescue
+				_ -> []
+			end
+
+		case ESI.Names.resolve(missing) do
+			[] -> :ok
+			entries -> upsert_names(entries)
+		end
+	rescue
+		_ -> :ok
+	catch
+		_, _ -> :ok
+	end
+
+	# Same steady fill for the systems cache (name/security/region). Each
+	# system costs 3 ESI GETs (system -> constellation -> region), so the
+	# per-tick cap stays small.
+	def seed_missing_systems(limit \\ 20) do
+		missing =
+			try do
+				Database.all(
+					from market in "market",
+						left_join: system in "systems",
+						on: system.system_id == market.system_id,
+						where: is_nil(system.system_id),
+						select: market.system_id,
+						distinct: true,
+						order_by: market.system_id,
+						limit: ^limit
+				)
+			rescue
+				_ -> []
+			end
+
+		Enum.each(missing, fn system_id ->
+			with {:ok, info} <- ESI.SystemInfo.fetch(system_id) do
+				upsert_system(info)
+			end
+		end)
+	rescue
+		_ -> :ok
+	catch
+		_, _ -> :ok
+	end
+
 	def upsert_names([]), do: :ok
 
 	def upsert_names(entries),

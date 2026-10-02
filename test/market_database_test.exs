@@ -66,6 +66,7 @@ defmodule Market.DatabaseTest do
 		assert item.item_name == "Tritanium"
 		assert item.location_name == "Jita IV - Moon 4"
 		assert item.price == 10.0
+		assert item.buy_price == 110.0
 		assert item.instant_sell_profit == 1_000.0
 	end
 
@@ -135,6 +136,7 @@ defmodule Market.DatabaseTest do
 			assert item.type_id == 44_992
 			assert item.item_name == "PLEX"
 			assert item.price == 10.0
+			assert item.buy_price == 110.0
 			assert item.instant_sell_profit == 1_000.0
 		end
 	end
@@ -199,6 +201,7 @@ defmodule Market.DatabaseTest do
 			assert item.type_id == 81_008
 			assert item.item_name == "Squall"
 			assert item.price == 10.0
+			assert item.buy_price == 110.0
 			assert item.instant_sell_profit == 1_000.0
 		end
 	end
@@ -302,6 +305,41 @@ defmodule Market.DatabaseTest do
 		])
 
 		assert Universe.Database.seed_missing_type_names(500) == :ok
+	end
+
+	test "location and system seeding are no-ops offline when nothing is missing" do
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("names", [
+			%{id: 1_001, name: "Tritanium"},
+			%{id: 60_003_760, name: "Jita IV - Moon 4"}
+		])
+
+		Database.insert_all("systems", [
+			%{system_id: 30_000_142, name: "Jita", security_status: 0.9, region_name: "The Forge"}
+		])
+
+		Database.insert_all("market", [
+			%{
+				order_id: 502,
+				duration: 1,
+				is_buy_order: 0,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 60_003_760,
+				min_volume: 1,
+				price: 10.0,
+				range: "station",
+				system_id: 30_000_142,
+				type_id: 1_001,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			}
+		])
+
+		assert Universe.Database.seed_missing_location_names(500) == :ok
+		assert Universe.Database.seed_missing_systems(20) == :ok
 	end
 
 	test "reads ordered undercutting rows from the market list view" do

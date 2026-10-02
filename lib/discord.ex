@@ -166,7 +166,7 @@ defmodule Discord.Messages do
 						[Market](#{market_url}) [Reference](#{reference_url})
 						",
 			# url: "https://discord.com",
-			color: @color_info,
+			color: embed_color(item.instant_sell_profit),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
 				name: "Marketmailer - Market Order",
@@ -181,28 +181,47 @@ defmodule Discord.Messages do
 			},
 			fields: [
 				%Embed.Field{
-					name: "#{item.region_name}",
-					value: "#{format_security(item.security_status)} #{item.system_name}",
+					name: "Location",
+					value:
+						"#{or_unknown(item.region_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.location_name)} (#{format_security(item.security_status)})",
+					inline: false
+				},
+				%Embed.Field{
+					name: "Sell",
+					value: "#{format_isk(item.price)} ISK",
 					inline: true
 				},
-				profit_field(item)
+				%Embed.Field{
+					name: "Buy",
+					value: "#{format_isk(item.buy_price)} ISK",
+					inline: true
+				},
+				%Embed.Field{
+					name: "Margin",
+					value: margin_value(item.instant_sell_profit),
+					inline: false
+				}
 			]
 		}
 		|> with_version()
 	end
 
-	defp profit_field(item) do
-		name =
-			if is_nil(item.instant_sell_profit),
-				do: "Sell price",
-				else: "#{format_isk(item.instant_sell_profit)} ISK profit"
+	# Green sidebar on profit, red on loss, neutral when unknown.
+	defp embed_color(nil), do: @color_info
+	defp embed_color(profit) when is_number(profit) and profit > 0, do: @color_success
+	defp embed_color(_profit), do: @color_error
 
-		%Embed.Field{
-			name: name,
-			value: "#{format_isk(item.price)} ISK",
-			inline: true
-		}
+	# Discord has no colored text; diff blocks render +/- lines green/red.
+	defp margin_value(nil), do: "```diff\n? ISK\n```"
+
+	defp margin_value(profit) when is_number(profit) do
+		sign = if profit >= 0, do: "+", else: "-"
+		"```diff\n#{sign}#{format_isk(abs(profit))} ISK\n```"
 	end
+
+	defp or_unknown(nil), do: "?"
+	defp or_unknown(""), do: "?"
+	defp or_unknown(value), do: value
 
 	defp format_security(nil), do: "?"
 	defp format_security(security), do: abs(Float.round(security * 1.0, 1))
@@ -388,9 +407,19 @@ defmodule Discord.Consumer do
 				# Instant DB-only lookup: single SELECT, no ESI/Janice, so the
 				# direct reply stays inside Discord's 3s window. Found and
 				# not-found both answer immediately with no thinking state.
+				# The Janice chart follows as an async edit (with the failure
+				# image as fallback) so a slow capture never blocks the reply.
 				case safe_get_market_item(item_name) do
-					nil -> respond(interaction, Messages.market_not_found_embed(item_name))
-					item -> respond(interaction, Messages.market_embed(item))
+					nil ->
+						respond(interaction, Messages.market_not_found_embed(item_name))
+
+					item ->
+						respond(interaction, Messages.market_embed(item))
+
+						case active_bot_name() do
+							nil -> :ok
+							bot_name -> start_chart_task(bot_name, interaction, item)
+						end
 				end
 
 			"list_market" ->
@@ -457,6 +486,54 @@ defmodule Discord.Consumer do
 			)
 
 			nil
+	end
+
+	# Janice chart follows the instant reply as an async edit: success
+	# attaches the captured chart, failure attaches the bundled failure
+	# image so the embed always ends with a graph. Never blocks check_market.
+	defp start_chart_task(bot_name, interaction, item) do
+		task =
+			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
+				capture_and_edit(bot_name, interaction, item)
+			end)
+
+		case task do
+			{:ok, _pid} ->
+				:ok
+
+			{:error, reason} ->
+				log_discord_warning("check_market_chart_task_failed", reason, interaction)
+		end
+	end
+
+	defp capture_and_edit(bot_name, interaction, item) do
+		case Janice.Capture.capture(item.type_id) do
+			{:ok, png} ->
+				filename = Janice.Capture.filename(item.type_id)
+				embed = Messages.market_embed(item, "attachment://#{filename}")
+				edit_response(bot_name, interaction, %{embeds: [embed], files: [%{name: filename, body: png}]})
+
+			{:error, reason} ->
+				Marketmailer.Log.warning(
+					"janice_capture_failed",
+					%{type_id: item.type_id, reason: inspect(reason)},
+					"Janice chart capture failed; using the fallback chart image"
+				)
+
+				edit_fallback_response(bot_name, interaction, item)
+		end
+	end
+
+	defp edit_fallback_response(bot_name, interaction, item) do
+		filename = Janice.Capture.fallback_filename()
+		embed = Messages.market_embed(item, "attachment://#{filename}")
+
+		edit_response(bot_name, interaction, %{
+			embeds: [embed],
+			files: [%{name: filename, body: Janice.Capture.fallback_image()}]
+		})
+	rescue
+		_ -> edit_response(bot_name, interaction, %{embeds: [Messages.market_embed(item)]})
 	end
 
 	defp start_list_task(bot_name, interaction) do

@@ -64,7 +64,11 @@ defmodule Marketmailer.Application do
 			"type-name fill tick: #{count} missing"
 		)
 
-		if count != 0, do: Universe.Database.seed_missing_type_names(500)
+		if count != 0 do
+			Universe.Database.seed_missing_type_names(500)
+			Universe.Database.seed_missing_location_names(500)
+			Universe.Database.seed_missing_systems(20)
+		end
 
 		Marketmailer.Log.info(
 			"type_names_tick_done",
