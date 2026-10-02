@@ -39,10 +39,13 @@ defmodule Marketmailer.Application do
 		# the swarm; steady 500-id ticks drain the ~18k backlog within the
 		# hour and then idle on a cheap empty query.
 		if pollers_enabled?() do
+			# Independent tasks: region seeding can stall behind the boot
+			# ESI stampede and must never head-of-line-block the type fill.
 			Task.start(fn ->
 				Universe.Database.seed_region_names(Marketmailer.RegionManagerSupervisor.region_ids())
-				seed_type_names_forever()
 			end)
+
+			Task.start(fn -> seed_type_names_forever() end)
 		end
 
 		{:ok, pid}
