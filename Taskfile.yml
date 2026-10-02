@@ -15,10 +15,16 @@ tasks:
       - mix setup
 
   start:
-    desc: Run prod release detached (daemon, survives terminal close)
-    cmds:
-      - MIX_ENV=prod mix release
+    desc: Run latest tree as prod release detached (restarts when stale; never modifies the repo)
+    status:
       - |
+        # Up-to-date iff the daemon runs a release built from this exact tree.
+        # The stamp is written on every start-launch under _build (gitignored),
+        # so this check never dirties the repo.
+        STAMP=_build/prod/.start_stamp
+        test -f "$STAMP" || exit 1
+        FPRINT="$(git rev-parse HEAD 2>/dev/null || echo no-git):$(git status --porcelain 2>/dev/null | sha256sum | cut -d' ' -f1)"
+        test "$(cat "$STAMP")" = "$FPRINT" || exit 1
         # NOTE: `pgrep -f` scans full command lines, and this script's own
         # text contains the pattern — as does every go-task wrapper shell
         # above us — so exclude this shell AND all its ancestors. A bare
@@ -31,14 +37,43 @@ tasks:
           _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
         done
         if pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
-          echo "prod release already running — nothing to do"
-          exit 0
+          echo "prod release already running current code — nothing to do"
+        else
+          exit 1
         fi
+    cmds:
+      - task: stop
+      - MIX_ENV=prod mix release --overwrite
+      - |
+        # Seed a fresh prod DB from the in-project DB so the first boot
+        # reuses warm etags/market cache instead of resweeping all of ESI.
+        # Only when prod has no DB yet and the paths differ (single-host
+        # setups share one file, so this is a no-op there). The daemon is
+        # stopped above, so plain cp is safe (copy -wal/-shm sidecars too
+        # when present — the WAL may hold committed data).
+        DEV_DB="priv/data/marketmailer.db"
+        PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
+        if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
+          if ! mkdir -p "$(dirname "$PROD_DB")" 2>/dev/null || [ ! -w "$(dirname "$PROD_DB")" ]; then
+            echo "start: cannot write prod DB dir $(dirname "$PROD_DB") — set MARKETMAILER_DB to a writable path in .env (e.g. priv/data/marketmailer.db)"
+            exit 1
+          fi
+          for suffix in "" "-wal" "-shm"; do
+            if [ -f "$DEV_DB$suffix" ]; then
+              cp "$DEV_DB$suffix" "$PROD_DB$suffix"
+            fi
+          done
+          echo "start: seeded $PROD_DB from $DEV_DB"
+        fi
+      - |
         # Stale pidfile from the removed detached-dev workflow (dev is now
         # shell-only via `task dev`); the release daemon never uses it.
         rm -f priv/data/marketmailer.pid
         _build/prod/rel/marketmailer/bin/marketmailer daemon
         echo "started prod release (daemon)"
+        # Record the tree this release was built from (see `status` above).
+        mkdir -p _build/prod
+        echo "$(git rev-parse HEAD 2>/dev/null || echo no-git):$(git status --porcelain 2>/dev/null | sha256sum | cut -d' ' -f1)" > _build/prod/.start_stamp
 
   stop:
     desc: Stop everything (prod daemon + any legacy dev node)
@@ -74,45 +109,6 @@ tasks:
         done
         # Stale pidfile from the removed detached-dev workflow.
         rm -f priv/data/marketmailer.pid
-
-  start:live:
-    desc: Alias for start (prod release detached)
-    cmds:
-      - task: start
-
-  stop:live:
-    desc: Alias for stop
-    cmds:
-      - task: stop
-
-  swap:
-    desc: Cut over to prod on latest code (build, stop everything, seed fresh DB, start)
-    cmds:
-      - task: live:update
-      - task: stop
-      - |
-        # Seed a fresh prod DB from the legacy dev DB so the first boot
-        # reuses warm etags/market cache instead of resweeping all of ESI.
-        # Only when prod has no DB yet, dev has one, and they differ.
-        # Dev is already stopped above, so plain cp is safe (copy -wal/-shm
-        # sidecars too when present — the WAL may hold committed data).
-        DEV_DB="priv/data/marketmailer.db"
-        PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
-        if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
-          if ! mkdir -p "$(dirname "$PROD_DB")" 2>/dev/null || [ ! -w "$(dirname "$PROD_DB")" ]; then
-            echo "swap: cannot write prod DB dir $(dirname "$PROD_DB") — set MARKETMAILER_DB to a writable path in .env (e.g. priv/data/marketmailer.db)"
-            exit 1
-          fi
-          for suffix in "" "-wal" "-shm"; do
-            if [ -f "$DEV_DB$suffix" ]; then
-              cp "$DEV_DB$suffix" "$PROD_DB$suffix"
-            fi
-          done
-          echo "swap: seeded $PROD_DB from $DEV_DB"
-        else
-          echo "swap: no DB seed needed ($PROD_DB)"
-        fi
-      - task: start
 
   live:update:
     desc: Hot-upgrade prod when code changed (auto patch-bump, appup, build, unpack/install/commit); no-op otherwise

@@ -15,7 +15,7 @@ to flip into the Jita buy wall). A Discord bot broadcasts market updates.
 ```sh
 cp .example.env .env   # then fill in values
 task setup             # deps.get + ecto.create + ecto.migrate
-task start             # prod release detached (daemon, survives terminal close)
+task start             # run latest tree as prod release detached (restarts when stale)
 ```
 
 Or a dev shell with plain mix:

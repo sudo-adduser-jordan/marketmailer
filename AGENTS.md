@@ -8,7 +8,7 @@ the Jita buy wall). The Discord bot feature exists but is currently disabled.
 
 ```sh
 mix setup            # deps.get + ecto.create + ecto.migrate
-task start           # prod release detached (daemon, survives terminal close)
+task start           # run latest tree as prod release detached (restarts when stale; never modifies the repo)
 task dev             # interactive shell with the app started (dev, shell-only)
 task live:update     # auto hot-upgrade when code changed (patch-bump + appup + release + unpack/install/commit); no-op otherwise
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
@@ -29,7 +29,7 @@ then `bin/castle unpack/install/commit` if the prod daemon is running
 rejected). SemVer — patch = hot-loadable logic, minor =
 feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape.
 Non-code dirt alone never bumps (docs need nothing; release config applies
-at boot, so config-only changes need `task stop` + `task start`).
+at boot, so config-only changes need `task start`).
 If appup coverage fails (migration, state-shape change), commit and restart
 instead of hot upgrade. Restarts before `commit` return to the
 previous permanent version; `restart_emulator` upgrades exit the emulator,
@@ -53,10 +53,11 @@ happens in `task dev` (interactive shell) or the test suite.
 - If none exists, start it: `task start` (prod release daemon, survives
   terminal close). `task stop` stops everything on this host — the prod
   daemon plus any legacy detached-dev node (no pid archaeology needed) —
-  and is the only intended off switch. First cutover from the old dev
-  poller, or any full restart onto latest code: `task swap` (builds via
-  `live:update`, stops everything, seeds a fresh prod DB from the dev DB
-  when the paths differ, then starts).
+  and is the only intended off switch. `task start` always runs the
+  current tree: it no-ops when the daemon already runs current code,
+  otherwise it stops, rebuilds (`mix release --overwrite`), seeds a fresh
+  prod DB from the in-project DB when the paths differ, and starts
+  (restart delivery needs no version bump).
 - Talk to the live node instead of booting a second one:
   `_build/prod/rel/marketmailer/bin/marketmailer remote`
   (it reads the deployment cookie itself). `task dev` boots a second,
@@ -67,7 +68,7 @@ happens in `task dev` (interactive shell) or the test suite.
   (`mix upgrade.hot`) and `recompile()` hot-loading are removed.
   Hot upgrade keeps processes, ETS, and
   timers; state-shape changes (GenServer state, ETS tuple shapes) still
-  need a poller restart (`task stop` + `task start`).
+  need a poller restart (`task start` restarts a stale daemon onto the latest tree).
 - Safety while a poller runs: dev tests run fine alongside it — the suite
   uses stubbed ESI fixtures, `start_pollers: false`, and an isolated DB
   (`priv/data/test.db` default, per-suite tmp files). Read-only inspection of the
