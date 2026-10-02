@@ -223,9 +223,13 @@ defmodule ESI do
 					:ets.insert(@table, {{:bucket, group}, available - cost, now, limit, window})
 					:ok
 				else
+					# Bounded wait, then re-check shared state: at boot hundreds
+					# of workers share one conservative bucket and the naive
+					# deficit sleep spans tens of minutes, parking unlucky
+					# waiters (e.g. the names seeder) far past recovery.
 					needed = cost - available
 					sleep = if(refill_rate > 0, do: round(needed / refill_rate), else: @pause_ms) + @margin_ms
-					Process.sleep(sleep)
+					Process.sleep(min(sleep, 5_000))
 					acquire_bucket(group, cost)
 				end
 		end
