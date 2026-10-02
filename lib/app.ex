@@ -55,7 +55,15 @@ defmodule Marketmailer.Application do
 	# minute, forever. Each tick is at most one ESI chunk; once the backlog
 	# drains the tick is a single indexed no-op query.
 	defp seed_type_names_forever do
-		Universe.Database.seed_missing_type_names(500)
+		count = Universe.Database.missing_type_name_count()
+
+		Marketmailer.Log.info(
+			"type_names_tick",
+			%{missing: count},
+			"type-name fill tick: #{count} missing"
+		)
+
+		if count != 0, do: Universe.Database.seed_missing_type_names(500)
 		Process.sleep(60_000)
 		seed_type_names_forever()
 	end

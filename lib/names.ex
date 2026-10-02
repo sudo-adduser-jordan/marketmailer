@@ -190,6 +190,22 @@ defmodule Universe.Database do
 	# behind ~36 ESI chunks. Keeps single-item lookups a pure DB query.
 	@seed_type_names_per_boot 5_000
 
+	# How many traded type ids still lack a cached name. Negative on DB
+	# error so the ticker can tell "unknown" apart from "done".
+	def missing_type_name_count do
+		Database.one(
+			from market in "market",
+				left_join: name in "names",
+				on: name.id == market.type_id,
+				where: is_nil(name.id),
+				select: count(market.type_id, :distinct)
+		) || 0
+	rescue
+		_ -> -1
+	catch
+		_, _ -> -1
+	end
+
 	def seed_missing_type_names(limit \\ @seed_type_names_per_boot) do
 		missing =
 			try do
