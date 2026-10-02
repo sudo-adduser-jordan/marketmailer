@@ -151,7 +151,56 @@ defmodule Discord.Messages do
 	end
 
 	defp format_isk(nil), do: "?"
-	defp format_isk(number), do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
+	defp format_isk(number) when is_number(number), do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
+
+	defp format_isk(binary) when is_binary(binary) do
+		case Float.parse(String.trim(binary)) do
+			{number, _} -> format_isk(number)
+			:error -> "?"
+		end
+	end
+
+	defp format_isk(_), do: "?"
+
+	# ANSI code-block colors (Discord only renders color inside code blocks).
+	@ansi_reset "\e[0m"
+	@ansi_green "\e[32m"
+	@ansi_yellow "\e[33m"
+	@ansi_red "\e[31m"
+	@ansi_gray "\e[90m"
+
+	defp ansi_block(color, text), do: "```ansi\n#{color}#{text}#{@ansi_reset}\n```"
+
+	# Highsec green, lowsec yellow, nullsec red, unknown gray.
+	defp security_color(nil), do: @ansi_gray
+	defp security_color(""), do: @ansi_gray
+
+	defp security_color(security) when is_binary(security) do
+		case Float.parse(String.trim(security)) do
+			{number, _} -> security_color(number)
+			:error -> @ansi_gray
+		end
+	end
+
+	defp security_color(security) when is_number(security) do
+		cond do
+			security >= 0.5 -> @ansi_green
+			security >= 0.0 -> @ansi_yellow
+			true -> @ansi_red
+		end
+	end
+
+	defp security_color(_), do: @ansi_gray
+
+	defp location_value(item) do
+		text =
+			"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
+
+		ansi_block(security_color(item.security_status), text)
+	end
+
+	defp price_value(nil), do: ansi_block(@ansi_gray, "? ISK")
+	defp price_value(price), do: ansi_block(@ansi_green, "#{format_isk(price)} ISK")
 
 	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
 		market_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
@@ -168,11 +217,6 @@ defmodule Discord.Messages do
 			# url: "https://discord.com",
 			color: embed_color(item.instant_sell_profit),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: %Embed.Author{
-				name: "Marketmailer - Market Order",
-				url: "https://discord.com",
-				icon_url: @icon_success
-			},
 			thumbnail: %Embed.Thumbnail{
 				url: thumbnail_url || type_icon
 			},
@@ -182,18 +226,17 @@ defmodule Discord.Messages do
 			fields: [
 				%Embed.Field{
 					name: "Location",
-					value:
-						"#{or_unknown(item.region_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.location_name)} (#{format_security(item.security_status)})",
+					value: location_value(item),
 					inline: false
 				},
 				%Embed.Field{
 					name: "Sell",
-					value: "#{format_isk(item.price)} ISK",
+					value: price_value(item.price),
 					inline: true
 				},
 				%Embed.Field{
 					name: "Buy",
-					value: "#{format_isk(item.buy_price)} ISK",
+					value: price_value(item.buy_price),
 					inline: true
 				},
 				%Embed.Field{
@@ -211,20 +254,33 @@ defmodule Discord.Messages do
 	defp embed_color(profit) when is_number(profit) and profit > 0, do: @color_success
 	defp embed_color(_profit), do: @color_error
 
-	# Discord has no colored text; diff blocks render +/- lines green/red.
-	defp margin_value(nil), do: "```diff\n? ISK\n```"
+	# ANSI blocks render green/red/gray text in Discord.
+	defp margin_value(nil), do: ansi_block(@ansi_gray, "? ISK")
 
 	defp margin_value(profit) when is_number(profit) do
 		sign = if profit >= 0, do: "+", else: "-"
-		"```diff\n#{sign}#{format_isk(abs(profit))} ISK\n```"
+		color = if profit >= 0, do: @ansi_green, else: @ansi_red
+		ansi_block(color, "#{sign}#{format_isk(abs(profit))} ISK")
 	end
+
+	defp margin_value(_), do: ansi_block(@ansi_gray, "? ISK")
 
 	defp or_unknown(nil), do: "?"
 	defp or_unknown(""), do: "?"
 	defp or_unknown(value), do: value
 
 	defp format_security(nil), do: "?"
-	defp format_security(security), do: abs(Float.round(security * 1.0, 1))
+	defp format_security(""), do: "?"
+
+	defp format_security(security) when is_binary(security) do
+		case Float.parse(String.trim(security)) do
+			{number, _} -> format_security(number)
+			:error -> "?"
+		end
+	end
+
+	defp format_security(security) when is_number(security), do: Float.round(security * 1.0, 1)
+	defp format_security(_), do: "?"
 
 	def add_channel(interaction) do
 		%Embed{

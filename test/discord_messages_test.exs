@@ -28,10 +28,11 @@ defmodule Discord.MessagesTest do
 		fields = Map.new(embed.fields, &{&1.name, &1.value})
 
 		assert %Embed{title: "Tritanium"} = embed
-		assert fields["Location"] == "The Forge - Jita - Jita IV - Moon 4 (0.9)"
-		assert fields["Sell"] == "10.00 ISK"
-		assert fields["Buy"] == "110.00 ISK"
-		assert fields["Margin"] == "```diff\n+1000.00 ISK\n```"
+		assert embed.author == nil
+		assert fields["Location"] == "```ansi\n\e[32mJita IV - Moon 4 - Jita - The Forge (0.9)\e[0m\n```"
+		assert fields["Sell"] == "```ansi\n\e[32m10.00 ISK\e[0m\n```"
+		assert fields["Buy"] == "```ansi\n\e[32m110.00 ISK\e[0m\n```"
+		assert fields["Margin"] == "```ansi\n\e[32m+1000.00 ISK\e[0m\n```"
 		assert embed.description =~ "janice.e-351.com/i/1001/market/2"
 		assert embed.color == 0x43B581
 	end
@@ -48,7 +49,7 @@ defmodule Discord.MessagesTest do
 		loss_embed = Discord.Messages.market_embed(loss)
 		loss_fields = Map.new(loss_embed.fields, &{&1.name, &1.value})
 
-		assert loss_fields["Margin"] == "```diff\n-100.00 ISK\n```"
+		assert loss_fields["Margin"] == "```ansi\n\e[31m-100.00 ISK\e[0m\n```"
 		assert loss_embed.color == 0xF04747
 
 		unknown = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0}
@@ -56,9 +57,9 @@ defmodule Discord.MessagesTest do
 		unknown_embed = Discord.Messages.market_embed(unknown)
 		unknown_fields = Map.new(unknown_embed.fields, &{&1.name, &1.value})
 
-		assert unknown_fields["Buy"] == "? ISK"
-		assert unknown_fields["Margin"] == "```diff\n? ISK\n```"
-		assert unknown_fields["Location"] =~ "?"
+		assert unknown_fields["Buy"] == "```ansi\n\e[90m? ISK\e[0m\n```"
+		assert unknown_fields["Margin"] == "```ansi\n\e[90m? ISK\e[0m\n```"
+		assert unknown_fields["Location"] == "```ansi\n\e[90m? - ? - ? (?)\e[0m\n```"
 		assert unknown_embed.color == 0x7289DA
 	end
 
@@ -91,6 +92,32 @@ defmodule Discord.MessagesTest do
 		embed = Discord.Messages.market_embed(item)
 
 		assert embed.thumbnail.url == "https://images.evetech.net/types/81008/icon?size=64"
+	end
+
+	test "colors location by security and keeps station-system-region order" do
+		base = %MarketView{
+			type_id: 1_001,
+			item_name: "Tritanium",
+			region_name: "The Forge",
+			system_name: "Jita",
+			location_name: "Jita IV - Moon 4",
+			price: 10.0
+		}
+
+		high = Discord.Messages.market_embed(%{base | security_status: 0.9})
+		low = Discord.Messages.market_embed(%{base | security_status: 0.3})
+		null = Discord.Messages.market_embed(%{base | security_status: -0.5})
+
+		fields = fn embed -> Map.new(embed.fields, &{&1.name, &1.value}) end
+
+		assert fields.(high)["Location"] ==
+						"```ansi\n\e[32mJita IV - Moon 4 - Jita - The Forge (0.9)\e[0m\n```"
+
+		assert fields.(low)["Location"] ==
+						"```ansi\n\e[33mJita IV - Moon 4 - Jita - The Forge (0.3)\e[0m\n```"
+
+		assert fields.(null)["Location"] ==
+						"```ansi\n\e[31mJita IV - Moon 4 - Jita - The Forge (-0.5)\e[0m\n```"
 	end
 
 	test "all embeds carry a SemVer version badge in the footer" do
