@@ -34,14 +34,27 @@ defmodule Marketmailer.Application do
 		# Fire-and-forget: bulk universe/names calls caching every polled
 		# region id plus every traded type id, so single-item lookups stay
 		# pure DB queries. Skipped when pollers are disabled (e.g. `config/test.exs`).
+		# The type fill ticks forever in small batches: at boot every page
+		# worker stampedes ESI at once, so one big fill would starve behind
+		# the swarm; steady 500-id ticks drain the ~18k backlog within the
+		# hour and then idle on a cheap empty query.
 		if pollers_enabled?() do
 			Task.start(fn ->
 				Universe.Database.seed_region_names(Marketmailer.RegionManagerSupervisor.region_ids())
-				Universe.Database.seed_missing_type_names()
+				seed_type_names_forever()
 			end)
 		end
 
 		{:ok, pid}
+	end
+
+	# Steady background fill of the names cache: one small bounded batch per
+	# minute, forever. Each tick is at most one ESI chunk; once the backlog
+	# drains the tick is a single indexed no-op query.
+	defp seed_type_names_forever do
+		Universe.Database.seed_missing_type_names(500)
+		Process.sleep(60_000)
+		seed_type_names_forever()
 	end
 
 	# Test env (`config/test.exs`: `start_pollers: false`) boots only the

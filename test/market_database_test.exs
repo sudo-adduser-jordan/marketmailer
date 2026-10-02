@@ -277,6 +277,33 @@ defmodule Market.DatabaseTest do
 		assert MarketDatabase.suggest_items(nil) == []
 	end
 
+	test "type-name seeding is a no-op offline when nothing is missing" do
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("names", [%{id: 1_001, name: "Tritanium"}])
+
+		Database.insert_all("market", [
+			%{
+				order_id: 501,
+				duration: 1,
+				is_buy_order: 0,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 60_003_760,
+				min_volume: 1,
+				price: 10.0,
+				range: "station",
+				system_id: 30_000_142,
+				type_id: 1_001,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			}
+		])
+
+		assert Universe.Database.seed_missing_type_names(500) == :ok
+	end
+
 	test "reads ordered undercutting rows from the market list view" do
 		insert_fixture()
 

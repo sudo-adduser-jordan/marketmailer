@@ -343,9 +343,7 @@ defmodule Discord.Consumer do
 
 	# Autocomplete must come before the command clause below: autocomplete
 	# interactions carry the same command name in data.
-	def handle_event(
-				{:INTERACTION_CREATE, %Interaction{type: 4, data: %{name: "check_market"}} = interaction, _}
-			) do
+	def handle_event({:INTERACTION_CREATE, %Interaction{type: 4, data: %{name: "check_market"}} = interaction, _}) do
 		partial = focused_option_value(interaction, "item")
 
 		choices =
