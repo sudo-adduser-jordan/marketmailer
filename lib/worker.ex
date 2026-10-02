@@ -30,6 +30,8 @@ defmodule Marketmailer.PageWorker do
 
 	@impl true
 	def handle_info(:work, state) do
+		ensure_error_log()
+
 		if ESI.maintenance_active?() do
 			# Global maintenance is on. Try to extend the timer to "claim" the next 10s slot.
 			if try_claim_ping() do
@@ -286,6 +288,21 @@ defmodule Marketmailer.PageWorker do
 		send(manager, {:update_page_count, count})
 		schedule_next(ttl)
 		state
+	end
+
+	# :logger_std_h holds the error-log fd open, so `rm logs/errors.jsonl`
+	# while running orphans the descriptor and no new file appears. Re-ensure
+	# the handler on every fetch (a no-op stat when healthy) so a deleted log
+	# is recreated within one cycle. Skipped when pollers are off so the suite
+	# never touches the live log file.
+	defp ensure_error_log do
+		if Application.get_env(:marketmailer, :start_pollers, true) do
+			Marketmailer.Application.ensure_file_logger()
+		else
+			:ok
+		end
+	rescue
+		_ -> :ok
 	end
 
 	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)

@@ -2,6 +2,9 @@ defmodule Marketmailer.Application do
 	use Application
 
 	@legacy_tables ["systems", "names", "discord", "etags", "market"]
+	@log_dir "logs"
+	@log_file "logs/errors.jsonl"
+	@log_handler :marketmailer_errors
 
 	@impl true
 	def start(_type, _args) do
@@ -148,15 +151,46 @@ defmodule Marketmailer.Application do
 	# Rotation keeps the five most recent 10 MB archives, compressed on rotate.
 	# A failed handler never stops the app - it only warns (logger_std_h
 	# requires a charlist).
+	# While running, :logger_std_h holds the log file descriptor open: deleting
+	# logs/errors.jsonl (or logs/) orphans the descriptor and no new file
+	# appears. ensure_file_logger/0 is idempotent and non-destructive —
+	# PageWorker calls it on every fetch so a deleted log is recreated within
+	# one cycle.
 	defp configure_file_logger do
-		File.rm_rf!("logs")
-		File.mkdir_p!("logs")
-		file = String.to_charlist(Path.join("logs", "errors.jsonl"))
+		File.rm_rf!(@log_dir)
+		ensure_file_logger()
+	end
 
+	@doc """
+	Recreates the file log (dir + `:logger_std_h` handler) when it was deleted
+	while running. Cheap no-op when healthy: one `stat` plus a handler lookup.
+	Public so supervised workers and `remote` shells can call it. The optional
+	args exist for tests so they never touch the real `logs/errors.jsonl`.
+	"""
+	def ensure_file_logger(path \\ @log_file, handler \\ @log_handler) do
+		File.mkdir_p!(Path.dirname(path))
+
+		if handler_healthy?(handler, path) do
+			:ok
+		else
+			# Drop the orphan-fd handler (if any) so the re-added one opens the
+			# fresh path.
+			:logger.remove_handler(handler)
+			add_file_handler(handler, path)
+		end
+	rescue
+		_ -> :ok
+	end
+
+	defp handler_healthy?(handler, path) do
+		File.exists?(path) and match?({:ok, _}, :logger.get_handler_config(handler))
+	end
+
+	defp add_file_handler(handler, path) do
 		config = %{
 			config: %{
 				type: :file,
-				file: file,
+				file: String.to_charlist(path),
 				max_no_bytes: 10_000_000,
 				max_no_files: 5,
 				compress_on_rotate: true,
@@ -166,16 +200,25 @@ defmodule Marketmailer.Application do
 			formatter: {Marketmailer.Log.Format, [pretty: true, color: false]}
 		}
 
-		case :logger.add_handler(:marketmailer_errors, :logger_std_h, config) do
+		case :logger.add_handler(handler, :logger_std_h, config) do
 			:ok ->
 				:ok
 
-			{:error, {:already_exist, _id}} ->
-				:ok
+			{:error, {:already_exist, _}} ->
+				:logger.remove_handler(handler)
+
+				case :logger.add_handler(handler, :logger_std_h, config) do
+					:ok -> :ok
+					{:error, reason} -> handler_failed(reason)
+				end
 
 			{:error, reason} ->
-				Marketmailer.Log.warning("error_log_handler_failed", %{reason: inspect(reason)})
-				:ok
+				handler_failed(reason)
 		end
+	end
+
+	defp handler_failed(reason) do
+		Marketmailer.Log.warning("error_log_handler_failed", %{reason: inspect(reason)})
+		:ok
 	end
 end
