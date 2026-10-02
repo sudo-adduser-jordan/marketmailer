@@ -24,7 +24,7 @@ defmodule Discord.Messages do
 	# Version badge — SemVer from mix.exs, read at runtime so Castle hot
 	# upgrades show the new version without a restart.
 	defp with_version(%Embed{} = embed) do
-		%{embed | footer: %Embed.Footer{text: "Marketmailer v#{app_version()}"}}
+		%{embed | footer: %Embed.Footer{text: "v#{app_version()}"}}
 	end
 
 	defp app_version do
@@ -273,7 +273,9 @@ defmodule Discord.Messages do
 		%Embed{
 			title: item.item_name || "Market order",
 			description: "
-						[Janice](#{janice_url}) [Eve Ref](#{eve_ref_url}) [Eve Tycoon](#{eve_tycoon_url})
+						[Janice](#{janice_url})
+						[Eve Ref](#{eve_ref_url})
+						[Eve Tycoon](#{eve_tycoon_url})
 						",
 			# url: "https://discord.com",
 			color: embed_color(item.instant_sell_profit),

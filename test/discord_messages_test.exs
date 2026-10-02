@@ -37,6 +37,15 @@ defmodule Discord.MessagesTest do
 		assert embed.description =~ "[Janice](https://janice.e-351.com/i/1001/market/2)"
 		assert embed.description =~ "[Eve Ref](https://everef.net/types/1001)"
 		assert embed.description =~ "[Eve Tycoon](https://evetycoon.com/market/1001)"
+
+		lines = embed.description |> String.split("\n") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+
+		assert lines == [
+						 "[Janice](https://janice.e-351.com/i/1001/market/2)",
+						 "[Eve Ref](https://everef.net/types/1001)",
+						 "[Eve Tycoon](https://evetycoon.com/market/1001)"
+					 ]
+
 		assert embed.color == 0x43B581
 	end
 
@@ -191,7 +200,7 @@ defmodule Discord.MessagesTest do
 
 		for embed <- embeds do
 			assert %Embed{footer: %Embed.Footer{text: text}} = embed
-			assert text =~ ~r/^Marketmailer v\d+\.\d+\.\d+$/
+			assert text =~ ~r/^v\d+\.\d+\.\d+$/
 		end
 	end
 end
