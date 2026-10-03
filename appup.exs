@@ -1,6 +1,39 @@
 {
-  ~c"0.1.12",
+  ~c"0.1.13",
   [
+    {~c"0.1.12",
+     [
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # MarketmailerWeb.DashboardAuth: added by this transition.
+       {:add_module, MarketmailerWeb.DashboardAuth},
+       # MarketmailerWeb.Endpoint: added by this transition.
+       {:add_module, MarketmailerWeb.Endpoint},
+       # MarketmailerWeb.ErrorHTML: added by this transition.
+       {:add_module, MarketmailerWeb.ErrorHTML},
+       # MarketmailerWeb.Router: added by this transition.
+       {:add_module, MarketmailerWeb.Router},
+       # MarketmailerWeb.Router.Helpers: added by this transition.
+       {:add_module, MarketmailerWeb.Router.Helpers},
+       # MarketmailerWeb.Telemetry: added by this transition.
+       {:add_module, MarketmailerWeb.Telemetry},
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Discord.Messages: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Messages},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format}
+     ]},
     {~c"0.1.11",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
@@ -264,6 +297,51 @@
      ]}
   ],
   [
+    {~c"0.1.12",
+     [
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Discord.Messages: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Messages},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # MarketmailerWeb.DashboardAuth: removed by this transition. delete_module purges
+       # the module and loads nothing, so never use it for a module the target build
+       # still has.
+       {:delete_module, MarketmailerWeb.DashboardAuth},
+       # MarketmailerWeb.Endpoint: removed by this transition. delete_module purges the
+       # module and loads nothing, so never use it for a module the target build still
+       # has.
+       {:delete_module, MarketmailerWeb.Endpoint},
+       # MarketmailerWeb.ErrorHTML: removed by this transition. delete_module purges the
+       # module and loads nothing, so never use it for a module the target build still
+       # has.
+       {:delete_module, MarketmailerWeb.ErrorHTML},
+       # MarketmailerWeb.Router: removed by this transition. delete_module purges the
+       # module and loads nothing, so never use it for a module the target build still
+       # has.
+       {:delete_module, MarketmailerWeb.Router},
+       # MarketmailerWeb.Router.Helpers: removed by this transition. delete_module purges
+       # the module and loads nothing, so never use it for a module the target build
+       # still has.
+       {:delete_module, MarketmailerWeb.Router.Helpers},
+       # MarketmailerWeb.Telemetry: removed by this transition. delete_module purges the
+       # module and loads nothing, so never use it for a module the target build still
+       # has.
+       {:delete_module, MarketmailerWeb.Telemetry}
+     ]},
     {~c"0.1.11",
      [
        # An update only reaches processes in the supervision tree. An unsupervised

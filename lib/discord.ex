@@ -153,10 +153,23 @@ defmodule Discord.Messages do
 	defp candidate_name(%{"name" => name}) when is_binary(name), do: name
 	defp candidate_name(_), do: nil
 
-	def market_list_embed(nil), do: market_list_embed([])
+	def market_list_embed(items, page \\ 1, per_page \\ 10)
 
-	def market_list_embed(items) when is_list(items) do
-		lines = items |> Enum.with_index(1) |> Enum.map(fn {item, i} -> list_line(item, i) end)
+	def market_list_embed(nil, _page, _per_page), do: market_list_embed([], 1, 10)
+
+	def market_list_embed(items, page, per_page) when is_list(items) do
+		capped = Enum.take(items, 100)
+		per_page = if is_integer(per_page) and per_page > 0, do: per_page, else: 10
+		total_pages = max(1, ceil_div(length(capped), per_page))
+		page = clamp_page(page, total_pages)
+		page_items = list_page_slice(capped, page, per_page)
+		offset = (page - 1) * per_page
+
+		lines =
+			page_items
+			|> Enum.with_index(offset + 1)
+			|> Enum.map(fn {item, i} -> list_line(item, i) end)
+
 		description = truncate_lines(lines, "")
 
 		description =
@@ -166,8 +179,15 @@ defmodule Discord.Messages do
 				description
 			end
 
+		title =
+			if length(capped) > per_page do
+				"Items undercutting the Jita buy wall (#{page}/#{total_pages})"
+			else
+				"Items undercutting the Jita buy wall"
+			end
+
 		%Embed{
-			title: "Items undercutting the Jita buy wall",
+			title: title,
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -183,7 +203,67 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	def market_list_embed(_), do: market_list_embed([])
+	def market_list_embed(_items, _page, _per_page), do: market_list_embed([], 1, 10)
+
+	# Paginated payload: page-1 embed plus Prev/Next buttons. Empty lists
+	# carry no components.
+	def market_list_payload(items, page \\ 1, per_page \\ 10) do
+		list = if is_list(items), do: Enum.take(items, 100), else: []
+		per_page = if is_integer(per_page) and per_page > 0, do: per_page, else: 10
+		total_pages = max(1, ceil_div(length(list), per_page))
+		page = clamp_page(page, total_pages)
+
+		%{embeds: [market_list_embed(list, page, per_page)], components: list_components(page, total_pages, length(list))}
+	end
+
+	def list_per_page, do: 10
+	def list_max_items, do: 100
+
+	def list_components(_page, _total_pages, 0), do: []
+
+	def list_components(_page, total_pages, _count) when total_pages <= 1, do: []
+
+	def list_components(page, total_pages, _count) do
+		[
+			%{
+				type: 1,
+				components: [
+					%{
+						type: 2,
+						style: 2,
+						label: "Prev",
+						custom_id: "market_list:page:#{page - 1}",
+						disabled: page <= 1
+					},
+					%{
+						type: 2,
+						style: 2,
+						label: "Next",
+						custom_id: "market_list:page:#{page + 1}",
+						disabled: page >= total_pages
+					}
+				]
+			}
+		]
+	end
+
+	defp clamp_page(page, total_pages) when is_integer(page), do: page |> max(1) |> min(total_pages)
+
+	defp clamp_page(page, total_pages) when is_binary(page) do
+		case Integer.parse(String.trim(page)) do
+			{number, _} -> clamp_page(number, total_pages)
+			:error -> 1
+		end
+	end
+
+	defp clamp_page(_, _), do: 1
+
+	defp ceil_div(0, _), do: 1
+	defp ceil_div(count, per_page), do: div(count + per_page - 1, per_page)
+
+	defp list_page_slice(items, page, per_page) do
+		items |> Enum.drop((page - 1) * per_page) |> Enum.take(per_page)
+	end
 
 	defp list_field(item, atom_key, string_key) do
 		atom_val = if is_map(item), do: Map.get(item, atom_key)
@@ -191,11 +271,65 @@ defmodule Discord.Messages do
 	end
 
 	defp list_line(item, i) do
-		name = list_field(item, :item, "item") || "?"
-		location = list_field(item, :location_name, "location_name") || list_field(item, :system_name, "system_name") || "?"
+		name = list_truncate(list_field(item, :item, "item") || list_field(item, :item_name, "item_name"), 20)
+		margin = format_list_margin(list_field(item, :margin, "margin"))
+		system = list_truncate(list_field(item, :system_name, "system_name"), 12)
+		security = format_list_security(list_field(item, :security_status, "security_status"))
 
-		"#{i}. **#{name}** — sell #{format_isk(list_field(item, :sell_price, "sell_price"))} / buy #{format_isk(list_field(item, :buy_price, "buy_price"))} | +#{format_isk(list_field(item, :margin, "margin"))} ISK @ #{location}"
+		"#{i}. **#{name}** #{margin} #{system} #{security}"
 	end
+
+	# Short mobile-width truncation with an ellipsis marker.
+	defp list_truncate(nil, _max), do: "?"
+	defp list_truncate("", _max), do: "?"
+
+	defp list_truncate(name, max) when is_binary(name) and is_integer(max) do
+		name = String.trim(name)
+
+		cond do
+			name == "" -> "?"
+			String.length(name) <= max -> name
+			true -> String.slice(name, 0, max - 1) <> "…"
+		end
+	end
+
+	defp list_truncate(_, _), do: "?"
+
+	# Compact margin without any pipe divider: +1.2k, +3.4M, +12.50.
+	defp format_list_margin(nil), do: "?"
+
+	defp format_list_margin(margin) when is_binary(margin) do
+		case Float.parse(String.trim(margin)) do
+			{number, _} -> format_list_margin(number)
+			:error -> "?"
+		end
+	end
+
+	defp format_list_margin(margin) when is_number(margin) do
+		sign = if margin < 0, do: "-", else: "+"
+		abs_value = abs(margin * 1.0)
+
+		cond do
+			abs_value >= 1_000_000 -> "#{sign}#{Float.round(abs_value / 1_000_000, 1)}M"
+			abs_value >= 1_000 -> "#{sign}#{Float.round(abs_value / 1_000, 1)}k"
+			true -> "#{sign}#{:erlang.float_to_binary(Float.round(abs_value, 2), decimals: 2)}"
+		end
+	end
+
+	defp format_list_margin(_), do: "?"
+
+	defp format_list_security(nil), do: "?"
+	defp format_list_security(""), do: "?"
+
+	defp format_list_security(security) when is_binary(security) do
+		case Float.parse(String.trim(security)) do
+			{number, _} -> format_list_security(number)
+			:error -> "?"
+		end
+	end
+
+	defp format_list_security(security) when is_number(security), do: "#{Float.round(security * 1.0, 1)}"
+	defp format_list_security(_), do: "?"
 
 	# Embed descriptions cap at 4096 chars; drop lines that would overflow.
 	defp truncate_lines([], acc), do: acc
@@ -496,6 +630,18 @@ defmodule Discord.Consumer do
 		})
 	end
 
+	def handle_event(
+				{:INTERACTION_CREATE, %Interaction{type: 3, data: %{custom_id: "market_list:page:" <> _}} = interaction, _}
+			) do
+		page = list_page_from_custom_id(interaction)
+		payload = Messages.market_list_payload(safe_get_items(), page, Messages.list_per_page())
+
+		Api.Interaction.create_response(interaction, %{
+			type: InteractionCallbackType.update_message(),
+			data: payload
+		})
+	end
+
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
 		case name do
 			"add_channel" ->
@@ -549,7 +695,7 @@ defmodule Discord.Consumer do
 				case active_bot_name() do
 					# No bot runtime (tests, dev shell): synchronous immediate reply.
 					nil ->
-						respond(interaction, Messages.market_list_embed(safe_get_items()))
+						respond(interaction, Messages.market_list_payload(safe_get_items(), 1, Messages.list_per_page()))
 
 					# Deferred ack first: the list query scans the full
 					# undercut view, so it runs in the async task below.
@@ -754,16 +900,16 @@ defmodule Discord.Consumer do
 	# interaction on "thinking..." then "interaction failed"): any lookup,
 	# render, or edit crash still produces the empty-list embed.
 	defp run_list_task(bot_name, interaction) do
-		embed =
+		payload =
 			try do
-				Messages.market_list_embed(safe_get_items())
+				Messages.market_list_payload(safe_get_items(), 1, Messages.list_per_page())
 			rescue
-				_ -> Messages.market_list_embed([])
+				_ -> Messages.market_list_payload([], 1, Messages.list_per_page())
 			catch
-				_, _ -> Messages.market_list_embed([])
+				_, _ -> Messages.market_list_payload([], 1, Messages.list_per_page())
 			end
 
-		edit_response(bot_name, interaction, %{embeds: [embed]})
+		edit_response(bot_name, interaction, payload)
 	rescue
 		_ ->
 			try_edit_empty_list(bot_name, interaction)
@@ -772,7 +918,7 @@ defmodule Discord.Consumer do
 	end
 
 	defp try_edit_empty_list(bot_name, interaction) do
-		edit_response(bot_name, interaction, %{embeds: [Messages.market_list_embed([])]})
+		edit_response(bot_name, interaction, Messages.market_list_payload([], 1, Messages.list_per_page()))
 	rescue
 		error -> log_discord_warning("list_market_fallback_failed", Exception.message(error), interaction)
 	catch
@@ -783,13 +929,22 @@ defmodule Discord.Consumer do
 		log_discord_warning("list_market_defer_failed", reason, interaction)
 
 		try do
-			respond(interaction, Messages.market_list_embed(safe_get_items()))
+			respond(interaction, Messages.market_list_payload(safe_get_items(), 1, Messages.list_per_page()))
 		rescue
 			error -> log_discord_warning("list_market_defer_fallback_failed", Exception.message(error), interaction)
 		catch
 			_, fallback_reason -> log_discord_warning("list_market_defer_fallback_failed", fallback_reason, interaction)
 		end
 	end
+
+	defp list_page_from_custom_id(%{data: %{custom_id: "market_list:page:" <> page}}) do
+		case Integer.parse(String.trim(page)) do
+			{number, _} -> max(number, 1)
+			:error -> 1
+		end
+	end
+
+	defp list_page_from_custom_id(_), do: 1
 
 	# Never let a DB/ESI failure crash the interaction handler with no
 	# response: log once and fall back to the empty list embed.
@@ -851,6 +1006,13 @@ defmodule Discord.Consumer do
 		Api.Interaction.create_response(intr, %{
 			type: 4,
 			data: %{embeds: [embed]}
+		})
+	end
+
+	defp respond(intr, %{embeds: embeds, components: components}) do
+		Api.Interaction.create_response(intr, %{
+			type: 4,
+			data: %{embeds: embeds, components: components}
 		})
 	end
 end
