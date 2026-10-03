@@ -9,7 +9,7 @@ the Jita buy wall). The Discord bot feature exists but is currently disabled.
 ```sh
 mix setup            # deps.get + ecto.create + ecto.migrate
 task start           # run latest tree as prod release detached (restarts when stale; never modifies the repo)
-task dev             # interactive shell with the app started (dev, shell-only)
+task dev             # interactive shell with the app started (dev, shell-only; isolated priv/data/dev.db + :4001, coexists with prod)
 task live:update     # auto hot-upgrade when code changed (patch-bump + appup + release + unpack/install/commit); no-op otherwise
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
 mix compile          # compile; use --warnings-as-errors for strict mode
@@ -61,8 +61,11 @@ happens in `task dev` (interactive shell) or the test suite.
 - Talk to the live node instead of booting a second one:
   `_build/prod/rel/marketmailer/bin/marketmailer remote`
   (it reads the deployment cookie itself). `task dev` boots a second,
-  dev-env node — never point it at the live DB file while the daemon
-  holds it. Upgrades go
+  dev-env node on isolated defaults (`priv/data/dev.db`, `:4001`, no bot —
+  see `config/dev.exs` and the `dev` task) so plain `task dev` is safe
+  alongside the daemon — never point it at the live DB file while the
+  daemon holds it (`MARKETMAILER_DEV_DB=priv/data/marketmailer.db` opts
+  back in and is refused while the daemon runs). Upgrades go
   through Castle (`task live:update`, i.e. `bin/castle unpack/install/commit`
   with the auto-derived `mix.exs` version); the old rpc beam-push
   (`mix upgrade.hot`) and `recompile()` hot-loading are removed.

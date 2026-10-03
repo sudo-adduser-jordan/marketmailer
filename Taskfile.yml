@@ -237,9 +237,36 @@ tasks:
         echo "live:update: now on $VSN — remember to commit mix.exs + appup.exs"
 
   dev:
-    desc: Interactive shell with the app started
+    desc: Interactive shell with the app started (isolated DB/port; coexists with prod)
     cmds:
-      - iex -S mix run
+      - |
+        # Isolated dev defaults so plain `task dev` coexists with the prod
+        # daemon (`task start`: :4000 + priv/data/marketmailer.db). Dev gets
+        # :4001 + priv/data/dev.db and no Discord connection (prod keeps the
+        # gateway). Opt-ins: MARKETMAILER_DEV_DB (explicit DB path),
+        # DEV_DISCORD_TOKEN (bot token for dev; steals prod's gateway),
+        # START_POLLERS=false (lightweight shell, no ESI polling),
+        # DASHBOARD_PORT / DASHBOARD_ENABLED=false. .env's MARKETMAILER_DB /
+        # DISCORD_TOKEN do not leak into dev.
+        DEV_DB="${MARKETMAILER_DEV_DB:-priv/data/dev.db}"
+        DEV_PORT="${DASHBOARD_PORT:-4001}"
+        if [ "$DEV_DB" = "priv/data/marketmailer.db" ]; then
+          # See `start` for why this shell and all its ancestors must be
+          # excluded from pgrep -f results.
+          drop="^$$\$"
+          _p=$PPID
+          while [ -n "$_p" ] && [ "$_p" != "1" ]; do
+            drop="$drop|^${_p}\$"
+            _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
+          done
+          if pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
+            echo "dev: refusing: $DEV_DB is the live prod file held by the daemon (see \`ps aux | grep -F marketmailer\`)"
+            echo "dev: run plain \`task dev\` for the isolated priv/data/dev.db, or \`task stop\` first"
+            exit 1
+          fi
+        fi
+        mkdir -p "$(dirname "$DEV_DB")"
+        MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" iex -S mix run
     interactive: true
 
   compile:

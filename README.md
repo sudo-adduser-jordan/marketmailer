@@ -38,7 +38,7 @@ Pending migrations run automatically on every boot, so containers and
 | `MARKETMAILER_DB` | No | Path to the SQLite file (default: `priv/data/marketmailer.db`). |
 | `SECRET_KEY_BASE` | No | Optional signing secret for the LiveDashboard endpoint. If unset, the dashboard boots with an ephemeral per-boot secret. |
 | `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | No | HTTP basic auth for `/dashboard` when both are set. |
-| `DASHBOARD_PORT` | No | Dashboard port (default: `4000`). |
+| `DASHBOARD_PORT` | No | Dashboard port (prod default: `4000`; `task dev` default: `4001`). |
 | `DASHBOARD_ENABLED` | No | Set to `false` to skip the dashboard endpoint. |
 
 <!-- Invite the bot to your server: -->
@@ -54,7 +54,7 @@ Pending migrations run automatically on every boot, so containers and
   into local cache tables; no static data dumps needed.
 - **LiveDashboard** (`MarketmailerWeb.Endpoint`) — BEAM/supervision/ETS
   (`:market_cache`, `:esi_error_state`) and Ecto `Database` stats at
-  `/dashboard` (dev: http://localhost:4000/dashboard).
+  `/dashboard` (prod: `:4000` on the host; dev: http://localhost:4001/dashboard).
 
 ## Supervision tree
 

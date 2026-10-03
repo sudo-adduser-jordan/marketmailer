@@ -4,8 +4,10 @@ defmodule MarketmailerWeb.Endpoint do
 	poller. No app routes — only `/dashboard` (see `MarketmailerWeb.Router`).
 
 	Started under `Marketmailer.Application` when `:dashboard_enabled` is
-	true (always except `config/test.exs`). Port/secret come from
-	`config/*` + `config/runtime.exs` (`DASHBOARD_PORT`, `SECRET_KEY_BASE`).
+	true (always except `config/test.exs`). Prod port/secret come from
+	`config/runtime.exs` (`DASHBOARD_PORT` default 4000, `SECRET_KEY_BASE`);
+	dev defaults live in `config/dev.exs` (`DASHBOARD_PORT` default 4001,
+	isolated `priv/data/dev.db` via `task dev`).
 	"""
 	use Phoenix.Endpoint, otp_app: :marketmailer
 
