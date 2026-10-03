@@ -36,6 +36,16 @@ if config_env() == :prod do
 		queue_interval: 5_000,
 		log: false
 
+	config :marketmailer, ReadDatabase,
+		database: String.replace_suffix(database, ".db", "_read.db"),
+		priv: "priv/repo",
+		journal_mode: :wal,
+		busy_timeout: 5_000,
+		pool_size: 10,
+		queue_target: 2_000,
+		queue_interval: 5_000,
+		log: false
+
 	config :marketmailer, :dashboard_enabled, dashboard_enabled
 
 	# The bot reads DISCORD_TOKEN lazily (&Marketmailer.BotSupervisor.token!/0),

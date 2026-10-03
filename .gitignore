@@ -32,6 +32,9 @@ marketmailer-*.tar
 /priv/data/*.db-wal
 !/priv/data/.gitkeep
 
+# SDE snapshot downloads (reproducible from developers.eveonline.com)
+/priv/data/sde/
+
 # dev poller pidfile (runtime state written by `task start`)
 /priv/data/marketmailer.pid
 

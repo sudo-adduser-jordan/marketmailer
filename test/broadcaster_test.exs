@@ -33,6 +33,52 @@ defmodule Discord.BroadcasterTest do
 		assert Process.alive?(broadcaster)
 	end
 
+	test "syncs the read database before rendering the broadcast", %{coordinator: coordinator} do
+		test_pid = self()
+
+		_broadcaster =
+			start_broadcaster(
+				coordinator,
+				[900],
+				fn ->
+					send(test_pid, :market_read)
+					market_list()
+				end,
+				fn channel, payload ->
+					send(test_pid, {:sent, channel, payload})
+					{:ok, :sent}
+				end,
+				sync_fun: fn ->
+					send(test_pid, :synced)
+					:ok
+				end
+			)
+
+		complete_cycle(coordinator, 13, :updated)
+
+		assert_receive :synced
+		assert_receive :market_read
+		assert_receive {:sent, 900, _payload}
+	end
+
+	test "stays silent when the read sync fails", %{coordinator: coordinator} do
+		_broadcaster =
+			start_broadcaster(
+				coordinator,
+				[950],
+				market_list(),
+				fn channel, payload ->
+					send(self(), {:sent, channel, payload})
+					{:ok, :sent}
+				end,
+				sync_fun: fn -> {:error, "db locked"} end
+			)
+
+		complete_cycle(coordinator, 14, :updated)
+
+		refute_receive {:sent, _channel, _payload}, 150
+	end
+
 	test "ignores a failed refresh without notifying Discord", %{coordinator: coordinator} do
 		_broadcaster =
 			start_broadcaster(coordinator, [300], market_list(), fn channel, payload ->
@@ -152,6 +198,10 @@ defmodule Discord.BroadcasterTest do
 	defp start_broadcaster(coordinator, channels, market_result, deliver_fun, opts \\ []) do
 		name = :"broadcaster_#{System.unique_integer([:positive])}"
 		deliver_opts = if deliver_fun, do: [deliver_fun: deliver_fun], else: []
+		sync_fun = Keyword.get(opts, :sync_fun, fn -> :ok end)
+
+		market_fun =
+			if is_function(market_result, 0), do: market_result, else: fn -> market_result end
 
 		pid =
 			start_supervised!(
@@ -162,7 +212,8 @@ defmodule Discord.BroadcasterTest do
 					 async: Keyword.get(opts, :async, false),
 					 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 					 channels_fun: fn -> channels end,
-					 market_fun: fn -> market_result end
+					 market_fun: market_fun,
+					 sync_fun: sync_fun
 				 ] ++ deliver_opts}
 			)
 

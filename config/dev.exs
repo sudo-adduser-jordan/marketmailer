@@ -45,5 +45,15 @@ config :marketmailer, MarketmailerWeb.Endpoint,
 	server: dashboard_enabled,
 	secret_key_base: "dev-secret-key-base-at-least-64-bytes-long-for-live-dashboard-only-0123456789"
 
+config :marketmailer, ReadDatabase,
+	database: String.replace_suffix(database, ".db", "_read.db"),
+	priv: "priv/repo",
+	journal_mode: :wal,
+	busy_timeout: 5000,
+	pool_size: 10,
+	queue_target: 2000,
+	queue_interval: 5000,
+	log: false
+
 config :marketmailer, :dashboard_enabled, dashboard_enabled
 config :marketmailer, :start_pollers, start_pollers

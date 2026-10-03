@@ -148,10 +148,11 @@ defmodule Universe.Database do
 	import Ecto.Query
 
 	# Local cache read only - never blocks on HTTP, so embed rendering and
-	# the 100ms broadcaster test windows stay fast. Names are seeded at boot
-	# (see seed_region_names/1) and refreshed by the usual lazy backfills.
+	# the 100ms broadcaster test windows stay fast. Served from the read
+	# database; caches fill via SDE import, the background ticker, and the
+	# write -> read sync.
 	def get_name(id) when is_integer(id) do
-		Database.one(from name in "names", where: name.id == ^id, select: name.name)
+		ReadDatabase.one(from name in "names", where: name.id == ^id, select: name.name)
 	rescue
 		_ -> nil
 	catch
@@ -199,6 +200,38 @@ defmodule Universe.Database do
 				on: name.id == market.type_id,
 				where: is_nil(name.id),
 				select: count(market.type_id, :distinct)
+		) || 0
+	rescue
+		_ -> -1
+	catch
+		_, _ -> -1
+	end
+
+	# How many traded location ids still lack a cached name. Negative on
+	# DB error so the ticker can tell "unknown" apart from "done".
+	def missing_location_name_count do
+		Database.one(
+			from market in "market",
+				left_join: name in "names",
+				on: name.id == market.location_id,
+				where: is_nil(name.id),
+				select: count(market.location_id, :distinct)
+		) || 0
+	rescue
+		_ -> -1
+	catch
+		_, _ -> -1
+	end
+
+	# How many traded systems still lack a cached row. Negative on DB
+	# error so the ticker can tell "unknown" apart from "done".
+	def missing_system_count do
+		Database.one(
+			from market in "market",
+				left_join: system in "systems",
+				on: system.system_id == market.system_id,
+				where: is_nil(system.system_id),
+				select: count(market.system_id, :distinct)
 		) || 0
 	rescue
 		_ -> -1

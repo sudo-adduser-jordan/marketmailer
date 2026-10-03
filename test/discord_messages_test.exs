@@ -126,6 +126,33 @@ defmodule Discord.MessagesTest do
 		assert embed.description =~ "Plex"
 	end
 
+	test "list embed renders a fixed-width table with no pipe dividers" do
+		embed =
+			Discord.Messages.market_list_embed([
+				%{item: "Tritanium", margin: 1_250.5, system_name: "Jita", security_status: 0.9},
+				%{item: "Plex", margin: nil, system_name: nil, security_status: nil}
+			])
+
+		description = embed.description
+		assert String.starts_with?(description, "```\n")
+		assert String.ends_with?(description, "\n```")
+		refute String.contains?(description, "|")
+
+		["```", header | rows] = String.split(description, "\n")
+		assert header =~ "ITEM"
+		assert header =~ "MARGIN"
+		assert header =~ "SYSTEM"
+		assert header =~ "SEC"
+
+		rows = Enum.reject(rows, &(&1 == "```" or &1 == ""))
+		assert length(rows) == 2
+		assert rows |> Enum.map(&String.length/1) |> Enum.uniq() |> length() == 1
+		assert String.length(header) == String.length(hd(rows))
+		assert hd(rows) =~ "Tritanium"
+		assert hd(rows) =~ "+1.3k"
+		assert List.last(rows) =~ "?"
+	end
+
 	test "disambiguation embed lists candidates with a re-run hint" do
 		embed =
 			Discord.Messages.market_disambiguation_embed("trit", [

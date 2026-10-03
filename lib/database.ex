@@ -5,6 +5,15 @@ defmodule Database do
 		adapter: Ecto.Adapters.SQLite3
 end
 
+defmodule ReadDatabase do
+	# Read-only replica: synced copy of the write database serving every
+	# user-facing query (fetch -> write -> copy -> read). Only Market.Sync
+	# writes here; everything else reads.
+	use Ecto.Repo,
+		otp_app: :marketmailer,
+		adapter: Ecto.Adapters.SQLite3
+end
+
 defmodule Etag.Database do
 	import Ecto.Query
 
@@ -229,8 +238,14 @@ defmodule Market.Database do
 
 	def upsert_chunk_size, do: @upsert_chunk_size
 
+	def get_list_less_than_jita_buy, do: []
+end
+
+defmodule Market.Read do
+	# Every user-facing market query, served from the read database only.
+	# Pure reads: no ESI, no backfill — gaps render as "?" and fill via the
+	# SDE import, the background ticker, and the write -> read sync.
 	def get_best_order do
-		backfill(load_rows("getBestOrder.sql"))
 		load_rows("getBestOrder.sql")
 	rescue
 		e ->
@@ -288,22 +303,7 @@ defmodule Market.Database do
 
 	def suggest_items(_prefix, _limit), do: []
 
-	# Flatten for matching: trim, collapse all whitespace runs to one space,
-	# downcase. Returns "" for non-matching input.
-	defp normalize_item_name(name) do
-		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()
-	end
-
-	# Escape LIKE wildcards so user input only ever matches literally.
-	defp escape_like(value) do
-		value |> String.replace("\\", "\\\\") |> String.replace("%", "\\%") |> String.replace("_", "\\_")
-	end
-
 	def get_items_less_than_jita_buy do
-		# No backfill here (unlike get_best_order/0): this fans out to up to
-		# 100 rows, so synchronous ESI per missing system would park the
-		# deferred list_market interaction on "thinking...". Gaps render as
-		# "?" and warm via the background seed tick instead.
 		load_rows("getItemsLessThan.sql")
 	rescue
 		e ->
@@ -316,13 +316,12 @@ defmodule Market.Database do
 			[]
 	end
 
-	def get_list_less_than_jita_buy, do: []
-
-	# Runs a query file from lib/ and returns one map/struct per row.
-	# Never raises into the Discord interaction handler: a DB error logs
-	# once and yields [], which the caller renders as the not-found embed.
+	# Runs a query file from lib/ against the read database and returns one
+	# map/struct per row. Never raises into the Discord interaction handler:
+	# a DB error logs once and yields [], which the caller renders as the
+	# not-found embed.
 	defp load_rows(file, params \\ []) do
-		case Database.query(read_sql(file), params) do
+		case ReadDatabase.query(read_sql(file), params) do
 			{:ok, %{rows: rows, columns: cols}} ->
 				Enum.map(rows, fn row ->
 					data = cols |> Enum.map(&String.to_atom/1) |> Enum.zip(row) |> Map.new()
@@ -360,35 +359,14 @@ defmodule Market.Database do
 
 	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
 
-	# Fills the lazy EVE caches (names/systems) for anything the query could not
-	# resolve locally; the caller re-runs the query afterwards.
-	defp backfill([]), do: []
-
-	defp backfill(rows) do
-		name_ids = rows |> Enum.flat_map(&name_gaps/1) |> Enum.uniq()
-
-		system_ids =
-			for row <- rows,
-					Map.get(row, :system_id) != nil and
-						(Map.get(row, :system_name) == nil or Map.get(row, :region_name) == nil),
-					do: Map.get(row, :system_id)
-
-		if name_ids != [], do: name_ids |> ESI.Names.resolve() |> Universe.Database.upsert_names()
-
-		Enum.each(Enum.uniq(system_ids), fn system_id ->
-			with {:ok, info} <- ESI.SystemInfo.fetch(system_id) do
-				Universe.Database.upsert_system(info)
-			end
-		end)
+	# Flatten for matching: trim, collapse all whitespace runs to one space,
+	# downcase. Returns "" for non-matching input.
+	defp normalize_item_name(name) do
+		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()
 	end
 
-	defp name_gaps(row) do
-		type_id =
-			if is_nil(Map.get(row, :item_name)) and is_nil(Map.get(row, :item)),
-				do: Map.get(row, :type_id)
-
-		location_id = if is_nil(Map.get(row, :location_name)), do: Map.get(row, :location_id)
-
-		[type_id, location_id] |> Enum.reject(&is_nil/1)
+	# Escape LIKE wildcards so user input only ever matches literally.
+	defp escape_like(value) do
+		value |> String.replace("\\", "\\\\") |> String.replace("%", "\\%") |> String.replace("_", "\\_")
 	end
 end

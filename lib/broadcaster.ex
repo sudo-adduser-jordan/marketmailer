@@ -32,7 +32,8 @@ defmodule Discord.Broadcaster do
 			 async: Keyword.get(opts, :async, true),
 			 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 			 channels_fun: Keyword.get(opts, :channels_fun, &DiscordDatabase.registered_channels/0),
-			 market_fun: Keyword.get(opts, :market_fun, &Market.Database.get_items_less_than_jita_buy/0),
+			 market_fun: Keyword.get(opts, :market_fun, &Market.Read.get_items_less_than_jita_buy/0),
+			 sync_fun: Keyword.get(opts, :sync_fun, &Market.Sync.run/0),
 			 deliver_fun: Keyword.get(opts, :deliver_fun, &deliver/2),
 			 prune_fun: Keyword.get(opts, :prune_fun, &DiscordDatabase.delete_by_channel/1),
 			 pending: MapSet.new(),
@@ -135,25 +136,45 @@ defmodule Discord.Broadcaster do
 	# Discord only announces success. An empty/invalid market result means
 	# "nothing worth posting", not something every channel should be pinged
 	# about — log it and stay silent.
+	#
+	# Strict order: refresh done -> sync write -> read -> broadcast. The
+	# sync runs first so the embed renders exactly what the read database
+	# holds; a failed sync skips the broadcast instead of advertising
+	# stale-as-fresh data.
 	defp process_refresh(summary, state) do
 		case fetch_channels(state) do
 			{:ok, []} ->
 				{:ok, :no_channels}
 
 			{:ok, channels} ->
-				case fetch_market_list(state) do
-					{:ok, items} ->
-						embed = Messages.market_list_embed(items)
-						deliver_all(channels, embed, nil, state)
+				case invoke(state.sync_fun) do
+					{:ok, :ok} ->
+						case fetch_market_list(state) do
+							{:ok, items} ->
+								embed = Messages.market_list_embed(items)
+								deliver_all(channels, embed, nil, state)
+
+							{:error, reason} ->
+								Marketmailer.Log.warning(
+									"broadcast_no_market_item",
+									%{region: Map.get(summary, :region), reason: inspect(reason)},
+									"Skipping Discord broadcast: no market items"
+								)
+
+								{:ok, :no_market_item}
+						end
+
+					{:ok, _other} ->
+						{:ok, :sync_skipped}
 
 					{:error, reason} ->
 						Marketmailer.Log.warning(
-							"broadcast_no_market_item",
+							"broadcast_sync_failed",
 							%{region: Map.get(summary, :region), reason: inspect(reason)},
-							"Skipping Discord broadcast: no market items"
+							"Skipping Discord broadcast: read sync failed"
 						)
 
-						{:ok, :no_market_item}
+						{:ok, :sync_failed}
 				end
 
 			{:error, reason} ->

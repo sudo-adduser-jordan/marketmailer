@@ -50,8 +50,9 @@ Pending migrations run automatically on every boot, so containers and
   market orders per region with dynamic page scaling and exponential backoff.
 - **Discord bot** (`Marketmailer.BotSupervisor`) — slash commands, embeds,
   and market-update broadcasts.
-- **Name resolution** — type/system/station names resolve lazily from ESI
-  into local cache tables; no static data dumps needed.
+- **Name resolution** — type/system/station names bulk-seeded from the
+  official JSONL SDE (`mix sde.import`) into local cache tables, with an ESI
+  ticker covering drift; no per-request fetching.
 - **LiveDashboard** (`MarketmailerWeb.Endpoint`) — BEAM/supervision/ETS
   (`:market_cache`, `:esi_error_state`) and Ecto `Database` stats at
   `/dashboard` (prod: `:4000` on the host; dev: http://localhost:4001/dashboard).
@@ -84,8 +85,11 @@ open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 `assets/` after edits.
 
 SQLite at `priv/data/marketmailer.db` (WAL, gitignored): `market` order
-cache, `etags` per-page ETag/Expires, lazy `names`/`systems` EVE caches,
-`discord` channel routing, plus the `marketListView` undercut view.
+cache, `etags` per-page ETag/Expires, `names`/`systems` EVE caches (SDE-seeded,
+ticker-backed), `discord` channel routing, plus the `marketListView` undercut
+view. Every refresh cycle deltas into `priv/data/marketmailer_read.db`, which
+serves all user-facing queries; see `AGENTS.md` for the fetch -> write ->
+copy -> read policy.
 `MarketView` (`lib/schema.ex`) is a query struct, not a DB view. Arrows
 are logical FKs joined by the app, not DB constraints.
 
@@ -99,8 +103,9 @@ open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 
 Flow: per-page `PageWorker`s poll ESI with their own ETag/Expires TTL
 (unchanged pages stay cheap `304`s), upsert into SQLite + ETS, report to
-`UpdateCoordinator`; SQL queries `LEFT JOIN` the lazy `names`/`systems`
-caches (backfilled from ESI, then re-run once); results go to Discord
+`UpdateCoordinator`; each completed cycle syncs deltas to the read database,
+and SQL queries `LEFT JOIN` the SDE-seeded `names`/`systems` caches (no
+per-request fetching); results go to Discord
 embeds/broadcasts. See `AGENTS.md` for architecture, database, and logging
 internals.
 

@@ -16,9 +16,16 @@ defmodule Marketmailer.Application do
 
 		:ok = migrate()
 
+		# The read database has no migrations (rebuilt, not migrated): ensure
+		# its tables + view exist before any user-facing query can run. Cheap
+		# idempotent DDL on a temporary connection; deltas arrive via
+		# Market.Sync after each refresh.
+		{:ok, _, _} = Ecto.Migrator.with_repo(ReadDatabase, fn _ -> Market.Sync.ensure_read_schema() end)
+
 		children =
 			[
 				Database,
+				ReadDatabase,
 				Market.DbWriter,
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
@@ -55,28 +62,34 @@ defmodule Marketmailer.Application do
 		{:ok, pid}
 	end
 
-	# Steady background fill of the names cache: one small bounded batch per
-	# minute, forever. Each tick is at most one ESI chunk; once the backlog
-	# drains the tick is a single indexed no-op query.
+	# Steady background fill of the lazy caches: one small bounded batch
+	# per minute per cache, forever. Each cache drains on its own backlog
+	# so a finished cache never gates the others; once all backlogs drain
+	# the tick is three indexed no-op queries.
 	defp seed_type_names_forever do
-		count = Universe.Database.missing_type_name_count()
+		types = Universe.Database.missing_type_name_count()
+		locations = Universe.Database.missing_location_name_count()
+		systems = Universe.Database.missing_system_count()
 		started = System.monotonic_time(:millisecond)
 
 		Marketmailer.Log.info(
 			"type_names_tick",
-			%{missing: count},
-			"type-name fill tick: #{count} missing"
+			%{missing_types: types, missing_locations: locations, missing_systems: systems},
+			"cache fill tick: #{types} types, #{locations} locations, #{systems} systems missing"
 		)
 
-		if count != 0 do
-			Universe.Database.seed_missing_type_names(500)
-			Universe.Database.seed_missing_location_names(500)
-			Universe.Database.seed_missing_systems(20)
-		end
+		if types != 0, do: Universe.Database.seed_missing_type_names(500)
+		if locations != 0, do: Universe.Database.seed_missing_location_names(500)
+		if systems != 0, do: Universe.Database.seed_missing_systems(20)
 
 		Marketmailer.Log.info(
 			"type_names_tick_done",
-			%{missing: count, elapsed_ms: System.monotonic_time(:millisecond) - started},
+			%{
+				missing_types: types,
+				missing_locations: locations,
+				missing_systems: systems,
+				elapsed_ms: System.monotonic_time(:millisecond) - started
+			},
 			"type-name fill tick done"
 		)
 

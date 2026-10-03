@@ -1,6 +1,12 @@
 {
-  ~c"0.1.13",
+  ~c"0.1.14",
   [
+    {~c"0.1.13",
+     [
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format}
+     ]},
     {~c"0.1.12",
      [
        # add_module comes first and delete_module last, but changed modules are not
@@ -297,6 +303,12 @@
      ]}
   ],
   [
+    {~c"0.1.13",
+     [
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format}
+     ]},
     {~c"0.1.12",
      [
        # add_module comes first and delete_module last, but changed modules are not

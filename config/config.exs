@@ -35,6 +35,19 @@ config :marketmailer, MarketmailerWeb.Endpoint,
 	pubsub_server: Marketmailer.PubSub,
 	live_view: [signing_salt: "marketmailer-dashboard"]
 
+# Read database: synced copy of the write DB serving every user-facing
+# query (fetch -> write -> copy -> read). Same directory, derived name so
+# every env (including MARKETMAILER_DB overrides) stays consistent.
+config :marketmailer, ReadDatabase,
+	database: String.replace_suffix(db_path, ".db", "_read.db"),
+	priv: "priv/repo",
+	journal_mode: :wal,
+	busy_timeout: 5000,
+	pool_size: 10,
+	queue_target: 2000,
+	queue_interval: 5000,
+	log: false
+
 config :marketmailer, :bot_options, %{
 	consumer: Discord.Consumer,
 	intents: [:guild_messages],

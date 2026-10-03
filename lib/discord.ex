@@ -170,13 +170,11 @@ defmodule Discord.Messages do
 			|> Enum.with_index(offset + 1)
 			|> Enum.map(fn {item, i} -> list_line(item, i) end)
 
-		description = truncate_lines(lines, "")
-
 		description =
-			if description == "" do
+			if page_items == [] do
 				"No items are undercutting the Jita buy wall right now."
 			else
-				description
+				"```\n" <> list_header() <> "\n" <> truncate_lines(lines, "") <> "\n```"
 			end
 
 		title =
@@ -270,13 +268,31 @@ defmodule Discord.Messages do
 		if atom_val == nil, do: if(is_map(item), do: Map.get(item, string_key)), else: atom_val
 	end
 
+	# Fixed-width table columns (monospace code block): item, margin,
+	# system, security. No region column, no pipe dividers.
+	@list_item_width 18
+	@list_margin_width 8
+	@list_system_width 10
+	@list_sec_width 4
+
+	defp list_header do
+		list_row(String.pad_leading("#", 3), "ITEM", "MARGIN", "SYSTEM", "SEC")
+	end
+
 	defp list_line(item, i) do
-		name = list_truncate(list_field(item, :item, "item") || list_field(item, :item_name, "item_name"), 20)
+		rank = i |> to_string() |> String.pad_leading(3)
+		name = list_truncate(list_field(item, :item, "item") || list_field(item, :item_name, "item_name"), @list_item_width)
 		margin = format_list_margin(list_field(item, :margin, "margin"))
-		system = list_truncate(list_field(item, :system_name, "system_name"), 12)
+		system = list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
 		security = format_list_security(list_field(item, :security_status, "security_status"))
 
-		"#{i}. **#{name}** #{margin} #{system} #{security}"
+		list_row(rank, name, margin, system, security)
+	end
+
+	# Rank + name left-aligned, margin + security right-aligned so the
+	# decimals line up. Every row is the same width by construction.
+	defp list_row(rank, name, margin, system, security) do
+		"#{rank}. #{String.pad_trailing(name, @list_item_width)} #{String.pad_leading(margin, @list_margin_width)} #{String.pad_trailing(system, @list_system_width)} #{String.pad_leading(security, @list_sec_width)}"
 	end
 
 	# Short mobile-width truncation with an ellipsis marker.
@@ -621,7 +637,7 @@ defmodule Discord.Consumer do
 		partial = focused_option_value(interaction, "item")
 
 		choices =
-			for %{item_name: name} <- Market.Database.suggest_items(partial || ""),
+			for %{item_name: name} <- Market.Read.suggest_items(partial || ""),
 					do: %{name: name, value: name}
 
 		Api.Interaction.create_response(interaction, %{
@@ -744,7 +760,7 @@ defmodule Discord.Consumer do
 	defp focused_option_value(_interaction, _name), do: nil
 
 	defp safe_get_market_item(item_name) do
-		Market.Database.get_market_item(item_name)
+		Market.Read.get_market_item(item_name)
 	rescue
 		error ->
 			Marketmailer.Log.warning(
@@ -766,7 +782,7 @@ defmodule Discord.Consumer do
 	end
 
 	defp safe_suggest_items(item_name, limit) when is_binary(item_name) and is_integer(limit) do
-		case Market.Database.suggest_items(item_name, limit) do
+		case Market.Read.suggest_items(item_name, limit) do
 			items when is_list(items) -> items
 			_ -> []
 		end
@@ -949,7 +965,7 @@ defmodule Discord.Consumer do
 	# Never let a DB/ESI failure crash the interaction handler with no
 	# response: log once and fall back to the empty list embed.
 	defp safe_get_items do
-		case Market.Database.get_items_less_than_jita_buy() do
+		case Market.Read.get_items_less_than_jita_buy() do
 			items when is_list(items) -> items
 			_ -> []
 		end
