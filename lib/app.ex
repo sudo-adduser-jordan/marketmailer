@@ -26,7 +26,7 @@ defmodule Marketmailer.Application do
 				Market.UpdateCoordinator,
 				Discord.Broadcaster,
 				Janice.Supervisor
-			] ++ poller_children()
+			] ++ dashboard_children() ++ poller_children()
 
 		opts = [
 			strategy: :one_for_one,
@@ -99,6 +99,23 @@ defmodule Marketmailer.Application do
 	end
 
 	defp pollers_enabled?, do: Application.get_env(:marketmailer, :start_pollers, true)
+
+	# Phoenix LiveDashboard (`/dashboard`): PubSub + telemetry poller +
+	# HTTP endpoint. Disabled in test (`config/test.exs`) and when
+	# `DASHBOARD_ENABLED=false` in prod (`config/runtime.exs`).
+	defp dashboard_children do
+		if dashboard_enabled?() do
+			[
+				{Phoenix.PubSub, name: Marketmailer.PubSub},
+				MarketmailerWeb.Telemetry,
+				MarketmailerWeb.Endpoint
+			]
+		else
+			[]
+		end
+	end
+
+	defp dashboard_enabled?, do: Application.get_env(:marketmailer, :dashboard_enabled, true)
 
 	defp ensure_ets(name, opts) do
 		case :ets.whereis(name) do

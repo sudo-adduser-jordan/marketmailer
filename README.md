@@ -36,6 +36,10 @@ Pending migrations run automatically on every boot, so containers and
 | --- | --- | --- |
 | `DISCORD_TOKEN` | No | Enables the Discord bot. If missing/invalid the bot is skipped with a warning and the rest of the app keeps running. |
 | `MARKETMAILER_DB` | No | Path to the SQLite file (default: `priv/data/marketmailer.db`). |
+| `SECRET_KEY_BASE` | No | 64+ byte secret enabling the LiveDashboard endpoint in prod. If unset the dashboard is skipped with a warning and the poller keeps running. |
+| `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | No | HTTP basic auth for `/dashboard` when both are set. |
+| `DASHBOARD_PORT` | No | Dashboard port (default: `4000`). |
+| `DASHBOARD_ENABLED` | No | Set to `false` to skip the dashboard endpoint. |
 
 <!-- Invite the bot to your server: -->
 <!-- https://discord.com/oauth2/authorize?client_id=1473196121630314689 -->
@@ -48,6 +52,9 @@ Pending migrations run automatically on every boot, so containers and
   and market-update broadcasts.
 - **Name resolution** — type/system/station names resolve lazily from ESI
   into local cache tables; no static data dumps needed.
+- **LiveDashboard** (`MarketmailerWeb.Endpoint`) — BEAM/supervision/ETS
+  (`:market_cache`, `:esi_error_state`) and Ecto `Database` stats at
+  `/dashboard` (dev: http://localhost:4000/dashboard).
 
 ## Database schema
 
@@ -82,7 +89,7 @@ internals.
 
 ```sh
 docker build -t marketmailer .
-docker run --rm -p 443:443 \
+docker run --rm -p 443:443 -p 4000:4000 \
   -v marketmailer-data:/data \
   -e MARKETMAILER_DB=/data/marketmailer.db \
   marketmailer

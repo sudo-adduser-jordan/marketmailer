@@ -12,5 +12,8 @@ config :marketmailer, Database,
 	queue_interval: 5000,
 	log: false
 
+# Never boot the dashboard in test: isolated DB, no HTTP listener.
+config :marketmailer, MarketmailerWeb.Endpoint, server: false
+config :marketmailer, :dashboard_enabled, false
 config :marketmailer, :start_pollers, false
 config :marketmailer, ecto_repos: [Database]

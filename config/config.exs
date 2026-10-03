@@ -13,9 +13,8 @@ db_path =
 # level, values colored by type.
 config :logger, :default_handler,
 	level: :info,
+	# Warning/error-level events also go to logs/errors.jsonl (see lib/app.ex).
 	formatter: {Marketmailer.Log.Format, [pretty: true, color: true]}
-
-# Warning/error-level events also go to logs/errors.jsonl (see lib/app.ex).
 
 config :marketmailer, Database,
 	database: db_path,
@@ -27,12 +26,27 @@ config :marketmailer, Database,
 	queue_interval: 5000,
 	log: false
 
+# Phoenix LiveDashboard endpoint. Port/secret are per-env (see
+# dev/prod/runtime); the dashboard itself lives at `/dashboard`.
+config :marketmailer, MarketmailerWeb.Endpoint,
+	url: [host: "localhost"],
+	adapter: Bandit.PhoenixAdapter,
+	render_errors: [formats: [html: MarketmailerWeb.ErrorHTML], layout: false],
+	pubsub_server: Marketmailer.PubSub,
+	live_view: [signing_salt: "marketmailer-dashboard"]
+
 config :marketmailer, :bot_options, %{
 	consumer: Discord.Consumer,
 	intents: [:guild_messages],
 	wrapped_token: &Marketmailer.BotSupervisor.token!/0
 }
 
+# Set to false to skip PubSub + Telemetry + Endpoint (test does this).
+config :marketmailer, :dashboard_enabled, true
+config :marketmailer, :dashboard_password, nil
+config :marketmailer, :dashboard_user, nil
 config :marketmailer, ecto_repos: [Database]
+
+config :phoenix, :json_library, Jason
 
 import_config "#{config_env()}.exs"

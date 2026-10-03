@@ -312,4 +312,4 @@ tasks:
     desc: Run the marketmailer Docker image (database stays in ./priv/data)
     cmds:
       - mkdir -p priv/data
-      - docker run --rm -p 443:443 -v ./priv/data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer
+      - docker run --rm -p 443:443 -p 4000:4000 -v ./priv/data:/data -e MARKETMAILER_DB=/data/marketmailer.db marketmailer

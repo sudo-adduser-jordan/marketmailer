@@ -32,6 +32,14 @@ defmodule Marketmailer.MixProject do
 			{:nostrum, github: "Kraigie/nostrum"},
 			{:playwright_ex, "~> 0.12.1"},
 			{:castle, "~> 1.0"},
+			{:phoenix, "~> 1.8"},
+			{:phoenix_pubsub, "~> 2.1"},
+			{:phoenix_live_view, "~> 1.1"},
+			{:phoenix_live_dashboard, "~> 0.8"},
+			{:telemetry_metrics, "~> 1.0"},
+			{:telemetry_poller, "~> 1.0"},
+			{:bandit, "~> 1.0"},
+			{:jason, "~> 1.4"},
 			{:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
 		]
 	end
