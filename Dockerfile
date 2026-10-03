@@ -4,7 +4,6 @@
 # Run:     sudo docker run --rm -p 443:443 -p 4000:4000 \
 #            -v marketmailer-data:/data \
 #            -e MARKETMAILER_DB=/data/marketmailer.db \
-#            -e SECRET_KEY_BASE="$(head -c 64 /dev/urandom | base64)" \
 #            marketmailer
 #
 # The app polls ESI market orders into SQLite. Pending migrations run

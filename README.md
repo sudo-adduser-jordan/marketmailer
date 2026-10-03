@@ -36,7 +36,7 @@ Pending migrations run automatically on every boot, so containers and
 | --- | --- | --- |
 | `DISCORD_TOKEN` | No | Enables the Discord bot. If missing/invalid the bot is skipped with a warning and the rest of the app keeps running. |
 | `MARKETMAILER_DB` | No | Path to the SQLite file (default: `priv/data/marketmailer.db`). |
-| `SECRET_KEY_BASE` | No | 64+ byte secret enabling the LiveDashboard endpoint in prod. If unset the dashboard is skipped with a warning and the poller keeps running. |
+| `SECRET_KEY_BASE` | No | Optional signing secret for the LiveDashboard endpoint. If unset, the dashboard boots with an ephemeral per-boot secret. |
 | `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | No | HTTP basic auth for `/dashboard` when both are set. |
 | `DASHBOARD_PORT` | No | Dashboard port (default: `4000`). |
 | `DASHBOARD_ENABLED` | No | Set to `false` to skip the dashboard endpoint. |
