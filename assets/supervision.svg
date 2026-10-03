@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1550" viewBox="0 0 1240 1550" font-family="sans-serif">
+<defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#1e1e1e"/></marker></defs>
+<rect width="1240" height="1550" fill="#ffffff"/>
+<text x="20" y="40" font-size="26" fill="#1e1e1e">Marketmailer — supervision tree</text>
+<text x="20" y="62" font-size="13" fill="#555">solid = supervises · dashed = manages / subscribes / reports · poller + dashboard children gated (start_pollers / dashboard_enabled)</text>
+<text x="20" y="120" font-size="13" fill="#555">root</text>
+<text x="410" y="120" font-size="13" fill="#555">children of Marketmailer.Supervisor</text>
+<text x="830" y="120" font-size="13" fill="#555">grandchildren</text>
+<rect x="20" y="620" width="330" height="110" rx="8" fill="#ffe3e3" stroke="#1e1e1e" stroke-width="2"/>
+<text x="185.0" y="642" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Marketmailer.Supervisor</text>
+<text x="185.0" y="664" font-size="12" text-anchor="middle" fill="#333">Supervisor, :one_for_one</text>
+<text x="185.0" y="682" font-size="12" text-anchor="middle" fill="#333">lib/app.ex</text>
+<rect x="410" y="150" width="320" height="84" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="172" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Database</text>
+<text x="570.0" y="194" font-size="12" text-anchor="middle" fill="#333">Ecto repo · SQLite WAL</text>
+<rect x="410" y="250" width="320" height="84" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="272" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Market.DbWriter</text>
+<text x="570.0" y="294" font-size="12" text-anchor="middle" fill="#333">GenServer · serialized writes</text>
+<rect x="410" y="350" width="320" height="84" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="372" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">EtagCache</text>
+<text x="570.0" y="394" font-size="12" text-anchor="middle" fill="#333">GenServer · warms :market_cache</text>
+<rect x="410" y="450" width="320" height="84" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="472" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Marketmailer.Registry</text>
+<text x="570.0" y="494" font-size="12" text-anchor="middle" fill="#333">Registry, keys: :unique</text>
+<rect x="410" y="550" width="320" height="84" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="572" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Marketmailer.TaskSup</text>
+<text x="570.0" y="594" font-size="12" text-anchor="middle" fill="#333">Task.Supervisor</text>
+<rect x="410" y="650" width="320" height="84" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="672" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Market.UpdateCoordinator</text>
+<text x="570.0" y="694" font-size="12" text-anchor="middle" fill="#333">GenServer · region cycle tracker</text>
+<rect x="410" y="750" width="320" height="84" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="772" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Discord.Broadcaster</text>
+<text x="570.0" y="794" font-size="12" text-anchor="middle" fill="#333">GenServer · subscribes: coordinator</text>
+<rect x="410" y="850" width="320" height="84" rx="8" fill="#f3f0ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="872" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Dashboard (optional)</text>
+<text x="570.0" y="894" font-size="12" text-anchor="middle" fill="#333">PubSub, Telemetry, Endpoint</text>
+<text x="570.0" y="912" font-size="12" text-anchor="middle" fill="#333">off when disabled / in test</text>
+<rect x="410" y="950" width="320" height="84" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="972" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Janice.Supervisor</text>
+<text x="570.0" y="994" font-size="12" text-anchor="middle" fill="#333">Supervisor, :one_for_one</text>
+<rect x="410" y="1050" width="320" height="84" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="1072" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Marketmailer.PageSup</text>
+<text x="570.0" y="1094" font-size="12" text-anchor="middle" fill="#333">DynamicSupervisor, :one_for_one</text>
+<rect x="410" y="1150" width="320" height="84" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="1172" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">RegionManagerSupervisor</text>
+<text x="570.0" y="1194" font-size="12" text-anchor="middle" fill="#333">Supervisor, :one_for_one</text>
+<rect x="410" y="1250" width="320" height="84" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
+<text x="570.0" y="1272" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Marketmailer.BotSupervisor</text>
+<text x="570.0" y="1294" font-size="12" text-anchor="middle" fill="#333">Supervisor, :one_for_one</text>
+<text x="570.0" y="1312" font-size="12" text-anchor="middle" fill="#333">:ignore if no token</text>
+<rect x="830" y="950" width="370" height="38" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+<text x="1015.0" y="968" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e1e1e">PlaywrightEx.Supervisor</text>
+<text x="1015.0" y="986" font-size="12" text-anchor="middle" fill="#333">external chart driver</text>
+<rect x="830" y="996" width="370" height="38" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+<text x="1015.0" y="1014" font-size="12" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Janice.ChartPool</text>
+<text x="1015.0" y="1032" font-size="12" text-anchor="middle" fill="#333">worker pool</text>
+<rect x="830" y="1050" width="370" height="84" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+<text x="1015.0" y="1072" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">PageWorker x N</text>
+<text x="1015.0" y="1094" font-size="12" text-anchor="middle" fill="#333">GenServer, :transient</text>
+<text x="1015.0" y="1112" font-size="12" text-anchor="middle" fill="#333">via {:page, region, page}</text>
+<text x="1015.0" y="1130" font-size="12" text-anchor="middle" fill="#333">reports → UpdateCoordinator</text>
+<rect x="830" y="1150" width="370" height="84" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+<text x="1015.0" y="1172" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">RegionManager x N</text>
+<text x="1015.0" y="1194" font-size="12" text-anchor="middle" fill="#333">GenServer, :permanent</text>
+<text x="1015.0" y="1212" font-size="12" text-anchor="middle" fill="#333">via {:region, id} · ~100+ regions</text>
+<text x="1015.0" y="1230" font-size="12" text-anchor="middle" fill="#333">page 1 → X-Pages scale</text>
+<rect x="830" y="1250" width="370" height="84" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+<text x="1015.0" y="1272" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Nostrum.Bot</text>
+<text x="1015.0" y="1294" font-size="12" text-anchor="middle" fill="#333">restart: :temporary</text>
+<text x="1015.0" y="1312" font-size="12" text-anchor="middle" fill="#333">owns Discord.Consumer</text>
+<rect x="20" y="1380" width="580" height="130" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
+<text x="310.0" y="1402" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Outside supervision</text>
+<text x="310.0" y="1424" font-size="12" text-anchor="middle" fill="#333">ETS tables: :market_cache, :esi_error_state, :janice_chart_cache</text>
+<text x="310.0" y="1442" font-size="12" text-anchor="middle" fill="#333">fire-and-forget seeders: seed_region_names, seed_type_names_forever</text>
+<text x="310.0" y="1460" font-size="12" text-anchor="middle" fill="#333">skipped when start_pollers: false (test env boots DB/cache leaves only)</text>
+<rect x="620" y="1380" width="600" height="130" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
+<text x="920.0" y="1402" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e1e1e">Legend</text>
+<text x="920.0" y="1424" font-size="12" text-anchor="middle" fill="#333">solid arrow = supervises (child spec under parent)</text>
+<text x="920.0" y="1442" font-size="12" text-anchor="middle" fill="#333">dashed arrow = manages / subscribes (Registry via, start_child, cast)</text>
+<text x="920.0" y="1460" font-size="12" text-anchor="middle" fill="#333">test: MIX_ENV=test · bot :ignore without DISCORD_TOKEN</text>
+<line x1="350" y1="675.0" x2="410" y2="192.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="292.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="392.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="492.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="592.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="692.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="792.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="892.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="992.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="1092.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="1192.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="350" y1="675.0" x2="410" y2="1292.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="730" y1="992.0" x2="830" y2="969.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="730" y1="992.0" x2="830" y2="1015.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="730" y1="1092.0" x2="830" y2="1092.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="730" y1="1192.0" x2="830" y2="1192.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="730" y1="1292.0" x2="830" y2="1292.0" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="1015.0" y1="1150" x2="1015.0" y2="1134" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="1021.0" y="1136.0" font-size="12" fill="#555">start_child</text>
+<line x1="570.0" y1="750" x2="570.0" y2="734" stroke="#1e1e1e" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+<text x="576.0" y="736.0" font-size="12" fill="#555">subscribe</text>
+</svg>

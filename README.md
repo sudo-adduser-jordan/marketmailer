@@ -56,6 +56,25 @@ Pending migrations run automatically on every boot, so containers and
   (`:market_cache`, `:esi_error_state`) and Ecto `Database` stats at
   `/dashboard` (dev: http://localhost:4000/dashboard).
 
+## Supervision tree
+
+![Supervision tree](assets/supervision.svg)
+
+Editable source: [assets/supervision.excalidraw](assets/supervision.excalidraw) —
+open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
+`assets/` after edits.
+
+Solid arrows are supervision (`lib/app.ex` children of
+`Marketmailer.Supervisor`, `:one_for_one`); dashed arrows are runtime links
+outside supervision — `RegionManager` start/stop of `PageWorker`s via
+`Marketmailer.PageSup`, `Broadcaster` subscription and `PageWorker` reports
+to `UpdateCoordinator` (`GenServer.cast`), all keyed through
+`Marketmailer.Registry` (`via` tuples). Poller children (`PageSup`,
+`RegionManagerSupervisor`, `BotSupervisor`) only boot when `start_pollers`
+is true; dashboard children (`PubSub`, `Telemetry`, `Endpoint`) only when
+the dashboard is enabled. ETS tables and `Task.start` name seeders live
+outside the tree.
+
 ## Database schema
 
 ![Database schema](assets/schema.svg)
