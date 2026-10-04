@@ -10,9 +10,16 @@ tasks:
     silent: true
 
   setup:
-    desc: Install deps and set up the database (deps.get + ecto.create + ecto.migrate)
+    desc: Install deps, migrate the DB and load the SDE name/system caches (idempotent; SDE_BUILD overrides the pinned build)
     cmds:
-      - mix setup
+      - |
+        # SDE/name caches live in the file `task start` seeds prod from, so
+        # pin both steps to it (plain `mix` in dev would hit priv/data/dev.db
+        # via config/dev.exs). MARKETMAILER_DEV_DB is pinned too because
+        # dev.exs prefers it over MARKETMAILER_DB when set.
+        SDE_DB="${MARKETMAILER_DB:-priv/data/marketmailer.db}"
+        MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix setup
+        MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import "${SDE_BUILD:-3569502}"
 
   start:
     desc: Run latest tree as prod release detached (restarts when stale; never modifies the repo)
@@ -42,6 +49,36 @@ tasks:
           exit 1
         fi
     cmds:
+      - |
+        # Fail fast when the SDE name/system caches are not loaded: names
+        # render from the read DB, which syncs from here. Checks the effective
+        # prod file (PROD_DB when it exists, else the DEV_DB seed source).
+        # Read-only; safe alongside a running daemon.
+        DEV_DB="priv/data/marketmailer.db"
+        PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
+        EFF_DB="$DEV_DB"
+        if [ -f "$PROD_DB" ]; then EFF_DB="$PROD_DB"; fi
+        if ! command -v sqlite3 >/dev/null 2>&1; then
+          echo "start: sqlite3 CLI not found — cannot verify SDE load"
+          exit 1
+        fi
+        if [ ! -f "$EFF_DB" ]; then
+          echo "start: $EFF_DB missing — run task setup first (migrate + SDE load)"
+          exit 1
+        fi
+        SDE_OK=1
+        for q in "SELECT COUNT(*) FROM sde_imports" "SELECT COUNT(*) FROM names" "SELECT COUNT(*) FROM systems"; do
+          n=$(sqlite3 "$EFF_DB" "$q" 2>/dev/null) || SDE_OK=0
+          if [ -z "$n" ] || [ "$n" = "0" ]; then SDE_OK=0; fi
+        done
+        if [ "$SDE_OK" != "1" ]; then
+          echo "start: SDE not loaded in $EFF_DB (sde_imports/names/systems empty or missing) — run task setup first"
+          if [ "$EFF_DB" = "$PROD_DB" ] && [ "$PROD_DB" != "$DEV_DB" ]; then
+            echo "start: note: setup loads $DEV_DB; a stale prod file keeps failing — load it directly: MARKETMAILER_DB=\"$PROD_DB\" mix sde.import \"${SDE_BUILD:-3569502}\""
+          fi
+          exit 1
+        fi
+        echo "start: SDE caches present in $EFF_DB"
       - task: stop
       - MIX_ENV=prod mix release --overwrite
       - |
