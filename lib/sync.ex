@@ -12,7 +12,9 @@ defmodule Market.Sync do
 	# - Never raises: errors log once and return {:error, reason} so the
 	#   caller can skip the broadcast instead of sending stale-as-fresh data.
 
-	@market_chunk_size 500
+	# Chunk sized so one multi-row INSERT stays under SQLite's bound
+	# parameter ceiling (14 columns x rows): 2000 rows ~= 28k params.
+	@market_chunk_size 2000
 	@cache_chunk_size 500
 	@market_fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total inserted_at updated_at)a
 
@@ -75,6 +77,7 @@ defmodule Market.Sync do
 			""",
 			"CREATE INDEX IF NOT EXISTS market_type_system_buy ON market(type_id, system_id, is_buy_order)",
 			"CREATE INDEX IF NOT EXISTS market_price ON market(price)",
+			"CREATE INDEX IF NOT EXISTS market_updated_at ON market(updated_at, order_id)",
 			"CREATE INDEX IF NOT EXISTS market_jita_buy ON market(type_id) WHERE system_id = 30000142 AND is_buy_order = 1",
 			"CREATE INDEX IF NOT EXISTS market_sell_price ON market(type_id, price) WHERE is_buy_order = 0",
 			"""
