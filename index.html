@@ -325,7 +325,12 @@
   }
 
   /* single box: right-biased corner sway, turning further right on hover */
+  /* single box: right-biased corner sway, turning further right on hover */
+  /* palette sampled off the Jumbo Rainbow reference pack (shared by every face) */
   .pack-3d {
+    --lc-red: #9e0631; --lc-red-d: #6d0421; --lc-blue: #508ecd; --lc-navy: #2e5296;
+    --lc-cyan: #6ab7d0; --lc-lemon: #f3ea5f; --lc-white: #f5f5f6;
+    --lc-stripe: linear-gradient(90deg, #e8384f, #f7941d, #f7e04a, #8dc63f, #3fa9d8, #4b4fa8);
     width: 270px; height: 415px; position: relative; margin: 0 auto;
     transform-style: preserve-3d;
     transform: rotateX(-5deg) rotateY(-30deg) rotateZ(-6deg);
@@ -338,10 +343,6 @@
   }
   .pack-face { backface-visibility: hidden; position: absolute; top: 50%; left: 50%; overflow: hidden; }
   .pack-front {
-    /* palette sampled off the Jumbo Rainbow reference pack */
-    --lc-red: #9e0631; --lc-red-d: #6d0421; --lc-blue: #508ecd; --lc-navy: #2e5296;
-    --lc-cyan: #6ab7d0; --lc-lemon: #f3ea5f; --lc-white: #f5f5f6;
-    --lc-stripe: linear-gradient(90deg, #e8384f, #f7941d, #f7e04a, #8dc63f, #3fa9d8, #4b4fa8);
     width: 270px; height: 415px; margin-top: -207.5px; margin-left: -135px;
     transform: translateZ(46px);
     background: linear-gradient(168deg, #a80a33 0%, var(--lc-red) 42%, #8a0529 100%);
@@ -353,6 +354,26 @@
     background: linear-gradient(180deg, #7d0526 0%, #63041d 100%);
     box-shadow: inset 7px 0 18px rgba(0, 0, 0, 0.34);
   }
+  /* the top band's blue wraps around the right edge onto the side face */
+  .pack-side-band {
+    position: absolute; left: 0; right: 0; top: 0; height: 11.5%; background: var(--lc-blue);
+    box-shadow: inset -8px 0 12px rgba(0, 0, 0, 0.22);
+  }
+  /* nutrition panel, cereal-style */
+  .pack-nutri {
+    position: absolute; left: 9%; right: 9%; top: 14.5%; padding: 3px 4px 5px;
+    background: #fff; color: #111; border: 1.5px solid #111; border-radius: 2px;
+    font-family: var(--mono); font-weight: 700; line-height: 1.18;
+  }
+  .pack-nutri h5 {
+    margin: 0 0 1px; padding-bottom: 1px; border-bottom: 2px solid #111;
+    font-size: 0.3rem; line-height: 1; letter-spacing: -0.02em; text-transform: uppercase;
+  }
+  .pack-nutri .row { display: flex; justify-content: space-between; gap: 3px; font-size: 0.2rem; white-space: nowrap; }
+  .pack-nutri .thick { margin: 2px 0; border-top: 3px solid #111; }
+  .pack-nutri .thin { margin: 1.5px 0; border-top: 1px solid #111; }
+  .pack-nutri .dv { font-size: 0.2rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  .pack-nutri .foot { margin-top: 2px; font-size: 0.16rem; font-style: italic; line-height: 1.1; }
   .pack-left {
     width: 92px; height: 415px; margin-top: -207.5px; margin-left: -46px;
     transform: translate(-135px) rotateY(-90deg);
@@ -411,28 +432,16 @@
 
   /* linear parabolic rainbow: two straight beams converging on a low vertex (42 deg from vertical) */
   .pack-beam {
-    position: absolute; left: 135px; top: -68px; width: 26px; height: 267px; margin-left: -13px;
+    position: absolute; left: 135px; top: -68px; width: 56px; height: 267px; margin-left: -28px;
     transform-origin: 50% 100%; transform: rotate(42deg); background: var(--lc-stripe);
+    clip-path: polygon(0 0, 100% 0, 67% 100%, 33% 100%);
     filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.28));
   }
   .pack-beam.l { transform: rotate(-42deg); }
 
-  /* the vertex is the Plex chevron mark (official Plex vector logo paths) */
-  .pack-plex { position: absolute; left: 50%; top: 40%; width: 70px; height: 78px; margin-left: -35px; z-index: 4; }
-  .pack-plex svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(70, 0, 20, 0.35)); }
-  /* red disc so the rainbow beam tips terminate behind the mark instead of showing through its notch */
-  .pack-plex::before {
-    content: ""; position: absolute; inset: -4px -2px; z-index: -2; border-radius: 50%;
-    background: radial-gradient(closest-side, #9b0630 62%, rgba(155, 6, 48, 0) 100%);
-  }
-  .pack-plex::after {
-    content: ""; position: absolute; inset: -7px -8px; z-index: -1; border-radius: 50%;
-    background: radial-gradient(closest-side, rgba(255, 255, 255, 0.32), transparent 70%);
-  }
-
   /* labels flanking the rainbow's lower vertices: swallowtail banners, white keyline */
   .pack-flag2 {
-    position: absolute; top: 59%; width: 36%; height: 15.5%; z-index: 4;
+    position: absolute; top: 42.5%; width: 37%; height: 16%; z-index: 4;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     text-align: center; background: #fff;
     font-weight: 900; text-transform: uppercase; line-height: 0.8; letter-spacing: -0.02em; font-size: 0.72rem;
@@ -441,8 +450,9 @@
   .pack-flag2 span { position: relative; z-index: 1; }
   .pack-flag2 .y { color: var(--lc-lemon); }
   .pack-flag2 .w { color: #fff; }
-  .pack-flag2.l { left: 2%; clip-path: polygon(0 0, 100% 0, 88% 46%, 100% 100%, 0 100%); }
-  .pack-flag2.r { right: 2%; clip-path: polygon(0 0, 100% 0, 100% 100%, 12% 54%, 0 0); }
+  /* l: notched-back pennant, point aims right at the emblem. r: arrow, point aims left. */
+  .pack-flag2.l { left: 2%; clip-path: polygon(9% 0, 100% 0, 100% 50%, 9% 100%, 0 76%, 0 24%); }
+  .pack-flag2.r { right: 2%; clip-path: polygon(0 50%, 28% 0, 100% 0, 100% 100%, 28% 100%); }
 
   /* bottom labels */
   .pack-async {
@@ -560,14 +570,6 @@
                 <div class="pack-beam l"></div>
                 <div class="pack-beam"></div>
 
-                <!-- vertex: Plex chevron mark -->
-                <div class="pack-plex">
-                  <svg viewBox="2186 0 900 1000" aria-hidden="true">
-                    <path fill="#E5A00D" d="M3086 0h-290l-290 500 290 500h290L2506 500.25Z"/>
-                    <path fill="#c98214" d="M2186 0h290l320 500.25L2476 1000.5h-290l320-500.25Z"/>
-                  </svg>
-                </div>
-
                 <!-- labels by the rainbow's lower vertices -->
                 <div class="pack-flag2 l"><span class="y">Arbitrage</span><span class="w">Spotted</span></div>
                 <div class="pack-flag2 r"><span class="y">Jumbo</span><span class="w">Markets!</span></div>
@@ -577,7 +579,23 @@
                 <div class="pack-isk"><b>1,000</b><span>ISK</span></div>
               </div>
             </div>
-            <div class="pack-face pack-side"></div>
+            <div class="pack-face pack-side">
+              <div class="pack-side-band"></div>
+              <div class="pack-nutri">
+                <h5>Nutrition Facts</h5>
+                <div class="row"><span>Serving size</span><b>1 region</b></div>
+                <div class="row"><span>Servings per pack</span><b>12</b></div>
+                <div class="thick"></div>
+                <div class="row"><span>Arbitrage</span><b>19g</b></div>
+                <div class="row"><span>ESI calls</span><b>304s</b></div>
+                <div class="row"><span>SQLite writes</span><b>&infin;</b></div>
+                <div class="thin"></div>
+                <div class="dv">% Daily Value</div>
+                <div class="row"><span>Deadlines</span><b>100%</b></div>
+                <div class="row"><span>Regrets</span><b>0%</b></div>
+                <div class="foot">* magically profitable</div>
+              </div>
+            </div>
             <div class="pack-face pack-left"></div>
             <div class="pack-face pack-top"></div>
           </div>
