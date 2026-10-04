@@ -7,22 +7,18 @@
 <meta name="description" content="Marketmailer: an EVE Online market watcher that polls ESI market orders and surfaces arbitrage opportunities against the Jita buy wall." />
 <style>
   :root {
-    --bg: #0a1440;
-    --bg-2: #101d55;
-    --bg-3: #182a6e;
-    --panel: #fff9ea;
-    --panel-ink: #2a1e05;
-    --border: #2a3a7a;
-    --text: #f2f6ff;
-    --muted: #a9b8dd;
-    --gold: #ffcf33;
-    --gold-2: #ffe08a;
-    --cyan: #4fc3f7;
-    --green: #2fbf71;
-    --red: #ff5f6d;
-    --purple: #b388ff;
-    --orange: #ff9f43;
-    --rainbow: linear-gradient(90deg, #ff5f6d, #ff9f43, #ffcf33, #2fbf71, #4fc3f7, #b388ff);
+    --bg: #ffffff;
+    --sky: #7fd4e8;
+    --sky-2: #d8f3fb;
+    --yellow: #ffd21e;
+    --yellow-2: #ffdd33;
+    --red: #b0103a;
+    --green: #0e7a3d;
+    --blue: #1c4f9c;
+    --ink: #22190d;
+    --muted: #6b5f47;
+    --card: #fff9e8;
+    --rainbow: linear-gradient(90deg, #f4364c, #ff8200, #fedb00, #97d700, #00c2de, #685bc7);
     --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, Menlo, monospace;
   }
 
@@ -32,12 +28,11 @@
 
   body {
     background:
-      radial-gradient(1100px 500px at 85% -10%, rgba(79, 195, 247, 0.22), transparent 60%),
-      radial-gradient(900px 500px at 5% 0%, rgba(255, 207, 51, 0.18), transparent 55%),
-      radial-gradient(700px 420px at 50% 30%, rgba(179, 136, 255, 0.12), transparent 60%),
+      radial-gradient(1000px 480px at 85% -10%, rgba(127, 212, 232, 0.35), transparent 60%),
+      radial-gradient(900px 480px at 5% 0%, rgba(255, 210, 30, 0.22), transparent 55%),
       var(--bg);
-    color: var(--text);
-    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
     line-height: 1.6;
     min-height: 100vh;
   }
@@ -50,7 +45,7 @@
     text-align: center;
     letter-spacing: 28px;
     font-size: 20px;
-    opacity: 0.14;
+    opacity: 0.25;
     pointer-events: none;
     z-index: 0;
   }
@@ -64,34 +59,33 @@
     align-items: center;
     justify-content: space-between;
     padding: 22px 0;
-    border-bottom: 1px solid var(--border);
-    background: rgba(7, 11, 20, 0.8);
-    backdrop-filter: blur(4px);
+    border-bottom: 2px solid rgba(34, 25, 13, 0.12);
   }
 
-  .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: 0.4px; }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: 0.4px; }
   .brand .logo {
-    width: 34px; height: 34px; border-radius: 8px;
-    background: linear-gradient(135deg, var(--gold), #c77b1e);
+    width: 38px; height: 38px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--yellow), #ff9f43);
     display: grid; place-items: center;
-    font-family: var(--mono); font-size: 13px; font-weight: 800; color: #0d0a02;
-    box-shadow: 0 0 18px rgba(240, 180, 41, 0.35);
+    font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-size: 16px; font-weight: 900; color: var(--red);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 rgba(34, 25, 13, 0.25);
   }
   .brand span { font-size: 18px; }
-  .brand small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+  .brand small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
 
-  nav { display: flex; gap: 22px; font-size: 14px; }
+  nav { display: flex; gap: 22px; font-size: 14px; font-weight: 700; }
   nav a { color: var(--muted); text-decoration: none; transition: color 0.15s; }
-  nav a:hover { color: var(--gold-2); }
+  nav a:hover { color: var(--red); }
 
   /* ---------- Hero ---------- */
   .hero {
     padding: 56px 32px 64px; text-align: center;
     margin-top: 28px; border-radius: 28px;
-    background: linear-gradient(180deg, #fffdf4 0%, #fef3d3 55%, #ffe08a 100%);
-    border: 3px solid #c8102e;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-    color: #2a1e05;
+    background: linear-gradient(180deg, #fffdf4 0%, #fef6d8 60%, #fdf0c0 100%);
+    border: 3px solid var(--ink);
+    box-shadow: 6px 6px 0 0 rgba(34, 25, 13, 0.9);
+    color: var(--ink);
   }
   .hero h1 {
     font-size: clamp(38px, 6vw, 64px);
@@ -106,62 +100,45 @@
   }
   .hero .rainbow-rule {
     width: 220px; height: 8px; border-radius: 999px; margin: 18px auto 0;
-    background: var(--rainbow);
-    box-shadow: 0 0 18px rgba(255, 207, 51, 0.45);
+    background: linear-gradient(90deg, #f4364c, #ff8200, #fedb00, #97d700, #00c2de, #685bc7);
   }
-  .hero .tagline { margin-top: 18px; font-size: clamp(16px, 2.4vw, 20px); color: #5a4a28; max-width: 640px; margin-inline: auto; }
-  .hero .tagline strong { color: #0e7a3d; font-weight: 800; }
+  .hero .tagline { margin-top: 18px; font-size: clamp(16px, 2.4vw, 20px); color: var(--muted); max-width: 640px; margin-inline: auto; }
+  .hero .tagline strong { color: var(--green); font-weight: 800; }
 
   .chips { display: flex; gap: 12px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
   .chip {
     display: inline-flex; align-items: center; gap: 8px;
-    border: 2px solid #0e7a3d; border-radius: 999px;
-    padding: 7px 16px; font-size: 13px; color: #2a1e05;
+    border: 2px solid var(--green); border-radius: 999px;
+    padding: 7px 16px; font-size: 13px; color: var(--ink); font-weight: 700;
     background: #fff;
   }
   .chip .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .dot.on { background: var(--green); box-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
-  .dot.opt { background: var(--gold); box-shadow: 0 0 8px rgba(240, 180, 41, 0.7); }
+  .dot.on { background: #2fbf71; }
+  .dot.opt { background: var(--yellow); }
 
   .cta { margin-top: 40px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .btn {
     display: inline-block; padding: 15px 32px; border-radius: 999px;
-    font-weight: 800; font-size: 16px; text-decoration: none;
+    font-weight: 900; font-size: 16px; text-decoration: none;
     font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
-    border: 3px solid #2a1e05;
+    border: 3px solid var(--ink);
     transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
   }
   .btn:hover { transform: translateY(-2px) scale(1.02); }
   .btn-primary {
-    background: linear-gradient(135deg, #2fbf71, #0e9e52);
-    color: #fff; box-shadow: 4px 4px 0 0 #c8102e;
+    background: linear-gradient(135deg, #ffe259, var(--yellow));
+    color: var(--ink); box-shadow: 4px 4px 0 0 var(--red);
   }
-  .btn-primary:hover { box-shadow: 2px 2px 0 0 #c8102e; }
-  .btn-ghost { border: 3px solid #2a1e05; color: #0e7a3d; background: #fff; box-shadow: 4px 4px 0 0 #2a1e05; }
-  .btn-ghost:hover { border-color: #2a1e05; box-shadow: 2px 2px 0 0 #2a1e05; }
-
-  /* ---------- Terminal ---------- */
-  .terminal {
-    margin: 56px auto 0; max-width: 720px; text-align: left;
-    background: #060a12; border: 1px solid var(--border); border-radius: 12px;
-    overflow: hidden; font-family: var(--mono); font-size: 13px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  }
-  .terminal .bar { display: flex; gap: 8px; padding: 12px 16px; background: var(--bg-3); border-bottom: 1px solid var(--border); }
-  .terminal .bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
-  .terminal .bar i:nth-child(1) { background: #ff5f56; } .terminal .bar i:nth-child(2) { background: #ffbd2e; } .terminal .bar i:nth-child(3) { background: #27c93f; }
-  .terminal pre { padding: 18px 20px 22px; overflow-x: auto; color: #9fb3d1; line-height: 1.7; }
-  .terminal .c { color: var(--muted); }
-  .terminal .p { color: var(--cyan); }
-  .terminal .g { color: var(--green); }
-  .terminal .y { color: var(--gold-2); }
+  .btn-primary:hover { box-shadow: 2px 2px 0 0 var(--red); }
+  .btn-ghost { border: 3px solid var(--ink); color: var(--blue); background: #fff; box-shadow: 4px 4px 0 0 var(--ink); }
+  .btn-ghost:hover { box-shadow: 2px 2px 0 0 var(--ink); }
 
   /* ---------- Sections ---------- */
   section { padding: 64px 0; }
   .sec-head { text-align: center; margin-bottom: 44px; }
   .sec-head .kicker {
     font-family: var(--mono); font-size: 12px; letter-spacing: 3px;
-    color: var(--cyan); text-transform: uppercase; margin-bottom: 10px;
+    color: var(--red); text-transform: uppercase; margin-bottom: 10px; font-weight: 700;
   }
   .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 900; letter-spacing: -0.3px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
   .sec-head p { color: var(--muted); margin-top: 12px; max-width: 620px; margin-inline: auto; font-size: 15px; }
@@ -169,66 +146,70 @@
   /* ---------- How it works ---------- */
   .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
   .step {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 26px; position: relative; color: var(--panel-ink);
+    background: var(--card); border: 2px solid var(--ink); border-radius: 16px;
+    padding: 26px; position: relative; color: var(--ink);
+    box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.15);
   }
   .step .num {
     position: absolute; top: -14px; left: 22px;
-    width: 30px; height: 30px; border-radius: 8px;
-    background: linear-gradient(135deg, var(--cyan), #0e7490);
+    width: 30px; height: 30px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--sky), #1a8fd1);
     display: grid; place-items: center; font-family: var(--mono); font-weight: 800; font-size: 14px;
-    box-shadow: 0 0 16px rgba(56, 217, 217, 0.35);
+    border: 2px solid var(--ink); color: var(--ink);
   }
-  .step h3 { margin: 8px 0 10px; font-size: 17px; }
-  .step p { color: #5a4a28; font-size: 14px; }
-  .step .flow { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--gold-2); word-break: break-word; }
+  .step h3 { margin: 8px 0 10px; font-size: 17px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
+  .step p { color: var(--muted); font-size: 14px; }
+  .step .flow { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--red); word-break: break-word; font-weight: 700; }
 
   /* ---------- Features ---------- */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
   .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 26px; transition: border-color 0.15s, transform 0.15s; color: var(--panel-ink);
+    background: #fff; border: 2px solid var(--ink); border-radius: 16px;
+    padding: 26px; transition: transform 0.15s, box-shadow 0.15s; color: var(--ink);
+    box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12);
   }
-  .card:hover { border-color: #2c3f68; transform: translateY(-3px); }
+  .card:hover { transform: translateY(-3px); box-shadow: 6px 6px 0 rgba(176, 16, 58, 0.18); }
   .card .ico {
-    width: 42px; height: 42px; border-radius: 10px; font-size: 21px;
-    display: grid; place-items: center; background: var(--bg-3); border: 1px solid var(--border); margin-bottom: 16px;
+    width: 42px; height: 42px; border-radius: 12px; font-size: 21px;
+    display: grid; place-items: center; background: var(--sky-2); border: 2px solid var(--ink); margin-bottom: 16px;
   }
-  .card h3 { font-size: 17px; margin-bottom: 8px; }
-  .card p { color: #5a4a28; font-size: 14px; }
+  .card h3 { font-size: 17px; margin-bottom: 8px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
+  .card p { color: var(--muted); font-size: 14px; }
   .card code {
-    font-family: var(--mono); font-size: 12px; color: var(--cyan);
-    background: var(--bg-2); border: 1px solid var(--border); border-radius: 5px;
+    font-family: var(--mono); font-size: 12px; color: var(--red);
+    background: var(--card); border: 1px solid rgba(34, 25, 13, 0.2); border-radius: 5px;
     padding: 1px 6px;
   }
   .card .tag {
     display: inline-block; margin-top: 14px; font-family: var(--mono); font-size: 11px;
-    letter-spacing: 1px; text-transform: uppercase; color: var(--gold);
-    border: 1px solid rgba(240, 180, 41, 0.35); border-radius: 999px; padding: 3px 10px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--green); font-weight: 700;
+    border: 2px solid var(--green); border-radius: 999px; padding: 3px 10px;
   }
-  .tag.opt { color: var(--cyan); border-color: rgba(56, 217, 217, 0.35); }
+  .tag.opt { color: var(--blue); border-color: var(--blue); }
 
   /* ---------- Commands ---------- */
-  .commands { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 30px; }
-  .cmd { display: flex; gap: 16px; padding: 12px 0; border-bottom: 1px dashed var(--border); flex-wrap: wrap; align-items: baseline; }
+  .commands { background: var(--card); border: 2px solid var(--ink); border-radius: 16px; padding: 30px; box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12); }
+  .cmd { display: flex; gap: 16px; padding: 12px 0; border-bottom: 2px dashed rgba(34, 25, 13, 0.2); flex-wrap: wrap; align-items: baseline; }
   .cmd:last-child { border-bottom: none; padding-bottom: 0; }
   .cmd code {
-    font-family: var(--mono); font-size: 14px; color: var(--gold-2);
-    background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--mono); font-size: 14px; color: var(--red); font-weight: 700;
+    background: #fff; border: 2px solid var(--ink); border-radius: 8px;
     padding: 4px 10px; white-space: nowrap;
   }
   .cmd p { color: var(--muted); font-size: 14px; flex: 1; min-width: 220px; }
 
   table { width: 100%; border-collapse: collapse; margin-top: 26px; font-size: 14px; }
-  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--mono); }
-  td code { font-family: var(--mono); font-size: 12.5px; color: var(--cyan); background: var(--bg-3); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 2px solid rgba(34, 25, 13, 0.12); }
+  th { color: var(--red); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--mono); }
+  td code { font-family: var(--mono); font-size: 12.5px; color: var(--blue); background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25); border-radius: 5px; padding: 2px 7px; }
 
   /* ---------- Footer ---------- */
-  footer { border-top: 1px solid var(--border); padding: 34px 0 46px; text-align: center; color: var(--muted); font-size: 13px; }
-  footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--gold-2); }
+  footer { border-top: 2px solid rgba(34, 25, 13, 0.12); padding: 34px 0 46px; text-align: center; color: var(--muted); font-size: 13px; }
+  footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--red); font-weight: 700; }
+  footer .rainbow { width: 180px; height: 6px; border-radius: 999px; margin: 0 auto 18px; background: var(--rainbow); }
 
   /* ---------- Spinning Lucky Charms product box (CSS 3D, replicator-style sway) ---------- */
+  /* Geometry + sway untouched. Faces re-skinned as a Lucky Charms homage. */
   .charm-stage { perspective: 1400px; perspective-origin: 50% 30%; display: flex; justify-content: center; padding: 44px 0 10px; }
   .charm-3d {
     width: 240px; height: 340px; position: relative;
@@ -246,45 +227,126 @@
     border-radius: 6px;
     overflow: hidden;
   }
+  /* ----- FRONT: crimson field, rainbow sunburst, yellow wordmark, mascot, banners, bowl ----- */
   .charm-front {
     width: 240px; height: 340px; margin-top: -170px; margin-left: -120px;
     transform: translateZ(35px);
-    background: linear-gradient(165deg, #fffbeF 0%, #fef3d3 55%, #f3e3b3 100%);
-    color: #2a1e05;
-    border: 3px solid #c8102e;
-    box-shadow: inset 0 0 30px rgba(150, 110, 30, 0.18), -14px 26px 50px rgba(0, 0, 0, 0.5);
+    background: #b0103a;
+    color: #fff;
+    border: 3px solid #22190d;
+    box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.25), -14px 26px 50px rgba(0, 0, 0, 0.5);
     display: flex; flex-direction: column; text-align: center;
   }
-  .charm-band { background: #c8102e; color: #fff; font-weight: 800; font-size: 12px; letter-spacing: 2px; padding: 8px 6px; text-transform: uppercase; }
-  .charm-title { font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; font-weight: 900; font-size: 30px; line-height: 1; margin-top: 10px; color: #0e7a3d; }
-  .charm-title small { display: block; font-size: 11px; letter-spacing: 3px; color: #c8102e; margin-top: 4px; }
-  .charm-rainbow { height: 26px; margin: 10px 18px 0; border-radius: 999px 999px 0 0;
-    background: linear-gradient(90deg, #ff5f6d, #ff9f43, #ffcf33, #2fbf71, #4fc3f7, #b388ff); }
-  .charm-charms { font-size: 22px; letter-spacing: 6px; margin: 12px 0 4px; }
-  .charm-blurb { font-size: 12px; padding: 0 18px; color: #5a4a28; }
-  .charm-foot { margin-top: auto; background: #0e7a3d; color: #fff; font-size: 11px; font-weight: 700; padding: 8px; letter-spacing: 1px; }
+  .charm-rays {
+    position: absolute; inset: 34px 0 0 0;
+    background: repeating-conic-gradient(from -90deg at 50% 118%,
+      #f4364c 0deg 7deg, #ff8200 7deg 14deg, #fedb00 14deg 21deg,
+      #97d700 21deg 28deg, #00c2de 28deg 35deg, #685bc7 35deg 42deg, #2c0be0 42deg 49deg);
+    clip-path: polygon(0 0, 100% 0, 78% 100%, 22% 100%);
+    opacity: 0.9;
+  }
+  .charm-claims {
+    position: relative; z-index: 3;
+    display: flex; align-items: stretch; justify-content: space-between;
+    background: #fff; color: #1c4f9c; font-size: 7px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.4px; line-height: 1.25;
+    padding: 5px 8px; border-bottom: 3px solid #1c4f9c;
+  }
+  .charm-claims b { display: block; font-size: 11px; color: #b0103a; }
+  .charm-wordmark {
+    position: relative; z-index: 3;
+    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
+    font-weight: 900; text-transform: uppercase;
+    font-size: 34px; line-height: 0.82; letter-spacing: 0.01em;
+    color: #ffdd33; transform: rotate(-2deg);
+    margin-top: 8px;
+    text-shadow:
+      -2px -2px 0 #7a0a26, 2px -2px 0 #7a0a26, -2px 2px 0 #7a0a26, 2px 2px 0 #7a0a26,
+      0 3px 0 #fff, 0 5px 0 rgba(0, 0, 0, 0.25);
+  }
+  .charm-wordmark small {
+    display: block; font-size: 9px; letter-spacing: 3px; color: #fff;
+    text-shadow: -1px -1px 0 #7a0a26, 1px -1px 0 #7a0a26, -1px 1px 0 #7a0a26, 1px 1px 0 #7a0a26;
+    margin-top: 4px;
+  }
+  .charm-marbits { position: absolute; inset: 96px 10px 96px 10px; z-index: 2; }
+  .marbit { position: absolute; width: 26px; height: 26px; filter: drop-shadow(0 1px 0 #fff) drop-shadow(0 0 3px rgba(255, 255, 255, 0.6)); }
+  .marbit.heart { background: #ff7fa5; border-radius: 50% 50% 50% 4px; transform: rotate(-8deg); }
+  .marbit.clover { background: #37b34a; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
+  .marbit.moon { background: #4fc3f7; border-radius: 50%; box-shadow: inset 7px -4px 0 #b0103a; }
+  .marbit.shoe { background: #8e6cc9; border-radius: 12px 12px 4px 4px; clip-path: polygon(0 0, 100% 0, 100% 65%, 72% 65%, 72% 100%, 28% 100%, 28% 65%, 0 65%); }
+  .marbit.star { background: #ffdd33; clip-path: polygon(50% 0, 63% 35%, 100% 38%, 70% 60%, 80% 100%, 50% 75%, 20% 100%, 30% 60%, 0 38%, 37% 35%); }
+  .marbit.arc { background: conic-gradient(#f4364c, #ff8200, #fedb00, #97d700, #00c2de, #685bc7, #f4364c); border-radius: 50%; }
+  .marbit.balloon { background: #f4364c; border-radius: 50% 50% 50% 50% / 55% 55% 45% 45%; }
+  .spark { position: absolute; width: 12px; height: 12px; background: #fff; z-index: 2;
+    clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); }
+  @keyframes twinkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+  .spark.tw { animation: twinkle 2.6s ease-in-out infinite; }
+  .charm-mascot { position: relative; z-index: 3; margin-top: 74px; }
+  .charm-tag {
+    position: absolute; z-index: 4; top: 196px;
+    background: #7fd4e8; color: #fff; font-weight: 900; font-size: 10px; line-height: 1.1;
+    padding: 5px 9px; text-transform: uppercase; letter-spacing: 0.5px;
+    border: 2px solid #fff; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3);
+  }
+  .charm-tag small { display: block; color: #ffdd33; }
+  .charm-tag.left { left: 6px; transform: rotate(-6deg); }
+  .charm-tag.right { right: 6px; transform: rotate(6deg); }
+  .charm-piece {
+    position: relative; z-index: 3; width: 86px; height: 86px; margin: 2px auto 0;
+    border-radius: 50%;
+    background: conic-gradient(from 40deg, #4fc3f7, #ffdd33 25%, #f48fb1 50%, #4fc3f7 75%, #4fc3f7);
+    border: 4px solid #fff;
+    box-shadow: 0 0 22px 6px rgba(255, 255, 255, 0.75), 0 0 0 6px rgba(255, 255, 255, 0.2);
+  }
+  .charm-bowl {
+    position: relative; z-index: 3; margin-top: -14px;
+    height: 74px;
+    background:
+      radial-gradient(ellipse 90px 26px at 50% 22px, #e8d5a8 60%, transparent 61%),
+      radial-gradient(ellipse 120px 40px at 50% 46px, #ffd21e 62%, #e0a800 100%);
+  }
+  .charm-bowl::after {
+    content: "o o  o   o o    o  o   o";
+    position: absolute; top: 8px; left: 0; right: 0;
+    color: #c9a86a; font-size: 13px; letter-spacing: 3px;
+  }
+  .charm-basebar {
+    position: relative; z-index: 4; margin-top: auto;
+    display: flex; align-items: center; justify-content: space-between;
+    background: #8d0a2c; padding: 7px 10px;
+    font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  }
+  .charm-oz {
+    background: #fff; color: #b0103a; border-radius: 6px;
+    font-size: 13px; font-weight: 900; line-height: 1; padding: 5px 8px;
+  }
+  /* ----- BACK + SPINES: white nutrition-panel look ----- */
   .charm-back {
     width: 240px; height: 340px; margin-top: -170px; margin-left: -120px;
     transform: rotateY(180deg) translateZ(35px);
-    background: #fff9ea; color: #2a1e05; border: 3px solid #0e7a3d;
-    padding: 16px 14px; font-size: 11px; text-align: left;
+    background: #fff; color: #22190d; border: 3px solid #22190d;
+    padding: 14px 13px; font-size: 10.5px; text-align: left;
   }
-  .charm-back h4 { font-size: 13px; margin-bottom: 8px; color: #0e7a3d; }
-  .charm-back ol { margin-left: 16px; margin-bottom: 10px; }
-  .charm-barcode { margin-top: auto; font-family: var(--mono); font-size: 10px; border-top: 2px dashed #c8102e; padding-top: 8px; }
+  .charm-back h4 { font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; font-size: 14px; margin-bottom: 6px; color: #b0103a; text-transform: uppercase; }
+  .charm-back ol { margin-left: 16px; margin-bottom: 8px; }
+  .charm-back .facts { border: 2px solid #22190d; padding: 6px 8px; margin: 8px 0; font-size: 10px; }
+  .charm-back .facts b { background: #22190d; color: #fff; display: block; margin: -6px -8px 6px; padding: 3px 8px; font-size: 10px; letter-spacing: 1px; }
+  .charm-barcode { margin-top: 6px; font-family: var(--mono); font-size: 10px; border-top: 2px dashed #b0103a; padding-top: 8px; }
   .charm-right, .charm-left {
     width: 70px; height: 340px; margin-top: -170px; margin-left: -35px;
-    padding: 14px 8px; font-size: 10px;
+    padding: 12px 7px; font-size: 9.5px; line-height: 1.5;
+    background: #fff; color: #22190d; border: 3px solid #22190d;
   }
-  .charm-right { transform: translateX(120px) rotateY(90deg); background: #0e7a3d; color: #fff; }
-  .charm-left { transform: translateX(-120px) rotateY(-90deg); background: #c8102e; color: #fff; }
-  .charm-right h5, .charm-left h5 { font-size: 10px; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.4); padding-bottom: 6px; }
-  .charm-top, .charm-bottom { width: 240px; height: 70px; margin-top: -35px; margin-left: -120px; display: grid; place-items: center; font-weight: 900; }
-  .charm-top { transform: translateY(-170px) rotateX(90deg); background: #ffcf33; color: #2a1e05; }
-  .charm-bottom { transform: translateY(170px) rotateX(90deg); background: #0e7a3d; color: #fff; }
+  .charm-right { transform: translateX(120px) rotateY(90deg); }
+  .charm-left { transform: translateX(-120px) rotateY(-90deg); }
+  .charm-right h5, .charm-left h5 { font-size: 9px; letter-spacing: 1px; margin-bottom: 8px; background: #22190d; color: #fff; padding: 4px; }
+  .charm-top, .charm-bottom { width: 240px; height: 70px; margin-top: -35px; margin-left: -120px; display: grid; place-items: center; font-weight: 900; border: 3px solid #22190d; }
+  .charm-top { transform: translateY(-170px) rotateX(90deg); background: #b0103a; color: #ffdd33; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; letter-spacing: 2px; }
+  .charm-bottom { transform: translateY(170px) rotateX(90deg); background: #ffd21e; color: #22190d; letter-spacing: 2px; font-size: 12px; }
   .charm-shadow {
     width: 200px; height: 22px; margin: 18px auto 0; border-radius: 50%;
-    background: radial-gradient(closest-side, rgba(0,0,0,0.55), transparent);
+    background: radial-gradient(closest-side, rgba(0,0,0,0.35), transparent);
     filter: blur(2px);
   }
   @media (prefers-reduced-motion: reduce) {
@@ -344,12 +406,46 @@
       <div>
         <div class="charm-3d">
           <div class="charm-face charm-front">
-            <div class="charm-band">Turkish &amp; Domain Blend · Magically Profitable</div>
-            <div class="charm-title">Marketmailer<small>LUCKY CHARMS EDITION</small></div>
-            <div class="charm-rainbow"></div>
-            <div class="charm-charms">❤️ ⭐ 🧲 🍀 🌙 🎈</div>
-            <p class="charm-blurb">Jita buy wall inside! Polls ESI, stores SQLite, surfaces arbitrage.</p>
-            <div class="charm-foot">EVE ONLINE MARKET WATCHER · PART OF A PROFITABLE BREAKFAST</div>
+            <div class="charm-claims">
+              <span>✓<br />ETAG<br /><b>CACHED</b></span>
+              <span>✓<br />SQLITE<br /><b>WAL MODE</b></span>
+              <span>✓<br />WITH<br /><b>12 REGIONS</b></span>
+            </div>
+            <div class="charm-rays"></div>
+            <div class="charm-wordmark">Market<br />mailer<small>LUCKY PROFIT EDITION</small></div>
+            <div class="charm-marbits">
+              <span class="marbit heart" style="left: 8px; top: 48px;"></span>
+              <span class="marbit clover" style="left: 30px; top: 4px;"></span>
+              <span class="marbit star" style="left: 66px; top: 30px;"></span>
+              <span class="marbit moon" style="right: 30px; top: 4px;"></span>
+              <span class="marbit shoe" style="right: 8px; top: 48px;"></span>
+              <span class="marbit balloon" style="left: 4px; top: 96px;"></span>
+              <span class="marbit arc" style="right: 4px; top: 96px;"></span>
+              <span class="spark" style="left: 52px; top: 66px;"></span>
+              <span class="spark tw" style="right: 52px; top: 66px;"></span>
+              <span class="spark tw" style="left: 96px; top: 8px;"></span>
+            </div>
+            <div class="charm-mascot">
+              <svg width="120" height="78" viewBox="0 0 120 78" role="img" aria-label="Leprechaun mascot">
+                <ellipse cx="60" cy="70" rx="34" ry="7" fill="#7a0a26" opacity="0.55" />
+                <rect x="34" y="52" width="52" height="18" rx="6" fill="#0e7a3d" />
+                <ellipse cx="60" cy="52" rx="30" ry="9" fill="#149a52" />
+                <rect x="30" y="22" width="60" height="32" rx="6" fill="#0e7a3d" />
+                <rect x="30" y="46" width="60" height="8" fill="#22190d" />
+                <rect x="53" y="44" width="14" height="12" rx="2" fill="#ffdd33" />
+                <circle cx="60" cy="66" r="17" fill="#ffd9b3" />
+                <path d="M43 66 Q60 92 77 66 Q74 78 60 80 Q46 78 43 66" fill="#e06a1b" />
+                <circle cx="53" cy="64" r="2.4" fill="#22190d" />
+                <circle cx="67" cy="64" r="2.4" fill="#22190d" />
+                <path d="M52 71 Q60 78 68 71" stroke="#7a2d12" stroke-width="2.4" fill="none" stroke-linecap="round" />
+                <path d="M40 58 Q34 52 40 46 M80 58 Q86 52 80 46" stroke="#e06a1b" stroke-width="5" fill="none" stroke-linecap="round" />
+              </svg>
+            </div>
+            <span class="charm-tag left">NEW!<small>ESI FRESH</small></span>
+            <span class="charm-tag right">JUMBO<small>PROFITS!</small></span>
+            <div class="charm-piece"></div>
+            <div class="charm-bowl"></div>
+            <div class="charm-basebar"><span>SQLite · ESI · Free</span><span class="charm-oz">MIT</span></div>
           </div>
           <div class="charm-face charm-back">
             <h4>How it works</h4>
@@ -358,6 +454,7 @@
               <li>Store orders in SQLite (WAL)</li>
               <li>Flip remote sells into Jita buys</li>
             </ol>
+            <div class="facts"><b>PROFIT FACTS</b>spread 37.2 ISK · volume Jita absorbs · instant_sell_profit</div>
             <p>Free · open source · follows the rainbow to Jita.</p>
             <div class="charm-barcode">||| |||| | || JITA-4-4 |||| ||| |||<br />task start · task dev</div>
           </div>
@@ -369,28 +466,11 @@
             <h5>JITA • MM</h5>
             ★ best order<br />🍀 undercut radar<br />🌙 ESI names<br />❤️ Discord bot
           </div>
-          <div class="charm-face charm-top">MM ★</div>
+          <div class="charm-face charm-top">MARKETMAILER ★</div>
           <div class="charm-face charm-bottom">FOLLOW THE RAINBOW</div>
         </div>
         <div class="charm-shadow"></div>
       </div>
-    </div>
-
-    <div class="terminal">
-      <div class="bar"><i></i><i></i><i></i></div>
-      <pre><span class="c">$</span> <span class="p">mix setup</span>
-  Resolving dependencies... done
-  Ecto: created marketmailer.db (SQLite, WAL mode)
-  Ecto: migrations up to date
-
-<span class="c">$</span> <span class="p">task start</span>
-  started prod release (daemon)
-<span class="g">app_start</span>  ts=2026-09-22T12:00:00.000Z commit=e3f9a1d
-<span class="g">region_update</span> The Forge   orders=142_381 pages=21
-<span class="g">arbitrage_found</span> <span class="y">"Core Scaffolding"</span> Jita buy 98.4 ISK vs 61.2 ISK · margin 37.2 ISK
-
-<span class="c">$</span> <span class="p">task dev</span>
-  isolated shell: priv/data/dev.db :4001 (coexists with prod)</pre>
     </div>
   </section>
 </div>
@@ -543,6 +623,7 @@
 <!-- ================= Footer ================= -->
 <div class="wrap">
   <footer>
+    <div class="rainbow" aria-hidden="true"></div>
     <div class="stack">Elixir ~> 1.19 · OTP · Ecto + SQLite · Nostrum · req</div>
     <p>Marketmailer v0.0.1 — an EVE Online community utility. Not affiliated with CCP Games.</p>
   </footer>
