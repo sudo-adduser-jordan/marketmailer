@@ -7,13 +7,13 @@
 <meta name="description" content="Marketmailer: an EVE Online market watcher that polls ESI market orders and surfaces arbitrage opportunities against the Jita buy wall." />
 <style>
   :root {
-    --bg: #ffffff;
-    --sky: #7fd4e8;
-    --sky-2: #d8f3fb;
+    --bg: #fffdf6;
+    --sky: #1a8fd1;
+    --sky-2: #d9f0fb;
     --yellow: #ffd21e;
     --yellow-2: #ffdd33;
-    --red: #b0103a;
-    --green: #0e7a3d;
+    --red: #c8102e;
+    --green: #3f9e4d;
     --blue: #1c4f9c;
     --ink: #22190d;
     --muted: #6b5f47;
@@ -28,8 +28,8 @@
 
   body {
     background:
-      radial-gradient(1000px 480px at 85% -10%, rgba(127, 212, 232, 0.35), transparent 60%),
-      radial-gradient(900px 480px at 5% 0%, rgba(255, 210, 30, 0.22), transparent 55%),
+      radial-gradient(1000px 480px at 85% -10%, rgba(63, 158, 77, 0.14), transparent 60%),
+      radial-gradient(900px 480px at 5% 0%, rgba(200, 16, 46, 0.10), transparent 55%),
       var(--bg);
     color: var(--ink);
     font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -37,7 +37,6 @@
     min-height: 100vh;
   }
 
-  /* floating marshmallow charms backdrop */
   body::before {
     content: "❤️ ⭐ 🍀 🌙 🎈 🧲 ✨ ❤️ ⭐ 🍀 🌙";
     position: fixed;
@@ -59,15 +58,15 @@
     align-items: center;
     justify-content: space-between;
     padding: 22px 0;
-    border-bottom: 2px solid rgba(34, 25, 13, 0.12);
+    border-bottom: 3px solid var(--green);
   }
 
   .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: 0.4px; }
   .brand .logo {
     width: 38px; height: 38px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--yellow), #ff9f43);
+    background: linear-gradient(135deg, #57c164, var(--green));
     display: grid; place-items: center;
-    font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-size: 16px; font-weight: 900; color: var(--red);
+    font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-size: 16px; font-weight: 900; color: #fff;
     border: 2px solid var(--ink);
     box-shadow: 2px 2px 0 rgba(34, 25, 13, 0.25);
   }
@@ -78,21 +77,31 @@
   nav a { color: var(--muted); text-decoration: none; transition: color 0.15s; }
   nav a:hover { color: var(--red); }
 
-  /* ---------- Hero ---------- */
+  /* ---------- Hero (product page style) ---------- */
   .hero {
-    padding: 56px 32px 64px; text-align: center;
+    padding: 48px 32px 56px;
     margin-top: 28px; border-radius: 28px;
-    background: linear-gradient(180deg, #fffdf4 0%, #fef6d8 60%, #fdf0c0 100%);
+    background: linear-gradient(180deg, #fffdf4 0%, #fdf6e0 60%, #fbeecb 100%);
     border: 3px solid var(--ink);
     box-shadow: 6px 6px 0 0 rgba(34, 25, 13, 0.9);
     color: var(--ink);
   }
+  .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+  .hero-copy { text-align: center; }
+  @media (min-width: 860px) { .hero-copy { text-align: left; } }
+  .badge-new {
+    display: inline-block; background: var(--red); color: #fff;
+    font-size: 12px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;
+    border-radius: 999px; padding: 5px 14px; border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 rgba(34, 25, 13, 0.35);
+  }
   .hero h1 {
+    margin-top: 16px;
     font-size: clamp(38px, 6vw, 64px);
     font-weight: 900;
     letter-spacing: -0.5px;
     font-family: "Baloo 2", "Fredoka One", "Nunito", "Quicksand", system-ui, sans-serif;
-    background: linear-gradient(90deg, #c8102e, #ff9f43 22%, #0e7a3d 48%, #1a8fd1 72%, #7b5cff);
+    background: linear-gradient(90deg, #c8102e, #3f9e4d 50%, #1a8fd1);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -102,10 +111,12 @@
     width: 220px; height: 8px; border-radius: 999px; margin: 18px auto 0;
     background: linear-gradient(90deg, #f4364c, #ff8200, #fedb00, #97d700, #00c2de, #685bc7);
   }
-  .hero .tagline { margin-top: 18px; font-size: clamp(16px, 2.4vw, 20px); color: var(--muted); max-width: 640px; margin-inline: auto; }
+  @media (min-width: 860px) { .hero .rainbow-rule { margin-left: 0; } }
+  .hero .tagline { margin-top: 18px; font-size: clamp(15px, 2.2vw, 18px); color: var(--muted); }
   .hero .tagline strong { color: var(--green); font-weight: 800; }
 
   .chips { display: flex; gap: 12px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+  @media (min-width: 860px) { .chips { justify-content: flex-start; } }
   .chip {
     display: inline-flex; align-items: center; gap: 8px;
     border: 2px solid var(--green); border-radius: 999px;
@@ -116,7 +127,8 @@
   .dot.on { background: #2fbf71; }
   .dot.opt { background: var(--yellow); }
 
-  .cta { margin-top: 40px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .cta { margin-top: 34px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  @media (min-width: 860px) { .cta { justify-content: flex-start; } }
   .btn {
     display: inline-block; padding: 15px 32px; border-radius: 999px;
     font-weight: 900; font-size: 16px; text-decoration: none;
@@ -153,13 +165,21 @@
   .step .num {
     position: absolute; top: -14px; left: 22px;
     width: 30px; height: 30px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--sky), #1a8fd1);
+    background: linear-gradient(135deg, #57c164, var(--green));
     display: grid; place-items: center; font-family: var(--mono); font-weight: 800; font-size: 14px;
-    border: 2px solid var(--ink); color: var(--ink);
+    border: 2px solid var(--ink); color: #fff;
   }
   .step h3 { margin: 8px 0 10px; font-size: 17px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
   .step p { color: var(--muted); font-size: 14px; }
   .step .flow { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--red); word-break: break-word; font-weight: 700; }
+
+  /* ---------- Benefits list (product page style) ---------- */
+  .benefits { max-width: 760px; margin: 0 auto 44px; }
+  .benefits h3 { font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; font-size: 22px; margin-bottom: 16px; }
+  .benefits ul { list-style: none; }
+  .benefits li { padding: 12px 0; border-bottom: 2px dashed rgba(34, 25, 13, 0.18); font-size: 14.5px; color: var(--muted); }
+  .benefits li:last-child { border-bottom: none; }
+  .benefits li strong { color: var(--ink); font-weight: 900; letter-spacing: 0.4px; }
 
   /* ---------- Features ---------- */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
@@ -168,7 +188,7 @@
     padding: 26px; transition: transform 0.15s, box-shadow 0.15s; color: var(--ink);
     box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12);
   }
-  .card:hover { transform: translateY(-3px); box-shadow: 6px 6px 0 rgba(176, 16, 58, 0.18); }
+  .card:hover { transform: translateY(-3px); box-shadow: 6px 6px 0 rgba(200, 16, 46, 0.18); }
   .card .ico {
     width: 42px; height: 42px; border-radius: 12px; font-size: 21px;
     display: grid; place-items: center; background: var(--sky-2); border: 2px solid var(--ink); margin-bottom: 16px;
@@ -187,6 +207,19 @@
   }
   .tag.opt { color: var(--blue); border-color: var(--blue); }
 
+  /* ---------- System Facts (nutrition panel style) ---------- */
+  .facts {
+    max-width: 560px; margin: 0 auto;
+    border: 3px solid var(--ink); border-radius: 16px; background: #fff; padding: 26px 30px;
+    box-shadow: 5px 5px 0 rgba(34, 25, 13, 0.2);
+  }
+  .facts h3 { font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-size: 26px; font-weight: 900; }
+  .facts .sub { font-size: 13px; color: var(--muted); margin: 6px 0 12px; border-bottom: 6px solid var(--ink); padding-bottom: 10px; }
+  .facts table { margin-top: 0; }
+  .facts th, .facts td { border-bottom: 1px solid rgba(34, 25, 13, 0.15); padding: 9px 4px; }
+  .facts th { color: var(--ink); font-size: 13px; letter-spacing: 0; text-transform: none; font-family: inherit; }
+  .facts td:last-child, .facts th:last-child { text-align: right; font-weight: 800; color: var(--red); font-family: var(--mono); font-size: 13px; }
+
   /* ---------- Commands ---------- */
   .commands { background: var(--card); border: 2px solid var(--ink); border-radius: 16px; padding: 30px; box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12); }
   .cmd { display: flex; gap: 16px; padding: 12px 0; border-bottom: 2px dashed rgba(34, 25, 13, 0.2); flex-wrap: wrap; align-items: baseline; }
@@ -203,10 +236,25 @@
   th { color: var(--red); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--mono); }
   td code { font-family: var(--mono); font-size: 12.5px; color: var(--blue); background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25); border-radius: 5px; padding: 2px 7px; }
 
+  /* ---------- You might also like ---------- */
+  .also { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; }
+  .also .card { text-align: center; }
+  .also .thumb {
+    width: 72px; height: 72px; margin: 0 auto 14px; border-radius: 16px;
+    display: grid; place-items: center; font-size: 34px;
+    border: 2px solid var(--ink); box-shadow: 3px 3px 0 rgba(34, 25, 13, 0.2);
+  }
+  .also .pill { display: inline-block; background: var(--red); color: #fff; font-size: 10px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; margin-bottom: 10px; }
+
   /* ---------- Footer ---------- */
-  footer { border-top: 2px solid rgba(34, 25, 13, 0.12); padding: 34px 0 46px; text-align: center; color: var(--muted); font-size: 13px; }
-  footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--red); font-weight: 700; }
+  footer { border-top: 3px solid var(--green); padding: 40px 0 46px; color: var(--muted); font-size: 13px; }
+  footer .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px; margin-bottom: 32px; }
+  footer h4 { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink); margin-bottom: 12px; }
+  footer .cols a { display: block; color: var(--muted); text-decoration: none; padding: 3px 0; }
+  footer .cols a:hover { color: var(--red); }
   footer .rainbow { width: 180px; height: 6px; border-radius: 999px; margin: 0 auto 18px; background: var(--rainbow); }
+  footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--red); font-weight: 700; text-align: center; }
+  footer p.fine { text-align: center; }
 
   /* ---------- Product box (ported verbatim from replicator.rip: .pack-* geometry + pack-turn) ---------- */
   .pack-wrap { position: relative; display: flex; justify-content: center; padding: 44px 0 10px; }
@@ -300,6 +348,10 @@
     .hero { padding: 56px 0 44px; }
     section { padding: 48px 0; }
     .pack-wrap { padding: 30px 0 6px; transform: scale(0.85); transform-origin: top center; }
+    .hero-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 859px) {
+    .hero-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -321,38 +373,42 @@
 
   <!-- ================= Hero ================= -->
   <section class="hero">
-    <h1>Marketmailer</h1>
-    <div class="rainbow-rule" aria-hidden="true"></div>
-    <p class="tagline">
-      A lightweight EVE Online market watcher that polls the
-      <strong>ESI market endpoints</strong>, stores orders locally in SQLite,
-      and surfaces <strong>arbitrage opportunities</strong> — the best remote
-      sell orders to instantly flip into the <strong>Jita buy wall</strong>.
-      They're magically profitable! ❤️⭐🍀🌙
-    </p>
+    <div class="hero-grid">
+      <div class="pack-wrap" aria-hidden="true">
+        <div class="pack-disc"></div>
+        <div class="pack-stage">
+          <div class="pack-3d">
+            <div class="pack-face pack-front"></div>
+            <div class="pack-face pack-side spine"></div>
+            <div class="pack-face pack-left spine"></div>
+            <div class="pack-face pack-top"></div>
+          </div>
+        </div>
+        <div class="pack-shadow"></div>
+      </div>
+      <div class="hero-copy">
+        <span class="badge-new">New</span>
+        <h1>Marketmailer</h1>
+        <div class="rainbow-rule" aria-hidden="true"></div>
+        <p class="tagline">
+          A lightweight EVE Online market watcher that polls the
+          <strong>ESI market endpoints</strong>, stores orders locally in SQLite,
+          and surfaces <strong>arbitrage opportunities</strong> — the best remote
+          sell orders to instantly flip into the <strong>Jita buy wall</strong>.
+          They're magically profitable! ❤️⭐🍀🌙
+        </p>
 
-    <div class="chips">
-      <span class="chip"><span class="dot on"></span> Region pollers — enabled</span>
-      <span class="chip"><span class="dot opt"></span> Discord bot — optional</span>
-      <span class="chip">SQLite · Elixir/OTP · Docker</span>
-    </div>
+        <div class="chips">
+          <span class="chip"><span class="dot on"></span> Region pollers — enabled</span>
+          <span class="chip"><span class="dot opt"></span> Discord bot — optional</span>
+          <span class="chip">SQLite · Elixir/OTP · Docker</span>
+        </div>
 
-    <div class="cta">
-      <a class="btn btn-primary" href="#quickstart">Get started</a>
-      <a class="btn btn-ghost" href="#features">See the features</a>
-    </div>
-
-    <div class="pack-wrap" aria-hidden="true">
-      <div class="pack-disc"></div>
-      <div class="pack-stage">
-        <div class="pack-3d">
-          <div class="pack-face pack-front"></div>
-          <div class="pack-face pack-side spine"></div>
-          <div class="pack-face pack-left spine"></div>
-          <div class="pack-face pack-top"></div>
+        <div class="cta">
+          <a class="btn btn-primary" href="#quickstart">Get started</a>
+          <a class="btn btn-ghost" href="#features">See the features</a>
         </div>
       </div>
-      <div class="pack-shadow"></div>
     </div>
   </section>
 </div>
@@ -400,13 +456,23 @@
   </div>
 </section>
 
-<!-- ================= Features ================= -->
+<!-- ================= Benefits ================= -->
 <section id="features">
   <div class="wrap">
     <div class="sec-head">
       <div class="kicker">02 · Arsenal</div>
       <h2>Features</h2>
       <p>Everything tuned for one job: buying low in the regions and selling high in Jita.</p>
+    </div>
+    <div class="benefits">
+      <h3>Benefits / Consumer Statements</h3>
+      <ul>
+        <li><strong>SPREAD SCANNER:</strong> A frosted-simple pipeline that finds the single best remote sell order you can instantly flip into Jita's buy wall, ranked by <em>instant_sell_profit</em>.</li>
+        <li><strong>UNDERCUT RADAR:</strong> The top-100 items whose remote sell price beats Jita's best buy, ordered by margin — your shopping list for station trading runs across all watched regions.</li>
+        <li><strong>LAZY NAME RESOLUTION:</strong> No static data dumps. Item, system, region and station names resolve on demand from ESI into cached tables.</li>
+        <li><strong>GLUTEN-FREE CONCURRENCY:</strong> A per-region GenServer tree with dynamic page scaling and supervisory restarts that survive transient ESI failures.</li>
+        <li><strong>CONTAINS:</strong> One SQLite database of market orders, etags, and names, ready to eat — or to query — any time. Perfect for instant arbitrage or a lunch-box trading run.</li>
+      </ul>
     </div>
     <div class="grid">
       <div class="card">
@@ -474,11 +540,39 @@
   </div>
 </section>
 
+<!-- ================= System Facts ================= -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">03 · Nutrition</div>
+      <h2>System Facts</h2>
+      <p>Every serving ships with the same wholesome ingredients.</p>
+    </div>
+    <div class="facts">
+      <h3>System Facts</h3>
+      <div class="sub">Servings per container: 1 poller · Serving size: 1 order cycle</div>
+      <table>
+        <thead>
+          <tr><th>Component</th><th>As Shipped</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Total "calories" (orders scanned/cycle)</td><td>region-dependent</td></tr>
+          <tr><td>ETag cache hits (unchanged pages)</td><td>304 cheap</td></tr>
+          <tr><td>Sodium (ESI requests, % Value)</td><td>rate-limited</td></tr>
+          <tr><td>Total Carbohydrate (SQLite WAL writes)</td><td>batched</td></tr>
+          <tr><td>Protein (profit per unit)</td><td>ranked</td></tr>
+          <tr><td>Vitamin D (observability)</td><td>ts + commit</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
 <!-- ================= Quick start ================= -->
 <section id="quickstart">
   <div class="wrap">
     <div class="sec-head">
-      <div class="kicker">03 · Launch</div>
+      <div class="kicker">04 · Launch</div>
       <h2>Quick start</h2>
       <p>From clone to arbitrage feed in three commands.</p>
     </div>
@@ -502,12 +596,67 @@
   </div>
 </section>
 
+<!-- ================= You might also like ================= -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">05 · Also</div>
+      <h2>You Might Also Like...</h2>
+      <p>More magically delicious utilities from the same kitchen.</p>
+    </div>
+    <div class="also">
+      <div class="card">
+        <span class="pill">New</span>
+        <div class="thumb" style="background: var(--sky-2);">📦</div>
+        <h3>SDE snapshot import</h3>
+        <p>Bulk-seed names/systems/stations from the official JSONL SDE in one command.</p>
+      </div>
+      <div class="card">
+        <div class="thumb" style="background: var(--card);">🔥</div>
+        <h3>Zero-downtime hot upgrades</h3>
+        <p>Castle OTP releases patch prod in place — no missed poll cycles.</p>
+      </div>
+      <div class="card">
+        <div class="thumb" style="background: #e8f5e9;">🐳</div>
+        <h3>Docker all the things</h3>
+        <p>One <code>docker build</code>, bind-mounted SQLite, up on any host.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ================= Footer ================= -->
 <div class="wrap">
   <footer>
+    <div class="cols">
+      <div>
+        <h4>Site</h4>
+        <a href="#how">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#quickstart">Quick start</a>
+      </div>
+      <div>
+        <h4>Our Brand</h4>
+        <a href="#features">Jita spread scanner</a>
+        <a href="#features">Undercut radar</a>
+        <a href="#features">Discord bot</a>
+      </div>
+      <div>
+        <h4>Connect With Us</h4>
+        <a href="#">ESI status</a>
+        <a href="#">GitHub</a>
+        <a href="#">Contact</a>
+      </div>
+      <div>
+        <h4>Legal &amp; Privacy</h4>
+        <a href="#">Terms of use</a>
+        <a href="#">Privacy policy</a>
+        <a href="#">Cookie notice</a>
+      </div>
+    </div>
     <div class="rainbow" aria-hidden="true"></div>
     <div class="stack">Elixir ~> 1.19 · OTP · Ecto + SQLite · Nostrum · req</div>
-    <p>Marketmailer v0.0.1 — an EVE Online community utility. Not affiliated with CCP Games.</p>
+    <p class="fine">Marketmailer v0.0.1 — an EVE Online community utility. Not affiliated with CCP Games.</p>
   </footer>
 </div>
 
