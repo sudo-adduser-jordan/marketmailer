@@ -373,7 +373,7 @@
     .pack-sparkles i { animation: none !important; }
   }
 
-  /* ---------- Front label: top band, parabolic rainbow, vertex marshmallow ---------- */
+  /* ---------- Front label: top band, parabolic rainbow, vertex Plex mark ---------- */
   .pack-label-wrap { position: absolute; inset: 0; }
   .pack-print { position: absolute; inset: 0; pointer-events: none; }
   .pack-print i {
@@ -397,12 +397,6 @@
     box-shadow: 1.5px 1.5px 0 rgba(34, 25, 13, 0.3); color: #fff;
     font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-weight: 900; font-size: 0.4rem;
   }
-  .pack-callouts { position: absolute; left: 28%; right: 1.5%; top: 0; height: 100%; display: flex; align-items: center; justify-content: space-between; }
-  .co { color: #fff; font-size: 0.185rem; font-weight: 900; letter-spacing: 0.04em; line-height: 1.2; text-transform: uppercase; }
-  .co b { display: block; font-size: 0.5rem; line-height: 0.9; color: var(--lc-navy); letter-spacing: -0.03em; text-transform: none; }
-  .co-1 b { font-size: 0.62rem; color: #fff; }
-  .co small { display: block; margin-top: 1px; font-size: 0.155rem; font-weight: 700; letter-spacing: 0.01em; opacity: 0.9; }
-
   /* wordmark */
   .pack-wordmark {
     position: absolute; left: 6%; right: 6%; top: 12.5%; z-index: 3; text-align: center;
@@ -412,8 +406,8 @@
     display: block; color: var(--lc-lemon); line-height: 0.8;
     text-shadow: -1.5px -1.5px 0 var(--lc-red-d), 1.5px -1.5px 0 var(--lc-red-d), -1.5px 1.5px 0 var(--lc-red-d), 1.5px 1.5px 0 var(--lc-red-d), 0 3px 0 rgba(0, 0, 0, 0.22);
   }
-  .pack-wordmark .lucky { font-size: 2.1rem; }
-  .pack-wordmark .charms { font-size: 2.25rem; margin-top: 5px; }
+  .pack-wordmark .market { font-size: 2.05rem; }
+  .pack-wordmark .mailer { font-size: 2.3rem; margin-top: 5px; }
 
   /* linear parabolic rainbow: two straight beams converging on a low vertex (42 deg from vertical) */
   .pack-beam {
@@ -423,32 +417,25 @@
   }
   .pack-beam.l { transform: rotate(-42deg); }
 
-  /* the vertex is a jumbo rainbow marshmallow (no leprechaun) */
-  .pack-jumbo { position: absolute; left: 50%; top: 40%; width: 94px; height: 52px; margin-left: -47px; z-index: 4; }
-  .pack-jumbo i {
-    position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
-    width: var(--w); height: var(--h); border: var(--b) solid var(--c); border-bottom: 0;
-    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-    filter: drop-shadow(0 2px 3px rgba(70, 0, 20, 0.32));
+  /* the vertex is the Plex chevron mark (official Plex vector logo paths) */
+  .pack-plex { position: absolute; left: 50%; top: 40%; width: 70px; height: 78px; margin-left: -35px; z-index: 4; }
+  .pack-plex svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(70, 0, 20, 0.35)); }
+  /* red disc so the rainbow beam tips terminate behind the mark instead of showing through its notch */
+  .pack-plex::before {
+    content: ""; position: absolute; inset: -4px -2px; z-index: -2; border-radius: 50%;
+    background: radial-gradient(closest-side, #9b0630 62%, rgba(155, 6, 48, 0) 100%);
   }
-  .pack-jumbo i.solid { border: 0; background: var(--c); }
-  .pack-jumbo::after {
-    content: ""; position: absolute; inset: -7px -9px; z-index: -1;
-    background: radial-gradient(closest-side, rgba(255, 255, 255, 0.45), transparent 72%);
-  }
-
-  /* floating charms */
-  .pack-charm {
-    position: absolute; left: var(--x); top: var(--y); z-index: 3; font-size: var(--fs, 15px); line-height: 1; color: var(--c);
-    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.85)) drop-shadow(0 1px 1px rgba(90, 0, 25, 0.45));
+  .pack-plex::after {
+    content: ""; position: absolute; inset: -7px -8px; z-index: -1; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(255, 255, 255, 0.32), transparent 70%);
   }
 
   /* labels flanking the rainbow's lower vertices: swallowtail banners, white keyline */
   .pack-flag2 {
-    position: absolute; top: 60%; width: 35%; height: 14%; z-index: 4;
+    position: absolute; top: 59%; width: 36%; height: 15.5%; z-index: 4;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     text-align: center; background: #fff;
-    font-weight: 900; text-transform: uppercase; line-height: 0.82; letter-spacing: -0.02em; font-size: 0.56rem;
+    font-weight: 900; text-transform: uppercase; line-height: 0.8; letter-spacing: -0.02em; font-size: 0.72rem;
   }
   .pack-flag2::before { content: ""; position: absolute; inset: 2.5px; background: var(--lc-cyan); clip-path: inherit; }
   .pack-flag2 span { position: relative; z-index: 1; }
@@ -459,17 +446,18 @@
 
   /* bottom labels */
   .pack-async {
-    position: absolute; left: 4%; bottom: 2.5%; z-index: 6; color: #fff;
-    font-size: 0.48rem; font-weight: 900; line-height: 1.04; text-transform: uppercase;
-    text-shadow: 1px 1px 0 rgba(90, 0, 25, 0.4);
+    position: absolute; left: 6%; bottom: 3%; z-index: 6; color: #fff;
+    font-size: 0.66rem; font-weight: 900; line-height: 1.02; text-transform: uppercase;
+    letter-spacing: -0.02em;
+    text-shadow: -1px -1px 0 var(--lc-red-d), 1px -1px 0 var(--lc-red-d), -1px 1px 0 var(--lc-red-d), 1px 1px 0 var(--lc-red-d);
   }
-  .pack-async span { display: block; color: #ff8098; text-shadow: none; }
+  .pack-async span { display: block; }
   .pack-isk {
-    position: absolute; right: 4%; bottom: 3.5%; z-index: 6; width: 25%; padding: 2px 4px 3px;
-    background: #fff; border-radius: 6px; text-align: center; box-shadow: 0 1px 4px rgba(60, 0, 15, 0.4);
+    position: absolute; right: 5%; bottom: 4%; z-index: 6; width: 34%; padding: 4px 6px 5px;
+    background: #fff; border-radius: 3px; text-align: center; box-shadow: 0 1px 4px rgba(60, 0, 15, 0.4);
   }
-  .pack-isk b { display: block; font-size: 0.8rem; line-height: 0.88; color: var(--lc-red-d); letter-spacing: -0.03em; }
-  .pack-isk span { display: block; font-size: 0.36rem; font-weight: 900; letter-spacing: 0.12em; color: var(--lc-red-d); }
+  .pack-isk b { display: block; font-size: 1.15rem; line-height: 0.86; color: var(--lc-red-d); letter-spacing: -0.03em; }
+  .pack-isk span { display: block; font-size: 0.44rem; font-weight: 900; letter-spacing: 0.14em; color: var(--lc-red-d); }
 
   .pack-shadow {
     position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); z-index: 2;
@@ -560,47 +548,29 @@
                 <div class="pack-band">
                   <div class="pack-wedge"></div>
                   <div class="pack-tab"><span class="pack-tab-m">M</span></div>
-                  <div class="pack-callouts">
-                    <p class="co co-1"><b>✔</b>Good source of ISK<small>Buena fuente de ISK</small></p>
-                    <p class="co"><b>19g</b>Profit per cycle<small>De beneficio por ciclo</small></p>
-                    <p class="co"><b>12</b>Class A regions<small>Con 12 regiones clase A</small></p>
-                  </div>
                 </div>
 
                 <!-- wordmark -->
                 <div class="pack-wordmark">
-                  <span class="lucky">Lucky</span>
-                  <span class="charms">Charms</span>
+                  <span class="market">Market</span>
+                  <span class="mailer">Mailer</span>
                 </div>
 
                 <!-- linear parabolic rainbow: beams converge on the low vertex -->
                 <div class="pack-beam l"></div>
                 <div class="pack-beam"></div>
 
-                <!-- vertex: jumbo rainbow marshmallow -->
-                <div class="pack-jumbo">
-                  <i style="--w:94px;--h:52px;--b:15px;--c:#6ab7d0"></i>
-                  <i style="--w:64px;--h:36px;--b:13px;--c:#f2a0a0"></i>
-                  <i class="solid" style="--w:38px;--h:21px;--c:#e0645f"></i>
+                <!-- vertex: Plex chevron mark -->
+                <div class="pack-plex">
+                  <svg viewBox="2186 0 900 1000" aria-hidden="true">
+                    <path fill="#E5A00D" d="M3086 0h-290l-290 500 290 500h290L2506 500.25Z"/>
+                    <path fill="#c98214" d="M2186 0h290l320 500.25L2476 1000.5h-290l320-500.25Z"/>
+                  </svg>
                 </div>
 
-                <!-- charms spread across the face -->
-                <span class="pack-charm" style="--x:5%;--y:19%;--fs:20px;--c:#6ab7d0">★</span>
-                <span class="pack-charm" style="--x:87%;--y:17%;--fs:19px;--c:#f2a0a0">♥</span>
-                <span class="pack-charm" style="--x:13%;--y:33%;--fs:18px;--c:#a8d05a">✿</span>
-                <span class="pack-charm" style="--x:83%;--y:30%;--fs:21px;--c:#f3ea5f">★</span>
-                <span class="pack-charm" style="--x:3%;--y:47%;--fs:18px;--c:#b39ddb">✿</span>
-                <span class="pack-charm" style="--x:93%;--y:45%;--fs:19px;--c:#6ab7d0">☾</span>
-                <span class="pack-charm" style="--x:21%;--y:56%;--fs:17px;--c:#f2b8b0">♥</span>
-                <span class="pack-charm" style="--x:79%;--y:55%;--fs:19px;--c:#f7e04a">★</span>
-                <span class="pack-charm" style="--x:10%;--y:79%;--fs:21px;--c:#f3ea5f">★</span>
-                <span class="pack-charm" style="--x:88%;--y:77%;--fs:18px;--c:#a8d05a">✿</span>
-                <span class="pack-charm" style="--x:44%;--y:82%;--fs:18px;--c:#6ab7d0">☾</span>
-                <span class="pack-charm" style="--x:58%;--y:86%;--fs:17px;--c:#f2a0a0">♥</span>
-
                 <!-- labels by the rainbow's lower vertices -->
-                <div class="pack-flag2 l"><span class="y">Limited</span><span class="w">Edition</span></div>
-                <div class="pack-flag2 r"><span class="y">Jumbo</span><span class="w">Spread!</span></div>
+                <div class="pack-flag2 l"><span class="y">Arbitrage</span><span class="w">Spotted</span></div>
+                <div class="pack-flag2 r"><span class="y">Jumbo</span><span class="w">Markets!</span></div>
 
                 <!-- bottom labels -->
                 <p class="pack-async">Async Free<span>Sin Async</span></p>
