@@ -17,17 +17,31 @@ defmodule Mix.Tasks.Sde.Import do
 	@latest_url "https://developers.eveonline.com/static-data/tranquility/latest.jsonl"
 	@zip_url_template "https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-BUILD-jsonl.zip"
 
-	# Zip entry basenames backing our caches.
+	# Zip entry basenames backing our caches. npcStations.jsonl is
+	# intentionally absent: official station entries carry no name field
+	# (names compose from operations + celestials), so station names keep
+	# warming through the fast bulk ESI ticker instead.
 	@needed_files [
 		"types.jsonl",
 		"mapSolarSystems.jsonl",
 		"mapConstellations.jsonl",
-		"mapRegions.jsonl",
-		"npcStations.jsonl"
+		"mapRegions.jsonl"
 	]
 
 	@impl true
 	def run(args) do
+		# Repos need the Ecto supervision tree (repo registry); the full
+		# application (pollers, bot, dashboard) must NOT boot for an import.
+		{:ok, _} = Application.ensure_all_started(:ecto_sqlite3)
+
+		# Req performs HTTP through a named Finch pool, started on demand.
+		{:ok, _} = Application.ensure_all_started(:req)
+
+		case Finch.start_link(name: Req.Finch) do
+			{:ok, _} -> :ok
+			{:error, {:already_started, _}} -> :ok
+		end
+
 		{:ok, _} = Database.start_link()
 
 		Ecto.Migrator.run(
@@ -52,7 +66,7 @@ defmodule Mix.Tasks.Sde.Import do
 
 		import_types(paths["types.jsonl"])
 		import_systems(paths["mapSolarSystems.jsonl"], constellations)
-		import_stations(paths["npcStations.jsonl"])
+		Mix.shell().info("station names: skipped (no names in official npcStations.jsonl; ESI ticker covers them)")
 		record_build(build)
 
 		Mix.shell().info("SDE import done (build #{build})")
@@ -149,8 +163,12 @@ defmodule Mix.Tasks.Sde.Import do
 		|> Enum.reduce(%{}, fn line, acc ->
 			case Jason.decode(line) do
 				{:ok, %{"_key" => key} = entry} ->
-					value = Enum.find_value(fields, fn field -> entry[field] end)
-					Map.put(acc, key, resolve_link(as_text(value), link))
+					raw = Enum.find_value(fields, fn field -> entry[field] end)
+
+					case follow_link(raw, link) do
+						nil -> acc
+						value -> Map.put(acc, key, value)
+					end
 
 				_ ->
 					acc
@@ -160,20 +178,85 @@ defmodule Mix.Tasks.Sde.Import do
 
 	defp load_keyed_map(path, field, link), do: load_keyed_map(path, [field], link)
 
+	defp follow_link(nil, _), do: nil
+	defp follow_link(id, link) when is_map(link) and is_integer(id), do: Map.get(link, id)
+	defp follow_link(value, _), do: as_text(value)
+
 	defp as_text(nil), do: nil
 	defp as_text(value) when is_binary(value), do: value
 	defp as_text(%{"en" => name}) when is_binary(name), do: name
 	defp as_text(_), do: nil
 
-	defp resolve_link(nil, _), do: nil
-	defp resolve_link(value, nil), do: value
-	defp resolve_link(id, map) when is_map(map), do: Map.get(map, id, id)
-	defp resolve_link(value, _), do: value
+	# Bulk writes against the live poller DB contend on SQLite's single
+	# write lock ("database is locked" fails fast, no busy wait). Retry
+	# with backoff so a background import always drains; raises after the
+	# budget so failures are loud, never silently swallowed.
+	@write_attempts 60
+	@write_delay_ms 500
+
+	defp with_write_retry(fun, attempts \\ @write_attempts)
+	defp with_write_retry(_fun, 0), do: Mix.raise("SDE import write failed: lock budget exhausted")
+
+	defp with_write_retry(fun, attempts) do
+		case fun.() do
+			{:error, reason} ->
+				if lock_contention_value?(reason) and attempts > 1 do
+					Process.sleep(@write_delay_ms)
+					with_write_retry(fun, attempts - 1)
+				else
+					Mix.raise("SDE import write failed: #{inspect(reason)}")
+				end
+
+			_ ->
+				:ok
+		end
+	rescue
+		e ->
+			if lock_contention?(e) and attempts > 1 do
+				Process.sleep(@write_delay_ms)
+				with_write_retry(fun, attempts - 1)
+			else
+				reraise e, __STACKTRACE__
+			end
+	end
+
+	defp lock_contention_value?(%Exqlite.Error{} = e), do: lock_contention?(e)
+	defp lock_contention_value?(%DBConnection.ConnectionError{}), do: true
+
+	defp lock_contention_value?(reason) when is_binary(reason),
+		do: String.contains?(reason, ["database is locked", "Database busy"])
+
+	defp lock_contention_value?(_), do: false
+
+	defp lock_contention?(%Exqlite.Error{} = e),
+		do: String.contains?(Exception.message(e), ["database is locked", "Database busy"])
+
+	defp lock_contention?(%DBConnection.ConnectionError{}), do: true
+	defp lock_contention?(_), do: false
+
+	# Direct repo writes with task-owned retry. Universe.Database wraps
+	# everything in DbWriter, which converts a spent lock budget into an
+	# {:error, ...} return — invisible to a bulk importer counting chunks.
+	# Same conflict semantics, same chunk discipline, but failures are loud.
+	defp insert_names(chunk) do
+		with_write_retry(fn ->
+			Database.insert_all("names", chunk, on_conflict: {:replace, [:name]}, conflict_target: :id)
+		end)
+	end
+
+	defp insert_system(entry) do
+		with_write_retry(fn ->
+			Database.insert_all("systems", [entry],
+				on_conflict: {:replace, [:name, :security_status, :region_name]},
+				conflict_target: :system_id
+			)
+		end)
+	end
 
 	defp import_types(path) do
-		count =
+		{count, ids} =
 			stream_entries(path)
-			|> Stream.filter(fn
+			|> Stream.map(fn
 				%{"_key" => id, "name" => %{"en" => name}, "published" => true}
 				when is_integer(id) and is_binary(name) ->
 					%{id: id, name: name}
@@ -183,16 +266,18 @@ defmodule Mix.Tasks.Sde.Import do
 			end)
 			|> Stream.reject(&is_nil/1)
 			|> Enum.chunk_every(500)
-			|> Enum.reduce(0, fn chunk, acc ->
-				Universe.Database.upsert_names(chunk)
-				acc + length(chunk)
+			|> Enum.reduce({0, []}, fn chunk, {acc, ids} ->
+				insert_names(chunk)
+				{acc + length(chunk), [Enum.map(chunk, & &1.id) | ids]}
 			end)
 
-		Mix.shell().info("imported #{count} published type names")
+		ids = List.flatten(ids)
+		verify_present!("names", "id", ids)
+		Mix.shell().info("imported #{count} published type names (verified #{length(ids)} present)")
 	end
 
 	defp import_systems(path, constellations) do
-		count =
+		{count, ids} =
 			stream_entries(path)
 			|> Stream.map(fn
 				%{"_key" => id} = entry when is_integer(id) ->
@@ -200,7 +285,7 @@ defmodule Mix.Tasks.Sde.Import do
 						system_id: id,
 						name: as_text(entry["name"]) || to_string(id),
 						security_status: entry["securityStatus"] || entry["security_status"],
-						region_name: Map.get(constellations, entry["constellationID"] || entry["constellation_id"], "?")
+						region_name: Map.get(constellations, entry["constellationID"] || entry["constellation_id"]) || "?"
 					}
 
 				_ ->
@@ -208,34 +293,38 @@ defmodule Mix.Tasks.Sde.Import do
 			end)
 			|> Stream.reject(&is_nil/1)
 			|> Enum.chunk_every(100)
-			|> Enum.reduce(0, fn chunk, acc ->
-				Enum.each(chunk, &Universe.Database.upsert_system/1)
-				acc + length(chunk)
+			|> Enum.reduce({0, []}, fn chunk, {acc, ids} ->
+				Enum.each(chunk, &insert_system/1)
+				{acc + length(chunk), [Enum.map(chunk, & &1.system_id) | ids]}
 			end)
 
-		Mix.shell().info("imported #{count} systems")
+		ids = List.flatten(ids)
+		verify_present!("systems", "system_id", ids)
+		Mix.shell().info("imported #{count} systems (verified #{length(ids)} present)")
 	end
 
-	defp import_stations(path) do
-		count =
-			stream_entries(path)
-			|> Stream.map(fn
-				%{"_key" => id} = entry when is_integer(id) ->
-					name = as_text(entry["name"]) || as_text(entry["stationName"])
-
-					if is_binary(name), do: %{id: id, name: name}
-
-				_ ->
-					nil
-			end)
-			|> Stream.reject(&is_nil/1)
+	# Reads back every imported id in chunks; raises unless all are present.
+	# Closes the silent-partial-write hole for good.
+	defp verify_present!(table, column, ids) do
+		missing =
+			ids
 			|> Enum.chunk_every(500)
-			|> Enum.reduce(0, fn chunk, acc ->
-				Universe.Database.upsert_names(chunk)
-				acc + length(chunk)
+			|> Enum.flat_map(fn chunk ->
+				placeholders = Enum.map_join(chunk, ",", fn _ -> "?" end)
+
+				%{rows: rows} = Database.query!("SELECT #{column} FROM #{table} WHERE #{column} IN (#{placeholders})", chunk)
+
+				present = MapSet.new(rows, fn [id] -> id end)
+				Enum.reject(chunk, &MapSet.member?(present, &1))
 			end)
 
-		Mix.shell().info("imported #{count} station names")
+		if missing != [] do
+			Mix.raise(
+				"SDE import verify failed: #{length(missing)} #{table} rows missing (e.g. #{inspect(Enum.take(missing, 5))})"
+			)
+		end
+
+		:ok
 	end
 
 	defp stream_entries(path) do
