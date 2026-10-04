@@ -208,149 +208,81 @@
   footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--red); font-weight: 700; }
   footer .rainbow { width: 180px; height: 6px; border-radius: 999px; margin: 0 auto 18px; background: var(--rainbow); }
 
-  /* ---------- Spinning Lucky Charms product box (CSS 3D, replicator-style sway) ---------- */
-  /* Geometry + sway untouched. Faces re-skinned as a Lucky Charms homage. */
-  .charm-stage { perspective: 1400px; perspective-origin: 50% 30%; display: flex; justify-content: center; padding: 44px 0 10px; }
-  .charm-3d {
-    width: 240px; height: 340px; position: relative;
-    transform-style: preserve-3d;
-    animation: charm-sway 14s ease-in-out infinite;
+  /* ---------- Product box (ported verbatim from replicator.rip: .pack-* geometry + pack-turn) ---------- */
+  .pack-wrap { position: relative; display: flex; justify-content: center; padding: 44px 0 10px; }
+  .pack-stage { perspective: 1400px; perspective-origin: 50% 40%; position: relative; padding-bottom: 34px; }
+  .pack-disc {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    aspect-ratio: 1 / 1; width: 300px; border-radius: 9999px;
+    background: #c8102e; pointer-events: none;
+    box-shadow: 0 0 0 12px rgba(200, 16, 46, 0.18);
   }
-  .charm-stage:hover .charm-3d, .charm-stage:focus-within .charm-3d { animation-play-state: paused; }
-  @keyframes charm-sway {
+  @media (min-width: 640px) { .pack-disc { width: 380px; } }
+  .pack-3d {
+    width: 270px; height: 415px; position: relative; margin: 0 auto;
+    transform-style: preserve-3d;
+    animation: 14s ease-in-out infinite pack-turn;
+  }
+  .pack-face { backface-visibility: hidden; position: absolute; top: 50%; left: 50%; }
+  .pack-front {
+    width: 270px; height: 415px; margin-top: -207.5px; margin-left: -135px;
+    transform: translateZ(46px); overflow: hidden;
+    background: linear-gradient(158deg, #f7f1e1 0%, #efe7d2 46%, #dbd1b7 100%);
+    box-shadow: inset 0 0 44px rgba(90, 70, 30, 0.12), -14px 26px 50px rgba(60, 20, 10, 0.45);
+    --scene-punch: #f5efdf;
+  }
+  .pack-front .inner {
+    position: absolute; inset: 9px;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: 16px 12px; text-align: center;
+    border: 1px solid rgba(176, 138, 58, 0.55);
+  }
+  .pack-ink { color: #22190d; }
+  .pack-label { color: rgba(34, 25, 13, 0.75); font-size: 0.5rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.24em; }
+  .pack-hr { margin: 6px auto 0; height: 1px; width: 64px; background: rgba(176, 138, 58, 0.7); }
+  .pack-scene { display: block; width: 100%; color: #22190d; }
+  .pack-wordmark {
+    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
+    color: #22190d; font-size: 1.7rem; line-height: 1; font-weight: 900;
+  }
+  .pack-hr2 { margin: 8px auto 0; height: 1px; width: 96px; background: rgba(176, 138, 58, 0.6); }
+  .pack-sub { margin-top: 6px; color: rgba(34, 25, 13, 0.65); font-size: 0.42rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; }
+  .pack-face .spine {
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pack-side {
+    width: 92px; height: 415px; margin-top: -207.5px; margin-left: -46px;
+    transform: translate(135px) rotateY(90deg);
+    background: linear-gradient(180deg, #d6cbb0 0%, #b4a888 100%);
+    box-shadow: inset 8px 0 20px rgba(0, 0, 0, 0.2);
+  }
+  .pack-left {
+    width: 92px; height: 415px; margin-top: -207.5px; margin-left: -46px;
+    transform: translate(-135px) rotateY(-90deg);
+    background: linear-gradient(180deg, #efe8d5 0%, #d5cbb0 100%);
+    box-shadow: inset -8px 0 20px rgba(0, 0, 0, 0.1);
+  }
+  .pack-spine-text { white-space: nowrap; color: rgba(34, 25, 13, 0.7); font-size: 0.5rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3em; }
+  .pack-spine-text.r { transform: rotate(90deg); }
+  .pack-spine-text.l { transform: rotate(-90deg); }
+  .pack-top {
+    width: 270px; height: 92px; margin-top: -46px; margin-left: -135px;
+    transform: translateY(-207.5px) rotateX(90deg);
+    background: linear-gradient(180deg, #faf5e8 0%, #ded4bb 100%);
+    box-shadow: inset 0 -6px 14px rgba(0, 0, 0, 0.14);
+  }
+  @keyframes pack-turn {
     0%, 100% { transform: rotateX(-6deg) rotateY(-26deg); }
     50% { transform: rotateX(-2deg) rotateY(22deg); }
   }
-  .charm-face {
-    position: absolute; top: 50%; left: 50%;
-    backface-visibility: hidden;
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  /* ----- FRONT: crimson field, rainbow sunburst, yellow wordmark, mascot, banners, bowl ----- */
-  .charm-front {
-    width: 240px; height: 340px; margin-top: -170px; margin-left: -120px;
-    transform: translateZ(35px);
-    background: #b0103a;
-    color: #fff;
-    border: 3px solid #22190d;
-    box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.25), -14px 26px 50px rgba(0, 0, 0, 0.5);
-    display: flex; flex-direction: column; text-align: center;
-  }
-  .charm-rays {
-    position: absolute; inset: 34px 0 0 0;
-    background: repeating-conic-gradient(from -90deg at 50% 118%,
-      #f4364c 0deg 7deg, #ff8200 7deg 14deg, #fedb00 14deg 21deg,
-      #97d700 21deg 28deg, #00c2de 28deg 35deg, #685bc7 35deg 42deg, #2c0be0 42deg 49deg);
-    clip-path: polygon(0 0, 100% 0, 78% 100%, 22% 100%);
-    opacity: 0.9;
-  }
-  .charm-claims {
-    position: relative; z-index: 3;
-    display: flex; align-items: stretch; justify-content: space-between;
-    background: #fff; color: #1c4f9c; font-size: 7px; font-weight: 800;
-    text-transform: uppercase; letter-spacing: 0.4px; line-height: 1.25;
-    padding: 5px 8px; border-bottom: 3px solid #1c4f9c;
-  }
-  .charm-claims b { display: block; font-size: 11px; color: #b0103a; }
-  .charm-wordmark {
-    position: relative; z-index: 3;
-    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
-    font-weight: 900; text-transform: uppercase;
-    font-size: 34px; line-height: 0.82; letter-spacing: 0.01em;
-    color: #ffdd33; transform: rotate(-2deg);
-    margin-top: 8px;
-    text-shadow:
-      -2px -2px 0 #7a0a26, 2px -2px 0 #7a0a26, -2px 2px 0 #7a0a26, 2px 2px 0 #7a0a26,
-      0 3px 0 #fff, 0 5px 0 rgba(0, 0, 0, 0.25);
-  }
-  .charm-wordmark small {
-    display: block; font-size: 9px; letter-spacing: 3px; color: #fff;
-    text-shadow: -1px -1px 0 #7a0a26, 1px -1px 0 #7a0a26, -1px 1px 0 #7a0a26, 1px 1px 0 #7a0a26;
-    margin-top: 4px;
-  }
-  .charm-marbits { position: absolute; inset: 96px 10px 96px 10px; z-index: 2; }
-  .marbit { position: absolute; width: 26px; height: 26px; filter: drop-shadow(0 1px 0 #fff) drop-shadow(0 0 3px rgba(255, 255, 255, 0.6)); }
-  .marbit.heart { background: #ff7fa5; border-radius: 50% 50% 50% 4px; transform: rotate(-8deg); }
-  .marbit.clover { background: #37b34a; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
-  .marbit.moon { background: #4fc3f7; border-radius: 50%; box-shadow: inset 7px -4px 0 #b0103a; }
-  .marbit.shoe { background: #8e6cc9; border-radius: 12px 12px 4px 4px; clip-path: polygon(0 0, 100% 0, 100% 65%, 72% 65%, 72% 100%, 28% 100%, 28% 65%, 0 65%); }
-  .marbit.star { background: #ffdd33; clip-path: polygon(50% 0, 63% 35%, 100% 38%, 70% 60%, 80% 100%, 50% 75%, 20% 100%, 30% 60%, 0 38%, 37% 35%); }
-  .marbit.arc { background: conic-gradient(#f4364c, #ff8200, #fedb00, #97d700, #00c2de, #685bc7, #f4364c); border-radius: 50%; }
-  .marbit.balloon { background: #f4364c; border-radius: 50% 50% 50% 50% / 55% 55% 45% 45%; }
-  .spark { position: absolute; width: 12px; height: 12px; background: #fff; z-index: 2;
-    clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); }
-  @keyframes twinkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
-  .spark.tw { animation: twinkle 2.6s ease-in-out infinite; }
-  .charm-mascot { position: relative; z-index: 3; margin-top: 74px; }
-  .charm-tag {
-    position: absolute; z-index: 4; top: 196px;
-    background: #7fd4e8; color: #fff; font-weight: 900; font-size: 10px; line-height: 1.1;
-    padding: 5px 9px; text-transform: uppercase; letter-spacing: 0.5px;
-    border: 2px solid #fff; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3);
-  }
-  .charm-tag small { display: block; color: #ffdd33; }
-  .charm-tag.left { left: 6px; transform: rotate(-6deg); }
-  .charm-tag.right { right: 6px; transform: rotate(6deg); }
-  .charm-piece {
-    position: relative; z-index: 3; width: 86px; height: 86px; margin: 2px auto 0;
-    border-radius: 50%;
-    background: conic-gradient(from 40deg, #4fc3f7, #ffdd33 25%, #f48fb1 50%, #4fc3f7 75%, #4fc3f7);
-    border: 4px solid #fff;
-    box-shadow: 0 0 22px 6px rgba(255, 255, 255, 0.75), 0 0 0 6px rgba(255, 255, 255, 0.2);
-  }
-  .charm-bowl {
-    position: relative; z-index: 3; margin-top: -14px;
-    height: 74px;
-    background:
-      radial-gradient(ellipse 90px 26px at 50% 22px, #e8d5a8 60%, transparent 61%),
-      radial-gradient(ellipse 120px 40px at 50% 46px, #ffd21e 62%, #e0a800 100%);
-  }
-  .charm-bowl::after {
-    content: "o o  o   o o    o  o   o";
-    position: absolute; top: 8px; left: 0; right: 0;
-    color: #c9a86a; font-size: 13px; letter-spacing: 3px;
-  }
-  .charm-basebar {
-    position: relative; z-index: 4; margin-top: auto;
-    display: flex; align-items: center; justify-content: space-between;
-    background: #8d0a2c; padding: 7px 10px;
-    font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
-  }
-  .charm-oz {
-    background: #fff; color: #b0103a; border-radius: 6px;
-    font-size: 13px; font-weight: 900; line-height: 1; padding: 5px 8px;
-  }
-  /* ----- BACK + SPINES: white nutrition-panel look ----- */
-  .charm-back {
-    width: 240px; height: 340px; margin-top: -170px; margin-left: -120px;
-    transform: rotateY(180deg) translateZ(35px);
-    background: #fff; color: #22190d; border: 3px solid #22190d;
-    padding: 14px 13px; font-size: 10.5px; text-align: left;
-  }
-  .charm-back h4 { font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; font-size: 14px; margin-bottom: 6px; color: #b0103a; text-transform: uppercase; }
-  .charm-back ol { margin-left: 16px; margin-bottom: 8px; }
-  .charm-back .facts { border: 2px solid #22190d; padding: 6px 8px; margin: 8px 0; font-size: 10px; }
-  .charm-back .facts b { background: #22190d; color: #fff; display: block; margin: -6px -8px 6px; padding: 3px 8px; font-size: 10px; letter-spacing: 1px; }
-  .charm-barcode { margin-top: 6px; font-family: var(--mono); font-size: 10px; border-top: 2px dashed #b0103a; padding-top: 8px; }
-  .charm-right, .charm-left {
-    width: 70px; height: 340px; margin-top: -170px; margin-left: -35px;
-    padding: 12px 7px; font-size: 9.5px; line-height: 1.5;
-    background: #fff; color: #22190d; border: 3px solid #22190d;
-  }
-  .charm-right { transform: translateX(120px) rotateY(90deg); }
-  .charm-left { transform: translateX(-120px) rotateY(-90deg); }
-  .charm-right h5, .charm-left h5 { font-size: 9px; letter-spacing: 1px; margin-bottom: 8px; background: #22190d; color: #fff; padding: 4px; }
-  .charm-top, .charm-bottom { width: 240px; height: 70px; margin-top: -35px; margin-left: -120px; display: grid; place-items: center; font-weight: 900; border: 3px solid #22190d; }
-  .charm-top { transform: translateY(-170px) rotateX(90deg); background: #b0103a; color: #ffdd33; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; letter-spacing: 2px; }
-  .charm-bottom { transform: translateY(170px) rotateX(90deg); background: #ffd21e; color: #22190d; letter-spacing: 2px; font-size: 12px; }
-  .charm-shadow {
-    width: 200px; height: 22px; margin: 18px auto 0; border-radius: 50%;
-    background: radial-gradient(closest-side, rgba(0,0,0,0.35), transparent);
-    filter: blur(2px);
-  }
   @media (prefers-reduced-motion: reduce) {
-    .charm-3d { animation: none; transform: rotateX(-4deg) rotateY(-18deg); }
+    .pack-3d { animation: none; transform: rotateX(-4deg) rotateY(-18deg); }
+  }
+  .pack-shadow {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    width: 200px; height: 22px; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(0, 0, 0, 0.35), transparent);
+    filter: blur(2px);
   }
 
   @media (max-width: 720px) {
@@ -358,8 +290,7 @@
     nav { display: none; }
     .hero { padding: 56px 0 44px; }
     section { padding: 48px 0; }
-    .charm-3d { transform: scale(0.82); }
-    .charm-stage { padding: 30px 0 6px; }
+    .pack-wrap { padding: 30px 0 6px; transform: scale(0.85); transform-origin: top center; }
   }
 </style>
 </head>
@@ -402,75 +333,46 @@
       <a class="btn btn-ghost" href="#features">See the features</a>
     </div>
 
-    <div class="charm-stage" aria-hidden="true">
-      <div>
-        <div class="charm-3d">
-          <div class="charm-face charm-front">
-            <div class="charm-claims">
-              <span>✓<br />ETAG<br /><b>CACHED</b></span>
-              <span>✓<br />SQLITE<br /><b>WAL MODE</b></span>
-              <span>✓<br />WITH<br /><b>12 REGIONS</b></span>
+    <div class="pack-wrap" aria-hidden="true">
+      <div class="pack-disc"></div>
+      <div class="pack-stage">
+        <div class="pack-3d">
+          <div class="pack-face pack-front">
+            <div class="inner">
+              <div>
+                <p class="pack-label">Jita &amp; Domestic</p>
+                <div class="pack-hr"></div>
+              </div>
+              <svg class="pack-scene" viewBox="0 50 600 154" role="img" aria-label="A dromedary camel standing before two pyramids and a pair of palm trees" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><g opacity="0.4"><path d="M 26 172 L 108 62 L 190 172 Z"></path><path d="M 168 172 L 214 108 L 260 172 Z"></path></g><g opacity="0.2"><path d="M 108 62 L 190 172 L 108 172 Z"></path><path d="M 214 108 L 260 172 L 214 172 Z"></path></g><g transform="translate(486, 172) scale(1.2)"><path d="M 0 0 C -1 -18, -3 -34, 3 -48" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"></path><path d="M 3 -48 C -10 -58, -26 -58, -36 -48 C -24 -54, -10 -55, 3 -50 Z"></path><path d="M 3 -48 C 16 -58, 32 -58, 42 -48 C 30 -54, 16 -55, 3 -50 Z"></path><path d="M 3 -48 C -6 -62, -18 -70, -30 -70 C -16 -66, -6 -58, 2 -50 Z"></path><path d="M 3 -48 C 12 -62, 24 -70, 36 -70 C 22 -66, 12 -58, 4 -50 Z"></path><path d="M 3 -48 C 1 -64, 3 -74, 8 -80 C 10 -70, 8 -58, 5 -50 Z"></path><circle cx="-1" cy="-45" r="2.6"></circle><circle cx="7" cy="-44" r="2.6"></circle></g><g transform="translate(556, 172) scale(0.92)" opacity="0.8"><path d="M 0 0 C -1 -18, -3 -34, 3 -48" fill="none" stroke="currentColor" stroke-width="5.2" stroke-linecap="round"></path><path d="M 3 -48 C -10 -58, -26 -58, -36 -48 C -24 -54, -10 -55, 3 -50 Z"></path><path d="M 3 -48 C 16 -58, 32 -58, 42 -48 C 30 -54, 16 -55, 3 -50 Z"></path><path d="M 3 -48 C -6 -62, -18 -70, -30 -70 C -16 -66, -6 -58, 2 -50 Z"></path><path d="M 3 -48 C 12 -62, 24 -70, 36 -70 C 22 -66, 12 -58, 4 -50 Z"></path><circle cx="-1" cy="-45" r="3"></circle><circle cx="7" cy="-44" r="3"></circle></g><g transform="translate(212, 55) scale(0.78)"><g opacity="0.75"><path d="M 130 94 L 139 94 L 138 120 L 140 150 L 132 150 L 130 120 Z"></path><path d="M 52 92 L 63 92 L 61 116 L 67 150 L 59 150 L 53 118 Z"></path></g><path d="M 56 74 C 48 80, 45 92, 48 104 L 54 101 C 51 92, 52 82, 60 78 Z"></path><circle cx="49" cy="105" r="3.4"></circle><path d="M 54 78
+         C 52 64, 62 57, 78 57
+         C 92 57, 97 52, 104 44
+         C 110 28, 140 28, 147 54
+         C 149 60, 152 62, 157 63
+         C 166 66, 170 74, 168 84
+         C 166 92, 159 98, 149 98
+         L 74 98
+         C 60 98, 55 90, 54 78 Z"></path><path d="M 149 72
+         C 152 54, 161 39, 173 30
+         L 188 36
+         C 178 45, 170 59, 166 76 Z"></path><path d="M 170 30
+         C 167 22, 176 17, 186 19
+         C 196 21, 205 26, 206 31
+         C 207 35, 202 38, 196 37
+         L 183 36
+         C 176 36, 172 34, 170 30 Z"></path><path d="M 178 21 L 179 11 L 187 19 Z"></path><circle cx="191" cy="27" r="1.9" fill="var(--scene-punch, #f5efdf)"></circle><path d="M 144 96 L 155 96 L 154 120 L 157 150 L 148 150 L 146 120 Z"></path><path d="M 64 94 L 77 94 L 75 116 L 83 150 L 74 150 L 68 118 Z"></path></g><path d="M 30 172 Q 180 165 330 172 T 578 170" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+              <div style="width: 100%;">
+                <p class="pack-wordmark">Marketmailer</p>
+                <div class="pack-hr2"></div>
+                <p class="pack-sub">12 Class A Regions</p>
+              </div>
             </div>
-            <div class="charm-rays"></div>
-            <div class="charm-wordmark">Market<br />mailer<small>LUCKY PROFIT EDITION</small></div>
-            <div class="charm-marbits">
-              <span class="marbit heart" style="left: 8px; top: 48px;"></span>
-              <span class="marbit clover" style="left: 30px; top: 4px;"></span>
-              <span class="marbit star" style="left: 66px; top: 30px;"></span>
-              <span class="marbit moon" style="right: 30px; top: 4px;"></span>
-              <span class="marbit shoe" style="right: 8px; top: 48px;"></span>
-              <span class="marbit balloon" style="left: 4px; top: 96px;"></span>
-              <span class="marbit arc" style="right: 4px; top: 96px;"></span>
-              <span class="spark" style="left: 52px; top: 66px;"></span>
-              <span class="spark tw" style="right: 52px; top: 66px;"></span>
-              <span class="spark tw" style="left: 96px; top: 8px;"></span>
-            </div>
-            <div class="charm-mascot">
-              <svg width="120" height="78" viewBox="0 0 120 78" role="img" aria-label="Leprechaun mascot">
-                <ellipse cx="60" cy="70" rx="34" ry="7" fill="#7a0a26" opacity="0.55" />
-                <rect x="34" y="52" width="52" height="18" rx="6" fill="#0e7a3d" />
-                <ellipse cx="60" cy="52" rx="30" ry="9" fill="#149a52" />
-                <rect x="30" y="22" width="60" height="32" rx="6" fill="#0e7a3d" />
-                <rect x="30" y="46" width="60" height="8" fill="#22190d" />
-                <rect x="53" y="44" width="14" height="12" rx="2" fill="#ffdd33" />
-                <circle cx="60" cy="66" r="17" fill="#ffd9b3" />
-                <path d="M43 66 Q60 92 77 66 Q74 78 60 80 Q46 78 43 66" fill="#e06a1b" />
-                <circle cx="53" cy="64" r="2.4" fill="#22190d" />
-                <circle cx="67" cy="64" r="2.4" fill="#22190d" />
-                <path d="M52 71 Q60 78 68 71" stroke="#7a2d12" stroke-width="2.4" fill="none" stroke-linecap="round" />
-                <path d="M40 58 Q34 52 40 46 M80 58 Q86 52 80 46" stroke="#e06a1b" stroke-width="5" fill="none" stroke-linecap="round" />
-              </svg>
-            </div>
-            <span class="charm-tag left">NEW!<small>ESI FRESH</small></span>
-            <span class="charm-tag right">JUMBO<small>PROFITS!</small></span>
-            <div class="charm-piece"></div>
-            <div class="charm-bowl"></div>
-            <div class="charm-basebar"><span>SQLite · ESI · Free</span><span class="charm-oz">MIT</span></div>
           </div>
-          <div class="charm-face charm-back">
-            <h4>How it works</h4>
-            <ol>
-              <li>Poll ESI markets (ETag cached)</li>
-              <li>Store orders in SQLite (WAL)</li>
-              <li>Flip remote sells into Jita buys</li>
-            </ol>
-            <div class="facts"><b>PROFIT FACTS</b>spread 37.2 ISK · volume Jita absorbs · instant_sell_profit</div>
-            <p>Free · open source · follows the rainbow to Jita.</p>
-            <div class="charm-barcode">||| |||| | || JITA-4-4 |||| ||| |||<br />task start · task dev</div>
-          </div>
-          <div class="charm-face charm-right">
-            <h5>PROFIT FACTS</h5>
-            spread 37.2 ISK<br /><br />volume Jita absorbs<br /><br />instant_sell_profit<br /><br />100% daily magic
-          </div>
-          <div class="charm-face charm-left">
-            <h5>JITA • MM</h5>
-            ★ best order<br />🍀 undercut radar<br />🌙 ESI names<br />❤️ Discord bot
-          </div>
-          <div class="charm-face charm-top">MARKETMAILER ★</div>
-          <div class="charm-face charm-bottom">FOLLOW THE RAINBOW</div>
+          <div class="pack-face pack-side spine"><p class="pack-spine-text r">Marketmailer</p></div>
+          <div class="pack-face pack-left spine"><p class="pack-spine-text l">Marketmailer</p></div>
+          <div class="pack-face pack-top"></div>
         </div>
-        <div class="charm-shadow"></div>
       </div>
+      <div class="pack-shadow"></div>
     </div>
   </section>
 </div>
