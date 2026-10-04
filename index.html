@@ -254,9 +254,7 @@
   }
   .pack-hr2 { margin: 8px auto 0; height: 1px; width: 96px; background: rgba(176, 138, 58, 0.6); }
   .pack-sub { margin-top: 6px; color: rgba(34, 25, 13, 0.65); font-size: 0.42rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; }
-  .pack-face .spine {
-    display: flex; align-items: center; justify-content: center;
-  }
+  .pack-face .spine { position: relative; padding: 0 4px; }
   .pack-side {
     width: 92px; height: 415px; margin-top: -207.5px; margin-left: -46px;
     transform: translate(135px) rotateY(90deg);
@@ -269,9 +267,13 @@
     background: linear-gradient(180deg, #efe8d5 0%, #d5cbb0 100%);
     box-shadow: inset -8px 0 20px rgba(0, 0, 0, 0.1);
   }
-  .pack-spine-text { white-space: nowrap; color: rgba(34, 25, 13, 0.7); font-size: 0.5rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3em; }
-  .pack-spine-text.r { transform: rotate(90deg); }
-  .pack-spine-text.l { transform: rotate(-90deg); }
+  .pack-spine-text {
+    position: absolute; top: 50%; left: 50%;
+    white-space: nowrap; color: rgba(34, 25, 13, 0.7);
+    font-size: 0.45rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.22em;
+  }
+  .pack-spine-text.r { transform: translate(-50%, -50%) rotate(90deg); }
+  .pack-spine-text.l { transform: translate(-50%, -50%) rotate(-90deg); }
   .pack-top {
     width: 270px; height: 92px; margin-top: -46px; margin-left: -135px;
     transform: translateY(-207.5px) rotateX(90deg);
