@@ -353,12 +353,19 @@
     background: linear-gradient(180deg, #7d0526 0%, #63041d 100%);
     box-shadow: inset 7px 0 18px rgba(0, 0, 0, 0.34);
   }
-  /* the top band's blue wraps around the right edge onto the side face */
-  .pack-side-band {
-    position: absolute; left: 0; right: 0; top: 0; height: 11.5%; background: var(--lc-blue);
-    box-shadow: inset -8px 0 12px rgba(0, 0, 0, 0.22);
+  /* gold wordmark on the side face, same stack + outline treatment as the front */
+  .pack-side-word {
+    position: absolute; left: 0; right: 0; top: 0; height: 11.5%; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
+    font-weight: 900; text-transform: uppercase; line-height: 0.82; letter-spacing: -0.01em;
+    color: var(--lc-lemon);
+    text-shadow: -1px -1px 0 var(--lc-red-d), 1px -1px 0 var(--lc-red-d), -1px 1px 0 var(--lc-red-d), 1px 1px 0 var(--lc-red-d), 0 2px 0 rgba(0, 0, 0, 0.22);
   }
-  /* ---------- Right side label: nutrition panel, clears the blue band above it ---------- */
+  .pack-side-word span { display: block; }
+  .pack-side-word .market { font-size: 0.7rem; }
+  .pack-side-word .mailer { font-size: 0.78rem; }
+  /* ---------- Right side label: nutrition panel, sits under the side wordmark ---------- */
   .side-label {
     position: absolute; inset: 56px 8px 14px; display: flex; flex-direction: column;
     background: #fffdf6; color: var(--ink); border-radius: 3px; padding: 6px 5px 5px;
@@ -573,7 +580,10 @@
               </div>
             </div>
             <div class="pack-face pack-side">
-              <div class="pack-side-band"></div>
+              <div class="pack-side-word">
+                <span class="market">Market</span>
+                <span class="mailer">Mailer</span>
+              </div>
               <div class="side-label">
                 <h4 class="side-title">Nutrition Facts</h4>
                 <p class="side-sub">Serving size 1 region · Servings per pack 12</p>
