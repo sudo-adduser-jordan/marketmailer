@@ -7,18 +7,22 @@
 <meta name="description" content="Marketmailer: an EVE Online market watcher that polls ESI market orders and surfaces arbitrage opportunities against the Jita buy wall." />
 <style>
   :root {
-    --bg: #070b14;
-    --bg-2: #0b1120;
-    --bg-3: #101a30;
-    --panel: #0d1526;
-    --border: #1c2b4a;
-    --text: #dbe4f5;
-    --muted: #8ea0c0;
-    --gold: #f0b429;
+    --bg: #0a1440;
+    --bg-2: #101d55;
+    --bg-3: #182a6e;
+    --panel: #fff9ea;
+    --panel-ink: #2a1e05;
+    --border: #2a3a7a;
+    --text: #f2f6ff;
+    --muted: #a9b8dd;
+    --gold: #ffcf33;
     --gold-2: #ffe08a;
-    --cyan: #38d9d9;
-    --green: #4ade80;
-    --red: #f87171;
+    --cyan: #4fc3f7;
+    --green: #2fbf71;
+    --red: #ff5f6d;
+    --purple: #b388ff;
+    --orange: #ff9f43;
+    --rainbow: linear-gradient(90deg, #ff5f6d, #ff9f43, #ffcf33, #2fbf71, #4fc3f7, #b388ff);
     --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, Menlo, monospace;
   }
 
@@ -28,14 +32,29 @@
 
   body {
     background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(56, 217, 217, 0.08), transparent 60%),
-      radial-gradient(900px 500px at 10% 0%, rgba(240, 180, 41, 0.06), transparent 55%),
+      radial-gradient(1100px 500px at 85% -10%, rgba(79, 195, 247, 0.22), transparent 60%),
+      radial-gradient(900px 500px at 5% 0%, rgba(255, 207, 51, 0.18), transparent 55%),
+      radial-gradient(700px 420px at 50% 30%, rgba(179, 136, 255, 0.12), transparent 60%),
       var(--bg);
     color: var(--text);
     font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
     line-height: 1.6;
     min-height: 100vh;
   }
+
+  /* floating marshmallow charms backdrop */
+  body::before {
+    content: "❤️ ⭐ 🍀 🌙 🎈 🧲 ✨ ❤️ ⭐ 🍀 🌙";
+    position: fixed;
+    inset: 12px 0 auto 0;
+    text-align: center;
+    letter-spacing: 28px;
+    font-size: 20px;
+    opacity: 0.14;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body > * { position: relative; z-index: 1; }
 
   .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
 
@@ -66,26 +85,39 @@
   nav a:hover { color: var(--gold-2); }
 
   /* ---------- Hero ---------- */
-  .hero { padding: 84px 0 64px; text-align: center; }
+  .hero {
+    padding: 56px 32px 64px; text-align: center;
+    margin-top: 28px; border-radius: 28px;
+    background: linear-gradient(180deg, #fffdf4 0%, #fef3d3 55%, #ffe08a 100%);
+    border: 3px solid #c8102e;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    color: #2a1e05;
+  }
   .hero h1 {
     font-size: clamp(38px, 6vw, 64px);
-    font-weight: 800;
+    font-weight: 900;
     letter-spacing: -0.5px;
-    background: linear-gradient(180deg, #ffffff, var(--gold-2) 55%, var(--gold));
+    font-family: "Baloo 2", "Fredoka One", "Nunito", "Quicksand", system-ui, sans-serif;
+    background: linear-gradient(90deg, #c8102e, #ff9f43 22%, #0e7a3d 48%, #1a8fd1 72%, #7b5cff);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    line-height: 1.1;
+    line-height: 1.05;
   }
-  .hero .tagline { margin-top: 18px; font-size: clamp(16px, 2.4vw, 20px); color: var(--muted); max-width: 640px; margin-inline: auto; }
-  .hero .tagline strong { color: var(--text); font-weight: 600; }
+  .hero .rainbow-rule {
+    width: 220px; height: 8px; border-radius: 999px; margin: 18px auto 0;
+    background: var(--rainbow);
+    box-shadow: 0 0 18px rgba(255, 207, 51, 0.45);
+  }
+  .hero .tagline { margin-top: 18px; font-size: clamp(16px, 2.4vw, 20px); color: #5a4a28; max-width: 640px; margin-inline: auto; }
+  .hero .tagline strong { color: #0e7a3d; font-weight: 800; }
 
   .chips { display: flex; gap: 12px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
   .chip {
     display: inline-flex; align-items: center; gap: 8px;
-    border: 1px solid var(--border); border-radius: 999px;
-    padding: 7px 16px; font-size: 13px; color: var(--muted);
-    background: var(--bg-2);
+    border: 2px solid #0e7a3d; border-radius: 999px;
+    padding: 7px 16px; font-size: 13px; color: #2a1e05;
+    background: #fff;
   }
   .chip .dot { width: 8px; height: 8px; border-radius: 50%; }
   .dot.on { background: var(--green); box-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
@@ -93,18 +125,20 @@
 
   .cta { margin-top: 40px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
   .btn {
-    display: inline-block; padding: 13px 26px; border-radius: 9px;
-    font-weight: 600; font-size: 15px; text-decoration: none;
+    display: inline-block; padding: 15px 32px; border-radius: 999px;
+    font-weight: 800; font-size: 16px; text-decoration: none;
+    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
+    border: 3px solid #2a1e05;
     transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
   }
-  .btn:hover { transform: translateY(-2px); }
+  .btn:hover { transform: translateY(-2px) scale(1.02); }
   .btn-primary {
-    background: linear-gradient(135deg, var(--gold), #d98a1b);
-    color: #140d02; box-shadow: 0 6px 24px rgba(240, 180, 41, 0.3);
+    background: linear-gradient(135deg, #2fbf71, #0e9e52);
+    color: #fff; box-shadow: 4px 4px 0 0 #c8102e;
   }
-  .btn-primary:hover { box-shadow: 0 10px 30px rgba(240, 180, 41, 0.45); }
-  .btn-ghost { border: 1px solid var(--border); color: var(--cyan); background: var(--bg-2); }
-  .btn-ghost:hover { border-color: var(--cyan); box-shadow: 0 0 20px rgba(56, 217, 217, 0.15); }
+  .btn-primary:hover { box-shadow: 2px 2px 0 0 #c8102e; }
+  .btn-ghost { border: 3px solid #2a1e05; color: #0e7a3d; background: #fff; box-shadow: 4px 4px 0 0 #2a1e05; }
+  .btn-ghost:hover { border-color: #2a1e05; box-shadow: 2px 2px 0 0 #2a1e05; }
 
   /* ---------- Terminal ---------- */
   .terminal {
@@ -129,14 +163,14 @@
     font-family: var(--mono); font-size: 12px; letter-spacing: 3px;
     color: var(--cyan); text-transform: uppercase; margin-bottom: 10px;
   }
-  .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 800; letter-spacing: -0.3px; }
+  .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 900; letter-spacing: -0.3px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
   .sec-head p { color: var(--muted); margin-top: 12px; max-width: 620px; margin-inline: auto; font-size: 15px; }
 
   /* ---------- How it works ---------- */
   .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
   .step {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 26px; position: relative;
+    padding: 26px; position: relative; color: var(--panel-ink);
   }
   .step .num {
     position: absolute; top: -14px; left: 22px;
@@ -146,14 +180,14 @@
     box-shadow: 0 0 16px rgba(56, 217, 217, 0.35);
   }
   .step h3 { margin: 8px 0 10px; font-size: 17px; }
-  .step p { color: var(--muted); font-size: 14px; }
+  .step p { color: #5a4a28; font-size: 14px; }
   .step .flow { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--gold-2); word-break: break-word; }
 
   /* ---------- Features ---------- */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 26px; transition: border-color 0.15s, transform 0.15s;
+    padding: 26px; transition: border-color 0.15s, transform 0.15s; color: var(--panel-ink);
   }
   .card:hover { border-color: #2c3f68; transform: translateY(-3px); }
   .card .ico {
@@ -161,7 +195,7 @@
     display: grid; place-items: center; background: var(--bg-3); border: 1px solid var(--border); margin-bottom: 16px;
   }
   .card h3 { font-size: 17px; margin-bottom: 8px; }
-  .card p { color: var(--muted); font-size: 14px; }
+  .card p { color: #5a4a28; font-size: 14px; }
   .card code {
     font-family: var(--mono); font-size: 12px; color: var(--cyan);
     background: var(--bg-2); border: 1px solid var(--border); border-radius: 5px;
@@ -194,11 +228,76 @@
   footer { border-top: 1px solid var(--border); padding: 34px 0 46px; text-align: center; color: var(--muted); font-size: 13px; }
   footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--gold-2); }
 
+  /* ---------- Spinning Lucky Charms product box (CSS 3D, replicator-style sway) ---------- */
+  .charm-stage { perspective: 1400px; perspective-origin: 50% 30%; display: flex; justify-content: center; padding: 44px 0 10px; }
+  .charm-3d {
+    width: 240px; height: 340px; position: relative;
+    transform-style: preserve-3d;
+    animation: charm-sway 14s ease-in-out infinite;
+  }
+  .charm-stage:hover .charm-3d, .charm-stage:focus-within .charm-3d { animation-play-state: paused; }
+  @keyframes charm-sway {
+    0%, 100% { transform: rotateX(-6deg) rotateY(-26deg); }
+    50% { transform: rotateX(-2deg) rotateY(22deg); }
+  }
+  .charm-face {
+    position: absolute; top: 50%; left: 50%;
+    backface-visibility: hidden;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .charm-front {
+    width: 240px; height: 340px; margin-top: -170px; margin-left: -120px;
+    transform: translateZ(35px);
+    background: linear-gradient(165deg, #fffbeF 0%, #fef3d3 55%, #f3e3b3 100%);
+    color: #2a1e05;
+    border: 3px solid #c8102e;
+    box-shadow: inset 0 0 30px rgba(150, 110, 30, 0.18), -14px 26px 50px rgba(0, 0, 0, 0.5);
+    display: flex; flex-direction: column; text-align: center;
+  }
+  .charm-band { background: #c8102e; color: #fff; font-weight: 800; font-size: 12px; letter-spacing: 2px; padding: 8px 6px; text-transform: uppercase; }
+  .charm-title { font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; font-weight: 900; font-size: 30px; line-height: 1; margin-top: 10px; color: #0e7a3d; }
+  .charm-title small { display: block; font-size: 11px; letter-spacing: 3px; color: #c8102e; margin-top: 4px; }
+  .charm-rainbow { height: 26px; margin: 10px 18px 0; border-radius: 999px 999px 0 0;
+    background: linear-gradient(90deg, #ff5f6d, #ff9f43, #ffcf33, #2fbf71, #4fc3f7, #b388ff); }
+  .charm-charms { font-size: 22px; letter-spacing: 6px; margin: 12px 0 4px; }
+  .charm-blurb { font-size: 12px; padding: 0 18px; color: #5a4a28; }
+  .charm-foot { margin-top: auto; background: #0e7a3d; color: #fff; font-size: 11px; font-weight: 700; padding: 8px; letter-spacing: 1px; }
+  .charm-back {
+    width: 240px; height: 340px; margin-top: -170px; margin-left: -120px;
+    transform: rotateY(180deg) translateZ(35px);
+    background: #fff9ea; color: #2a1e05; border: 3px solid #0e7a3d;
+    padding: 16px 14px; font-size: 11px; text-align: left;
+  }
+  .charm-back h4 { font-size: 13px; margin-bottom: 8px; color: #0e7a3d; }
+  .charm-back ol { margin-left: 16px; margin-bottom: 10px; }
+  .charm-barcode { margin-top: auto; font-family: var(--mono); font-size: 10px; border-top: 2px dashed #c8102e; padding-top: 8px; }
+  .charm-right, .charm-left {
+    width: 70px; height: 340px; margin-top: -170px; margin-left: -35px;
+    padding: 14px 8px; font-size: 10px;
+  }
+  .charm-right { transform: translateX(120px) rotateY(90deg); background: #0e7a3d; color: #fff; }
+  .charm-left { transform: translateX(-120px) rotateY(-90deg); background: #c8102e; color: #fff; }
+  .charm-right h5, .charm-left h5 { font-size: 10px; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.4); padding-bottom: 6px; }
+  .charm-top, .charm-bottom { width: 240px; height: 70px; margin-top: -35px; margin-left: -120px; display: grid; place-items: center; font-weight: 900; }
+  .charm-top { transform: translateY(-170px) rotateX(90deg); background: #ffcf33; color: #2a1e05; }
+  .charm-bottom { transform: translateY(170px) rotateX(90deg); background: #0e7a3d; color: #fff; }
+  .charm-shadow {
+    width: 200px; height: 22px; margin: 18px auto 0; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(0,0,0,0.55), transparent);
+    filter: blur(2px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .charm-3d { animation: none; transform: rotateX(-4deg) rotateY(-18deg); }
+  }
+
   @media (max-width: 720px) {
     .steps { grid-template-columns: 1fr; }
     nav { display: none; }
     .hero { padding: 56px 0 44px; }
     section { padding: 48px 0; }
+    .charm-3d { transform: scale(0.82); }
+    .charm-stage { padding: 30px 0 6px; }
   }
 </style>
 </head>
@@ -221,11 +320,13 @@
   <!-- ================= Hero ================= -->
   <section class="hero">
     <h1>Marketmailer</h1>
+    <div class="rainbow-rule" aria-hidden="true"></div>
     <p class="tagline">
       A lightweight EVE Online market watcher that polls the
       <strong>ESI market endpoints</strong>, stores orders locally in SQLite,
       and surfaces <strong>arbitrage opportunities</strong> — the best remote
       sell orders to instantly flip into the <strong>Jita buy wall</strong>.
+      They're magically profitable! ❤️⭐🍀🌙
     </p>
 
     <div class="chips">
@@ -239,6 +340,42 @@
       <a class="btn btn-ghost" href="#features">See the features</a>
     </div>
 
+    <div class="charm-stage" aria-hidden="true">
+      <div>
+        <div class="charm-3d">
+          <div class="charm-face charm-front">
+            <div class="charm-band">Turkish &amp; Domain Blend · Magically Profitable</div>
+            <div class="charm-title">Marketmailer<small>LUCKY CHARMS EDITION</small></div>
+            <div class="charm-rainbow"></div>
+            <div class="charm-charms">❤️ ⭐ 🧲 🍀 🌙 🎈</div>
+            <p class="charm-blurb">Jita buy wall inside! Polls ESI, stores SQLite, surfaces arbitrage.</p>
+            <div class="charm-foot">EVE ONLINE MARKET WATCHER · PART OF A PROFITABLE BREAKFAST</div>
+          </div>
+          <div class="charm-face charm-back">
+            <h4>How it works</h4>
+            <ol>
+              <li>Poll ESI markets (ETag cached)</li>
+              <li>Store orders in SQLite (WAL)</li>
+              <li>Flip remote sells into Jita buys</li>
+            </ol>
+            <p>Free · open source · follows the rainbow to Jita.</p>
+            <div class="charm-barcode">||| |||| | || JITA-4-4 |||| ||| |||<br />task start · task dev</div>
+          </div>
+          <div class="charm-face charm-right">
+            <h5>PROFIT FACTS</h5>
+            spread 37.2 ISK<br /><br />volume Jita absorbs<br /><br />instant_sell_profit<br /><br />100% daily magic
+          </div>
+          <div class="charm-face charm-left">
+            <h5>JITA • MM</h5>
+            ★ best order<br />🍀 undercut radar<br />🌙 ESI names<br />❤️ Discord bot
+          </div>
+          <div class="charm-face charm-top">MM ★</div>
+          <div class="charm-face charm-bottom">FOLLOW THE RAINBOW</div>
+        </div>
+        <div class="charm-shadow"></div>
+      </div>
+    </div>
+
     <div class="terminal">
       <div class="bar"><i></i><i></i><i></i></div>
       <pre><span class="c">$</span> <span class="p">mix setup</span>
@@ -246,10 +383,14 @@
   Ecto: created marketmailer.db (SQLite, WAL mode)
   Ecto: migrations up to date
 
-<span class="c">$</span> <span class="p">mix start</span>
+<span class="c">$</span> <span class="p">task start</span>
+  started prod release (daemon)
 <span class="g">app_start</span>  ts=2026-09-22T12:00:00.000Z commit=e3f9a1d
 <span class="g">region_update</span> The Forge   orders=142_381 pages=21
-<span class="g">arbitrage_found</span> <span class="y">"Core Scaffolding"</span> Jita buy 98.4 ISK vs 61.2 ISK · margin 37.2 ISK</pre>
+<span class="g">arbitrage_found</span> <span class="y">"Core Scaffolding"</span> Jita buy 98.4 ISK vs 61.2 ISK · margin 37.2 ISK
+
+<span class="c">$</span> <span class="p">task dev</span>
+  isolated shell: priv/data/dev.db :4001 (coexists with prod)</pre>
     </div>
   </section>
 </div>
@@ -307,7 +448,7 @@
     </div>
     <div class="grid">
       <div class="card">
-        <div class="ico">🎯</div>
+        <div class="ico">🍀</div>
         <h3>Jita spread scanner</h3>
         <p>
           Finds the single best remote sell order that can be instantly flipped
@@ -317,7 +458,7 @@
         <span class="tag">getBestOrder.sql</span>
       </div>
       <div class="card">
-        <div class="ico">📉</div>
+        <div class="ico">🌙</div>
         <h3>Undercut radar</h3>
         <p>
           Top-100 items whose remote sell price undercuts Jita's best buy,
@@ -327,7 +468,7 @@
         <span class="tag">getItemsLessThan.sql</span>
       </div>
       <div class="card">
-        <div class="ico">🏷️</div>
+        <div class="ico">⭐</div>
         <h3>Lazy EVE name resolution</h3>
         <p>
           No static data dumps. Item, system, region and station names resolve
@@ -337,7 +478,7 @@
         <span class="tag">ESI /universe/names</span>
       </div>
       <div class="card">
-        <div class="ico">🤖</div>
+        <div class="ico">❤️</div>
         <h3>Discord bot</h3>
         <p>
           Slash commands like <code>/check_market</code> and
@@ -348,7 +489,7 @@
         <span class="tag opt">optional · Nostrum</span>
       </div>
       <div class="card">
-        <div class="ico">⚡</div>
+        <div class="ico">🌈</div>
         <h3>Elixir/OTP concurrency</h3>
         <p>
           A per-region GenServer tree with dynamic page scaling, an ETS market
@@ -358,7 +499,7 @@
         <span class="tag">OTP supervisors</span>
       </div>
       <div class="card">
-        <div class="ico">🔭</div>
+        <div class="ico">🎈</div>
         <h3>Observability built in</h3>
         <p>
           Structured JSON logs on the console and rotated error records in
@@ -381,8 +522,9 @@
     </div>
     <div class="commands">
       <div class="cmd"><code>mix setup</code><p>Install deps, create the SQLite database and run migrations.</p></div>
-      <div class="cmd"><code>mix start</code><p>Setup, then run the supervision tree — pollers begin immediately.</p></div>
-      <div class="cmd"><code>iex -S mix run</code><p>Interactive shell with the app running, for live queries and debugging.</p></div>
+      <div class="cmd"><code>task start</code><p>Run latest tree as prod release daemon (restarts when stale; survives terminal close).</p></div>
+      <div class="cmd"><code>task dev</code><p>Interactive shell with the app started — isolated dev.db + :4001, safe alongside prod.</p></div>
+      <div class="cmd"><code>task live:update</code><p>Hot-upgrade prod when code changed (patch-bump + appup + release); no-op otherwise.</p></div>
       <div class="cmd"><code>mix ecto.migrate</code><p>Manual migration control (migrations also run automatically on every boot).</p></div>
     </div>
     <table>
