@@ -325,7 +325,6 @@
   }
 
   /* single box: right-biased corner sway, turning further right on hover */
-  /* single box: right-biased corner sway, turning further right on hover */
   /* palette sampled off the Jumbo Rainbow reference pack (shared by every face) */
   .pack-3d {
     --lc-red: #9e0631; --lc-red-d: #6d0421; --lc-blue: #508ecd; --lc-navy: #2e5296;
@@ -396,12 +395,6 @@
 
   /* ---------- Front label: top band, parabolic rainbow, vertex Plex mark ---------- */
   .pack-label-wrap { position: absolute; inset: 0; }
-  .pack-print { position: absolute; inset: 0; pointer-events: none; }
-  .pack-print i {
-    position: absolute; left: var(--x); top: var(--y);
-    width: var(--s); height: var(--s); background: #fff; opacity: .62;
-    clip-path: polygon(50% 0%, 58% 40%, 100% 50%, 58% 60%, 50% 100%, 42% 60%, 0% 50%, 42% 40%);
-  }
 
   /* top label band */
   .pack-band { position: absolute; left: 0; right: 0; top: 0; height: 11.5%; z-index: 3; background: var(--lc-blue); }
@@ -541,18 +534,6 @@
         <div class="pack-stage">
           <div class="pack-3d">
             <div class="pack-face pack-front">
-              <div class="pack-print">
-                <i style="--x:34px;--y:132px;--s:9px"></i>
-                <i style="--x:228px;--y:150px;--s:12px"></i>
-                <i style="--x:20px;--y:186px;--s:7px"></i>
-                <i style="--x:246px;--y:236px;--s:8px"></i>
-                <i style="--x:14px;--y:268px;--s:11px"></i>
-                <i style="--x:252px;--y:300px;--s:6px"></i>
-                <i style="--x:40px;--y:346px;--s:8px"></i>
-                <i style="--x:210px;--y:360px;--s:10px"></i>
-                <i style="--x:120px;--y:404px;--s:7px"></i>
-                <i style="--x:24px;--y:392px;--s:6px"></i>
-              </div>
               <div class="pack-label-wrap">
                 <!-- top label band -->
                 <div class="pack-band">
