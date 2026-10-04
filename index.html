@@ -441,7 +441,7 @@
 
   /* labels flanking the rainbow's lower vertices: swallowtail banners, white keyline */
   .pack-flag2 {
-    position: absolute; top: 42.5%; width: 37%; height: 16%; z-index: 4;
+    position: absolute; top: 60%; width: 37%; height: 16%; z-index: 4;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     text-align: center; background: #fff;
     font-weight: 900; text-transform: uppercase; line-height: 0.8; letter-spacing: -0.02em; font-size: 0.72rem;
@@ -450,8 +450,8 @@
   .pack-flag2 span { position: relative; z-index: 1; }
   .pack-flag2 .y { color: var(--lc-lemon); }
   .pack-flag2 .w { color: #fff; }
-  /* l: notched-back pennant, point aims right at the emblem. r: arrow, point aims left. */
-  .pack-flag2.l { left: 2%; clip-path: polygon(9% 0, 100% 0, 100% 50%, 9% 100%, 0 76%, 0 24%); }
+  /* mirrored arrows: both points aim at the rainbow's vertex */
+  .pack-flag2.l { left: 2%; clip-path: polygon(100% 50%, 72% 0, 0 0, 0 100%, 72% 100%); }
   .pack-flag2.r { right: 2%; clip-path: polygon(0 50%, 28% 0, 100% 0, 100% 100%, 28% 100%); }
 
   /* bottom labels */
