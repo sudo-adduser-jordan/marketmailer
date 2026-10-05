@@ -521,16 +521,16 @@
   .pack-wordmark .market { font-size: 2.4rem; }
   .pack-wordmark .mailer { font-size: 2.7rem; margin-top: 5px; }
 
-  /* linear parabolic rainbow: two straight beams converging on a low vertex (30 deg from vertical),
-     true cones — 68px base cut off by the box edges, tips overlapping 6px past the shared
-     pivot (135, 282) so the vertex closes as one solid point instead of a crossing notch */
+  /* linear parabolic rainbow: two straight beams converging on a low vertex (33 deg from vertical),
+     true cones — 132px base cut off by the box edges, bottoms nearly touching so the short
+     tips meet as one solid point at the pivot instead of crossing low with a notch above */
   .pack-beam {
-    position: absolute; left: 135px; top: -68px; width: 68px; height: 350px; margin-left: -34px;
-    transform-origin: 50% 100%; transform: rotate(30deg); background: var(--lc-stripe);
-    clip-path: polygon(0 0, 100% 0, 50% 104%);
+    position: absolute; left: 141px; top: -68px; width: 132px; height: 350px; margin-left: -66px;
+    transform-origin: 50% 100%; transform: rotate(33deg); background: var(--lc-stripe);
+    clip-path: polygon(0 0, 100% 0, 50% 103%);
     filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.28));
   }
-  .pack-beam.l { transform: rotate(-30deg); background: linear-gradient(270deg, #e8384f, #f7941d, #f7e04a, #8dc63f, #3fa9d8, #4b4fa8); }
+  .pack-beam.l { left: 129px; transform: rotate(-33deg); background: linear-gradient(270deg, #e8384f, #f7941d, #f7e04a, #8dc63f, #3fa9d8, #4b4fa8); }
 
   /* labels flanking the rainbow's lower vertices: swallowtail banners, white keyline */
   .pack-flag2 {
