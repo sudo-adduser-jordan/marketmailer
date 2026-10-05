@@ -38,6 +38,11 @@
   }
 
   :root {
+    /* side gutter for every .wrap; tightened on narrow screens (see media queries) */
+    --gutter: 24px;
+    /* uniform scale for the 3D product box; 1 = full size. Set to < 1 on phones so the
+       rotated box + red disc never outgrow the hero column (and so nothing overflows x) */
+    --pk: 1;
     --bg: #fffdf6;
     --sky: #1a8fd1;
     --sky-2: #d9f0fb;
@@ -57,7 +62,9 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
-  html { scroll-behavior: smooth; }
+  /* `clip` keeps vertical scrolling (and sticky/anchor behaviour) untouched while killing
+     horizontal scrollbar; the `hidden` line is the fallback for pre-2022 browsers. */
+  html { scroll-behavior: smooth; overflow-x: hidden; overflow-x: clip; }
 
   .brandbar { height: 8px; background: var(--rainbow); }
 
@@ -76,6 +83,7 @@
     content: "❤️ ⭐ 🍀 🌙 🎈 🧲 ✨ ❤️ ⭐ 🍀 🌙";
     position: fixed;
     inset: 12px 0 auto 0;
+    overflow: hidden;
     text-align: center;
     letter-spacing: 28px;
     font-size: 20px;
@@ -85,7 +93,7 @@
   }
   body > * { position: relative; z-index: 1; }
 
-  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 var(--gutter); }
 
   /* ---------- Header ---------- */
   header {
@@ -326,14 +334,22 @@
 
   /* ---------- Product box (3D CSS box; front + right label are the faces in view) ---------- */
   .pack-wrap { position: relative; display: flex; justify-content: center; padding: 44px 0 10px; }
-  .pack-stage { perspective: 1400px; perspective-origin: 50% 40%; position: relative; z-index: 2; padding-bottom: 34px; }
+  .pack-stage {
+    perspective: 1400px; perspective-origin: 50% 40%; position: relative; z-index: 2;
+    padding-bottom: 34px;
+    /* shrink-to-fit on narrow screens; the negative margin cancels the scaled-away height
+       (449px = 415px box + 34px pad) so no dead space is left under the box */
+    transform: scale(var(--pk));
+    transform-origin: top center;
+    margin-bottom: calc((var(--pk) - 1) * 449px);
+  }
   .pack-disc {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    aspect-ratio: 1 / 1; width: 300px; border-radius: 9999px;
+    aspect-ratio: 1 / 1; width: min(300px, 78vw); border-radius: 9999px;
     background: #c8102e; pointer-events: none;
     box-shadow: 0 0 0 12px rgba(200, 16, 46, 0.18), inset 0 0 44px rgba(78, 0, 18, 0.38);
   }
-  @media (min-width: 640px) { .pack-disc { width: 380px; } }
+  @media (min-width: 640px) { .pack-disc { width: min(380px, 55vw); } }
   /* scrim: keeps the red box readable against the red disc */
   .pack-disc::after {
     content: ""; position: absolute; inset: 0; border-radius: 9999px;
@@ -341,7 +357,7 @@
   }
 
   /* ---------- White sparkles (hero backdrop, twinkle in place) ---------- */
-  .pack-sparkles { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+  .pack-sparkles { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
   .pack-sparkles i {
     position: absolute; left: var(--x); top: var(--y);
     width: var(--s, 9px); height: var(--s, 9px);
@@ -537,16 +553,41 @@
     filter: blur(2px);
   }
 
-  @media (max-width: 720px) {
-    .steps { grid-template-columns: 1fr; }
-    nav { display: none; }
-    .hero { padding: 56px 0 44px; }
-    section { padding: 48px 0; }
-    .pack-wrap { padding: 30px 0 6px; transform: scale(0.85); transform-origin: top center; }
-    .hero-grid { grid-template-columns: 1fr; }
-  }
+  /* ---------- Tables: scroll instead of squishing on narrow screens ---------- */
+  .table-scroll { overflow-x: auto; }
+
+  /* ---------- Responsive ---------- */
   @media (max-width: 859px) {
     .hero-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    :root { --gutter: 18px; --pk: 0.86; }
+    .steps { grid-template-columns: 1fr; }
+    nav { display: none; }
+    /* keep side padding here: the hero's own border must never touch the copy */
+    .hero { padding: 40px 16px 44px; }
+    section { padding: 48px 0; }
+    .pack-wrap { padding: 30px 0 6px; }
+    .commands { padding: 24px; }
+    .facts { padding: 20px 18px; }
+    body::before { letter-spacing: 14px; font-size: 18px; }
+    th, td { padding: 10px; }
+  }
+  @media (max-width: 480px) {
+    :root { --gutter: 14px; --pk: 0.72; }
+    .hero { padding: 32px 12px 36px; }
+    .hero h1 { font-size: clamp(30px, 8.5vw, 42px); }
+    .step, .card { padding: 22px 18px; }
+    .commands { padding: 18px; }
+    .facts { padding: 18px 14px; }
+    .benefits li { padding: 12px 0 12px 34px; }
+    .btn { padding: 14px 24px; font-size: 15px; }
+    .facts h3 { font-size: 24px; }
+    th, td { padding: 9px 8px; }
+  }
+  @media (max-width: 400px) {
+    :root { --pk: 0.62; }
+    body::before { letter-spacing: 8px; font-size: 16px; }
   }
 </style>
 </head>
@@ -759,6 +800,7 @@
     <div class="facts">
       <h3>Program Technologies Used</h3>
       <div class="sub">The runtime, libraries and tooling the watcher is built on.</div>
+      <div class="table-scroll">
       <table>
         <thead>
           <tr><th>Technology</th><th>Used for</th></tr>
@@ -808,6 +850,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
       <p class="note">Also in the build: Playwright (Janice chart captures) · Castle (hot upgrades) · Taskfile + Docker (prod daemon) · Quokka + HendricksFormatter (dev formatter).</p>
     </div>
   </div>
@@ -828,6 +871,7 @@
       <div class="cmd"><code>task live:update</code><p>Hot-upgrade prod when code changed (patch-bump + appup + release); no-op otherwise.</p></div>
       <div class="cmd"><code>mix ecto.migrate</code><p>Manual migration control (migrations also run automatically on every boot).</p></div>
     </div>
+    <div class="table-scroll">
     <table>
       <thead>
         <tr><th>Variable</th><th>Purpose</th></tr>
@@ -838,6 +882,7 @@
         <tr><td><code>MARKETMAILER_DB</code></td><td>Override the SQLite file path — e.g. when mounting a Docker volume.</td></tr>
       </tbody>
     </table>
+    </div>
   </div>
 </section>
 
