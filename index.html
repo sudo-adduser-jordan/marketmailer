@@ -5,7 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Marketmailer — EVE Online Market Watcher</title>
 <meta name="description" content="Marketmailer: an EVE Online market watcher that polls ESI market orders and surfaces arbitrage opportunities against the Jita buy wall." />
+<!-- Self-hosted faces, byte-identical to the ones the real Lucky Charms site
+     serves (Burbank Big for display, Poppins for everything else). Preloaded so
+     the first paint already has them: font-display:block + preload means no
+     fallback-then-swap reflow. -->
+<link rel="preload" href="assets/fonts/burbank-big-regular-bold.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="assets/fonts/poppins-latin-400.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="assets/fonts/poppins-bold.woff2" as="font" type="font/woff2" crossorigin />
 <style>
+  /* Burbank Big: the box-title face, one weight only. The live site declares it
+     at 700 despite the file carrying usWeightClass 600, so we match that: the
+     page's font-weight:800/900 display declarations then resolve to this face
+     instead of being synthesised (faux-bold mushes the counters). */
+  @font-face {
+    font-family: "Burbank"; font-style: normal; font-weight: 700; font-display: block;
+    src: url(assets/fonts/burbank-big-regular-bold.woff2) format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+
+  /* Poppins: the site's body face. 400 and 700 are separate files (and separate
+     latin subsets) here too, so weight:800/900 resolves up to 700 rather than
+     synthesising. */
+  @font-face {
+    font-family: "Poppins"; font-style: normal; font-weight: 400; font-display: block;
+    src: url(assets/fonts/poppins-latin-400.woff2) format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Poppins"; font-style: normal; font-weight: 700; font-display: block;
+    src: url(assets/fonts/poppins-bold.woff2) format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+
   :root {
     --bg: #fffdf6;
     --sky: #1a8fd1;
@@ -19,7 +50,9 @@
     --muted: #6b5f47;
     --card: #fff9e8;
     --rainbow: linear-gradient(90deg, #f4364c, #ff8200, #fedb00, #97d700, #00c2de, #685bc7);
-    --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, Menlo, monospace;
+    /* the site's two stacks: Poppins for body, Burbank for display lettering */
+    --sans: "Poppins", Arial, sans-serif;
+    --display: "Burbank", "Poppins", Arial, sans-serif;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,7 +67,7 @@
       radial-gradient(900px 480px at 5% 0%, rgba(200, 16, 46, 0.10), transparent 55%),
       var(--bg);
     color: var(--ink);
-    font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-family: var(--sans);
     line-height: 1.6;
     min-height: 100vh;
   }
@@ -69,7 +102,7 @@
     width: 38px; height: 38px; border-radius: 10px;
     background: linear-gradient(135deg, #57c164, var(--green));
     display: grid; place-items: center;
-    font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-size: 16px; font-weight: 900; color: #fff;
+    font-family: var(--display); font-size: 16px; font-weight: 900; color: #fff;
     border: 2px solid var(--ink);
     box-shadow: 2px 2px 0 rgba(34, 25, 13, 0.25);
   }
@@ -112,7 +145,7 @@
     font-size: clamp(38px, 6vw, 64px);
     font-weight: 900;
     letter-spacing: -0.5px;
-    font-family: "Baloo 2", "Fredoka One", "Nunito", "Quicksand", system-ui, sans-serif;
+    font-family: var(--display);
     background: linear-gradient(90deg, #c8102e, #3f9e4d 50%, #1a8fd1);
     -webkit-background-clip: text;
     background-clip: text;
@@ -144,7 +177,7 @@
   .btn {
     display: inline-block; padding: 15px 32px; border-radius: 999px;
     font-weight: 900; font-size: 16px; text-decoration: none;
-    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
+    font-family: var(--display);
     border: 3px solid var(--ink);
     transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
   }
@@ -165,10 +198,10 @@
   }
   .sec-head { text-align: center; margin-bottom: 44px; }
   .sec-head .kicker {
-    font-family: var(--mono); font-size: 12px; letter-spacing: 3px;
+    font-family: var(--sans); font-size: 12px; letter-spacing: 3px;
     color: var(--red); text-transform: uppercase; margin-bottom: 10px; font-weight: 700;
   }
-  .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 900; letter-spacing: -0.3px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
+  .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 900; letter-spacing: -0.3px; font-family: var(--display); }
   .sec-head p { color: var(--muted); margin-top: 12px; max-width: 620px; margin-inline: auto; font-size: 15px; }
 
   /* ---------- How it works ---------- */
@@ -182,16 +215,16 @@
     position: absolute; top: -14px; left: 22px;
     width: 30px; height: 30px; border-radius: 10px;
     background: linear-gradient(135deg, #57c164, var(--green));
-    display: grid; place-items: center; font-family: var(--mono); font-weight: 800; font-size: 14px;
+    display: grid; place-items: center; font-family: var(--sans); font-weight: 800; font-size: 14px;
     border: 2px solid var(--ink); color: #fff;
   }
-  .step h3 { margin: 8px 0 10px; font-size: 17px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
+  .step h3 { margin: 8px 0 10px; font-size: 17px; font-family: var(--display); }
   .step p { color: var(--muted); font-size: 14px; }
-  .step .flow { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--red); word-break: break-word; font-weight: 700; }
+  .step .flow { margin-top: 14px; font-family: var(--sans); font-size: 12px; color: var(--red); word-break: break-word; font-weight: 700; }
 
   /* ---------- Benefits list (product page style) ---------- */
   .benefits { max-width: 760px; margin: 0 auto 44px; }
-  .benefits h3 { font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; font-size: 22px; margin-bottom: 16px; }
+  .benefits h3 { font-family: var(--display); font-size: 22px; margin-bottom: 16px; }
   .benefits ul { list-style: none; }
   .benefits li { padding: 12px 0 12px 40px; border-bottom: 2px dashed rgba(34, 25, 13, 0.18); font-size: 14.5px; color: var(--muted); position: relative; }
   .benefits li:last-child { border-bottom: none; }
@@ -210,10 +243,10 @@
     box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12);
   }
   .card:hover { transform: translateY(-3px); box-shadow: 6px 6px 0 rgba(200, 16, 46, 0.18); }
-  .card h3 { font-size: 17px; margin-bottom: 8px; font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; }
+  .card h3 { font-size: 17px; margin-bottom: 8px; font-family: var(--display); }
   .card p { color: var(--muted); font-size: 14px; }
   .card code {
-    font-family: var(--mono); font-size: 12px; color: var(--red);
+    font-family: var(--sans); font-size: 12px; color: var(--red);
     background: var(--card); border: 1px solid rgba(34, 25, 13, 0.2); border-radius: 5px;
     padding: 1px 6px;
   }
@@ -224,7 +257,7 @@
     border: 4px solid var(--ink); border-radius: 16px; background: #fff; padding: 26px 30px;
     box-shadow: 5px 5px 0 rgba(34, 25, 13, 0.2);
   }
-  .facts h3 { font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-size: 30px; font-weight: 900; letter-spacing: -0.5px; border-bottom: 8px solid var(--ink); padding-bottom: 6px; }
+  .facts h3 { font-family: var(--display); font-size: 30px; font-weight: 900; letter-spacing: -0.5px; border-bottom: 8px solid var(--ink); padding-bottom: 6px; }
   .facts .sub { font-size: 13px; color: var(--muted); margin: 6px 0 12px; border-bottom: 6px solid var(--ink); padding-bottom: 10px; }
   .facts table { margin-top: 0; }
   .facts th, .facts td { border-bottom: 1px solid rgba(34, 25, 13, 0.15); padding: 9px 4px; vertical-align: top; }
@@ -232,12 +265,12 @@
   .facts th { color: var(--ink); font-size: 13px; letter-spacing: 0; text-transform: none; font-family: inherit; }
   .facts tbody tr:last-child td { border-bottom: 6px solid var(--ink); padding-bottom: 14px; }
   .facts td:first-child { width: 100%; }
-  .facts td:last-child, .facts th:last-child { text-align: right; font-weight: 800; color: var(--red); font-family: var(--mono); font-size: 13px; overflow-wrap: break-word; }
+  .facts td:last-child, .facts th:last-child { text-align: right; font-weight: 800; color: var(--red); font-family: var(--sans); font-size: 13px; overflow-wrap: break-word; }
   .facts strong { font-weight: 900; letter-spacing: 0.3px; }
   .facts .ic { margin-right: 8px; font-size: 17px; }
   .facts .d { display: block; color: var(--muted); font-size: 12.5px; font-weight: 400; margin-top: 3px; }
   .facts code {
-    font-family: var(--mono); font-size: 11.5px; color: var(--blue);
+    font-family: var(--sans); font-size: 11.5px; color: var(--blue);
     background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25); border-radius: 5px;
     padding: 1px 5px;
   }
@@ -247,7 +280,7 @@
   .cmd { display: flex; gap: 16px; padding: 12px 0; border-bottom: 2px dashed rgba(34, 25, 13, 0.2); flex-wrap: wrap; align-items: baseline; }
   .cmd:last-child { border-bottom: none; padding-bottom: 0; }
   .cmd code {
-    font-family: var(--mono); font-size: 14px; color: var(--red); font-weight: 700;
+    font-family: var(--sans); font-size: 14px; color: var(--red); font-weight: 700;
     background: #fff; border: 2px solid var(--ink); border-radius: 8px;
     padding: 4px 10px; white-space: nowrap;
   }
@@ -255,8 +288,8 @@
 
   table { width: 100%; border-collapse: collapse; margin-top: 26px; font-size: 14px; }
   th, td { text-align: left; padding: 12px 14px; border-bottom: 2px solid rgba(34, 25, 13, 0.12); }
-  th { color: var(--red); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--mono); }
-  td code { font-family: var(--mono); font-size: 12.5px; color: var(--blue); background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25); border-radius: 5px; padding: 2px 7px; }
+  th { color: var(--red); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--sans); }
+  td code { font-family: var(--sans); font-size: 12.5px; color: var(--blue); background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25); border-radius: 5px; padding: 2px 7px; }
 
   /* ---------- You might also like ---------- */
   .also { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; }
@@ -271,7 +304,7 @@
   .also .pill { display: inline-block; background: var(--red); color: #fff; font-size: 10px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; margin-bottom: 10px; transform: rotate(-3deg); }
 
   .social { text-align: center; padding: 0 0 34px; }
-  .social p { font-family: var(--mono); font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; font-weight: 700; }
+  .social p { font-family: var(--sans); font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; font-weight: 700; }
   .social .row { display: flex; gap: 14px; justify-content: center; }
   .social a {
     width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--ink);
@@ -284,11 +317,11 @@
   /* ---------- Footer ---------- */
   footer { border-top: 5px solid var(--green); padding: 40px 0 46px; color: var(--muted); font-size: 13px; }
   footer .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px; margin-bottom: 32px; }
-  footer h4 { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink); margin-bottom: 12px; }
+  footer h4 { font-family: var(--sans); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink); margin-bottom: 12px; }
   footer .cols a { display: block; color: var(--muted); text-decoration: none; padding: 3px 0; }
   footer .cols a:hover { color: var(--red); }
   footer .rainbow { width: 180px; height: 6px; border-radius: 999px; margin: 0 auto 18px; background: var(--rainbow); }
-  footer .stack { font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--red); font-weight: 700; text-align: center; }
+  footer .stack { font-family: var(--sans); font-size: 12px; margin-bottom: 10px; color: var(--red); font-weight: 700; text-align: center; }
   footer p.fine { text-align: center; }
 
   /* ---------- Product box (3D CSS box; front + right label are the faces in view) ---------- */
@@ -357,8 +390,8 @@
   .pack-side-word {
     position: absolute; left: 0; right: 0; top: 0; height: 11.5%; z-index: 3;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
-    font-weight: 900; text-transform: uppercase; line-height: 0.82; letter-spacing: -0.01em;
+    font-family: var(--display);
+    font-weight: 700; text-transform: uppercase; line-height: 0.82; letter-spacing: -0.01em;
     color: var(--lc-lemon);
     text-shadow: -1px -1px 0 var(--lc-red-d), 1px -1px 0 var(--lc-red-d), -1px 1px 0 var(--lc-red-d), 1px 1px 0 var(--lc-red-d), 0 2px 0 rgba(0, 0, 0, 0.22);
   }
@@ -393,7 +426,7 @@
   /* lucky-charms style promo: white on the red below the panel, same outline as the front */
   .pack-side-promo {
     position: absolute; left: 4px; right: 4px; bottom: 8px; z-index: 3; text-align: center;
-    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif;
+    font-family: var(--display);
     font-weight: 900; text-transform: uppercase; line-height: 1.06; color: #fff;
     text-shadow: -0.6px -0.6px 0 var(--lc-red-d), 0.6px -0.6px 0 var(--lc-red-d), -0.6px 0.6px 0 var(--lc-red-d), 0.6px 0.6px 0 var(--lc-red-d), 0 1px 0 rgba(0, 0, 0, 0.25);
   }
@@ -439,19 +472,20 @@
     display: grid; place-items: center;
     background: linear-gradient(135deg, #57c164, #3f9e4d); border: 1.5px solid #22190d;
     box-shadow: 1.5px 1.5px 0 rgba(34, 25, 13, 0.3); color: #fff;
-    font-family: "Baloo 2", "Fredoka One", system-ui, sans-serif; font-weight: 900; font-size: 0.4rem;
+    font-family: var(--display); font-weight: 900; font-size: 0.4rem;
   }
   /* wordmark */
   .pack-wordmark {
-    position: absolute; left: 6%; right: 6%; top: 12.5%; z-index: 3; text-align: center;
-    font-family: "Baloo 2", "Fredoka One", "Nunito", system-ui, sans-serif; font-weight: 900; text-transform: uppercase;
+    position: absolute; left: 6%; right: 6%; top: 15%; z-index: 3; text-align: center;
+    font-family: var(--display);
+    font-weight: 700; text-transform: uppercase;
   }
   .pack-wordmark span {
     display: block; color: var(--lc-lemon); line-height: 0.8;
     text-shadow: -1.5px -1.5px 0 var(--lc-red-d), 1.5px -1.5px 0 var(--lc-red-d), -1.5px 1.5px 0 var(--lc-red-d), 1.5px 1.5px 0 var(--lc-red-d), 0 3px 0 rgba(0, 0, 0, 0.22);
   }
-  .pack-wordmark .market { font-size: 2.05rem; }
-  .pack-wordmark .mailer { font-size: 2.3rem; margin-top: 5px; }
+  .pack-wordmark .market { font-size: 2.4rem; }
+  .pack-wordmark .mailer { font-size: 2.7rem; margin-top: 5px; }
 
   /* linear parabolic rainbow: two straight beams converging on a low vertex (30 deg from vertical),
      true cones — 68px base cut off by the box edges, tips overlapping 6px past the shared
@@ -469,6 +503,7 @@
     position: absolute; top: 60%; width: 37%; height: 16%; z-index: 4;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     text-align: center; background: #fff;
+    font-family: var(--display);
     font-weight: 900; text-transform: uppercase; line-height: 0.8; letter-spacing: -0.02em; font-size: 0.72rem;
   }
   .pack-flag2::before { content: ""; position: absolute; inset: 2.5px; background: var(--lc-cyan); clip-path: inherit; }
@@ -482,6 +517,7 @@
   /* bottom labels */
   .pack-async {
     position: absolute; left: 6%; bottom: 3%; z-index: 6; color: #fff;
+    font-family: var(--display);
     font-size: 0.66rem; font-weight: 900; line-height: 1.02; text-transform: uppercase;
     letter-spacing: -0.02em;
     text-shadow: -1px -1px 0 var(--lc-red-d), 1px -1px 0 var(--lc-red-d), -1px 1px 0 var(--lc-red-d), 1px 1px 0 var(--lc-red-d);
