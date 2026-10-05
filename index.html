@@ -388,7 +388,7 @@
   .pack-3d {
     --lc-red: #9e0631; --lc-red-d: #6d0421; --lc-blue: #508ecd; --lc-blue-d: #3f6fb1; --lc-navy: #2e5296;
     --lc-cyan: #6ab7d0; --lc-lemon: #f3ea5f; --lc-white: #f5f5f6;
-    --lc-stripe: linear-gradient(90deg, #e8384f 0 16.66%, #f7941d 16.66% 33.33%, #f7e04a 33.33% 50%, #8dc63f 50% 66.66%, #3fa9d8 66.66% 83.33%, #4b4fa8 83.33% 100%);
+    --lc-stripe: conic-gradient(from 349.63deg at 50% 103%, #e8384f 0deg 3.46deg, #f7941d 3.46deg 6.91deg, #f7e04a 6.91deg 10.37deg, #8dc63f 10.37deg 13.83deg, #3fa9d8 13.83deg 17.28deg, #4b4fa8 17.28deg 360deg);
     width: 270px; height: 415px; position: relative; margin: 0 auto;
     transform-style: preserve-3d;
     transform: rotateX(-5deg) rotateY(-30deg) rotateZ(-6deg);
@@ -521,16 +521,16 @@
   .pack-wordmark .market { font-size: 2.4rem; }
   .pack-wordmark .mailer { font-size: 2.7rem; margin-top: 5px; }
 
-  /* linear parabolic rainbow: two straight beams converging on a low vertex (33 deg from vertical),
-     true cones — 132px base cut off by the box edges, bottoms nearly touching so the short
-     tips meet as one solid point at the pivot instead of crossing low with a notch above */
+  /* conic rainbow wedges converging on a low vertex (33 deg from vertical),
+     true cones — 132px base cut off by the box edges, tip-centered conic stripes so every
+     band runs vertex to edge; bottoms nearly touching so the short tips meet as one solid point */
   .pack-beam {
     position: absolute; left: 141px; top: -68px; width: 132px; height: 350px; margin-left: -66px;
     transform-origin: 50% 100%; transform: rotate(33deg); background: var(--lc-stripe);
     clip-path: polygon(0 0, 100% 0, 50% 103%);
     filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.28));
   }
-  .pack-beam.l { left: 129px; transform: rotate(-33deg); background: linear-gradient(270deg, #e8384f 0 16.66%, #f7941d 16.66% 33.33%, #f7e04a 33.33% 50%, #8dc63f 50% 66.66%, #3fa9d8 66.66% 83.33%, #4b4fa8 83.33% 100%); }
+  .pack-beam.l { left: 129px; transform: rotate(-33deg); background: conic-gradient(from 349.63deg at 50% 103%, #4b4fa8 0deg 3.46deg, #3fa9d8 3.46deg 6.91deg, #8dc63f 6.91deg 10.37deg, #f7e04a 10.37deg 13.83deg, #f7941d 13.83deg 17.28deg, #e8384f 17.28deg 360deg); }
 
   /* labels flanking the rainbow's lower vertices: swallowtail banners, white keyline */
   .pack-flag2 {
