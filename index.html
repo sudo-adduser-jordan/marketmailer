@@ -189,14 +189,18 @@
     border: 3px solid var(--ink);
     transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
   }
-  .btn:hover { transform: translateY(-2px) scale(1.02); }
   .btn-primary {
     background: linear-gradient(135deg, #ffe259, var(--yellow));
     color: var(--ink); box-shadow: 4px 4px 0 0 var(--red);
   }
-  .btn-primary:hover { box-shadow: 2px 2px 0 0 var(--red); }
   .btn-ghost { border: 3px solid var(--ink); color: var(--blue); background: #fff; box-shadow: 4px 4px 0 0 var(--ink); }
-  .btn-ghost:hover { box-shadow: 2px 2px 0 0 var(--ink); }
+  /* hover-only lifts: touch devices keep the :hover state stuck after a tap, so
+     these are gated to real pointing devices */
+  @media (hover: hover) and (pointer: fine) {
+    .btn:hover { transform: translateY(-2px) scale(1.02); }
+    .btn-primary:hover { box-shadow: 2px 2px 0 0 var(--red); }
+    .btn-ghost:hover { box-shadow: 2px 2px 0 0 var(--ink); }
+  }
 
   /* ---------- Sections ---------- */
   section { padding: 64px 0; }
@@ -250,7 +254,9 @@
     padding: 26px; transition: transform 0.15s, box-shadow 0.15s; color: var(--ink);
     box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12);
   }
-  .card:hover { transform: translateY(-3px); box-shadow: 6px 6px 0 rgba(200, 16, 46, 0.18); }
+  @media (hover: hover) and (pointer: fine) {
+    .card:hover { transform: translateY(-3px); box-shadow: 6px 6px 0 rgba(200, 16, 46, 0.18); }
+  }
   .card h3 { font-size: 17px; margin-bottom: 8px; font-family: var(--display); }
   .card p { color: var(--muted); font-size: 14px; }
   .card code {
@@ -308,7 +314,9 @@
     border: 2px solid var(--ink); box-shadow: 3px 3px 0 rgba(34, 25, 13, 0.2);
     transition: transform 0.2s;
   }
-  .also .card:hover .thumb { transform: scale(1.08) rotate(-3deg); }
+  @media (hover: hover) and (pointer: fine) {
+    .also .card:hover .thumb { transform: scale(1.08) rotate(-3deg); }
+  }
   .also .pill { display: inline-block; background: var(--yellow); color: var(--red); font-size: 10px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; margin-bottom: 10px; transform: rotate(-3deg); }
 
   .social { text-align: center; padding: 0 0 34px; }
@@ -320,7 +328,9 @@
     background: #fff; text-decoration: none; box-shadow: 3px 3px 0 rgba(34, 25, 13, 0.18);
     transition: transform 0.15s;
   }
-  .social a:hover { transform: translateY(-3px); background: var(--yellow-2); }
+  @media (hover: hover) and (pointer: fine) {
+    .social a:hover { transform: translateY(-3px); background: var(--yellow-2); }
+  }
 
   /* ---------- Footer ---------- */
   footer { border-top: 5px solid var(--green); padding: 40px 0 46px; color: var(--muted); font-size: 13px; }
@@ -385,9 +395,17 @@
     animation: 14s ease-in-out infinite pack-turn;
     transition: transform 0.5s ease;
   }
-  .pack-stage:hover .pack-3d, .pack-stage:focus-within .pack-3d {
+  /* the stop is hover-only (touch keeps :hover stuck after a tap, which froze the
+     sway); :focus-within stays ungated so keyboard users still get the hold */
+  .pack-stage:focus-within .pack-3d {
     animation-play-state: paused;
     transform: rotateX(-4deg) rotateY(-46deg) rotateZ(-12deg);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .pack-stage:hover .pack-3d {
+      animation-play-state: paused;
+      transform: rotateX(-4deg) rotateY(-46deg) rotateZ(-12deg);
+    }
   }
   .pack-face { backface-visibility: hidden; position: absolute; top: 50%; left: 50%; overflow: hidden; }
   .pack-front {
