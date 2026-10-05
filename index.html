@@ -451,11 +451,13 @@
   .pack-wordmark .market { font-size: 2.05rem; }
   .pack-wordmark .mailer { font-size: 2.3rem; margin-top: 5px; }
 
-  /* linear parabolic rainbow: two straight beams converging on a low vertex (42 deg from vertical) */
+  /* linear parabolic rainbow: two straight beams converging on a low vertex (30 deg from vertical),
+     true cones — 68px base cut off by the box edges, tips overlapping 6px past the shared
+     pivot (135, 282) so the vertex closes as one solid point instead of a crossing notch */
   .pack-beam {
-    position: absolute; left: 135px; top: -68px; width: 56px; height: 350px; margin-left: -28px;
+    position: absolute; left: 135px; top: -68px; width: 68px; height: 350px; margin-left: -34px;
     transform-origin: 50% 100%; transform: rotate(30deg); background: var(--lc-stripe);
-    clip-path: polygon(0 0, 100% 0, 67% 100%, 33% 100%);
+    clip-path: polygon(0 0, 100% 0, 50% 104%);
     filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.28));
   }
   .pack-beam.l { transform: rotate(-30deg); }
