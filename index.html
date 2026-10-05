@@ -187,8 +187,12 @@
     font-weight: 900; font-size: 16px; text-decoration: none;
     font-family: var(--display);
     border: 3px solid var(--ink);
+    outline: none;
     transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
   }
+  .btn:hover, .btn:active { outline: none; text-decoration: none; }
+  .btn:focus:not(:focus-visible) { outline: none; }
+  .btn:focus-visible { outline: 3px solid var(--sky); outline-offset: 3px; }
   .btn-primary {
     background: linear-gradient(135deg, #ffe259, var(--yellow));
     color: var(--ink); box-shadow: 4px 4px 0 0 var(--red);
@@ -197,7 +201,7 @@
   /* hover-only lifts: touch devices keep the :hover state stuck after a tap, so
      these are gated to real pointing devices */
   @media (hover: hover) and (pointer: fine) {
-    .btn:hover { transform: translateY(-2px) scale(1.02); }
+    .btn:hover { transform: translateY(-2px); }
     .btn-primary:hover { box-shadow: 2px 2px 0 0 var(--red); }
     .btn-ghost:hover { box-shadow: 2px 2px 0 0 var(--ink); }
   }
