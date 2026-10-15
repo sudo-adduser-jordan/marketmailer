@@ -141,14 +141,14 @@ tasks:
         test -n "$VSN" || (echo "could not read version from mix.exs" && exit 1)
         BIN=_build/prod/rel/marketmailer/bin/marketmailer
         CASTLE=_build/prod/rel/marketmailer/bin/castle
-        ALL_TARS=$(ls artifacts/marketmailer-*.tar.gz 2>/dev/null | sort -V || true)
+        ALL_TARS=$(ls releases/marketmailer-*.tar.gz 2>/dev/null | sort -V || true)
         DIRTY=$(git status --porcelain || true)
         if [ -z "$ALL_TARS" ]; then
           echo "live:update: no shipped baseline — first build, no upgrade path"
           MIX_ENV=prod mix release --overwrite
-          mkdir -p artifacts
-          cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
-          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz — run task start to launch it"
+          mkdir -p releases
+          cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
+          echo "live:update: staged releases/marketmailer-$VSN.tar.gz — run task start to launch it"
           exit 0
         fi
         FROM_TAR=""
@@ -161,21 +161,21 @@ tasks:
         if [ -z "$FROM_TAR" ]; then
           echo "live:update: no baseline older than $VSN — building without upgrade path"
           MIX_ENV=prod mix release --overwrite
-          mkdir -p artifacts
-          cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
-          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz"
+          mkdir -p releases
+          cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
+          echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
           exit 0
         fi
         FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
         mix compile >/dev/null 2>&1 || (echo "live:update: compile failed" && exit 1)
         if mix castle.appup --from "tar:$FROM_TAR" >/dev/null 2>&1; then
-          if [ ! -f "artifacts/marketmailer-$VSN.tar.gz" ]; then
+          if [ ! -f "releases/marketmailer-$VSN.tar.gz" ]; then
             echo "live:update: version $VSN not built yet — building (no version change needed)"
             echo "live:update: building prod release $VSN"
             MIX_ENV=prod mix release --overwrite
-            mkdir -p artifacts
-            cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
-            echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz"
+            mkdir -p releases
+            cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
+            echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
           else
             if [ -n "$DIRTY" ]; then
               echo "live:update: non-code changes only — no hot-upgrade needed"
@@ -187,7 +187,7 @@ tasks:
           fi
         else
           echo "live:update: code differs from $FROM_TAR"
-          if [ -f "artifacts/marketmailer-$VSN.tar.gz" ]; then
+          if [ -f "releases/marketmailer-$VSN.tar.gz" ]; then
             NEW_VSN=$(echo "$VSN" | awk -F. '{printf "%s.%s.%d", $1, $2, $3+1}')
             case "$NEW_VSN" in
               *.*.*) ;;
@@ -197,7 +197,7 @@ tasks:
             sed -i "s/^\([[:space:]]*version:[[:space:]]*\)\".*\"/\1\"$NEW_VSN\"/" mix.exs
             VSN="$NEW_VSN"
           fi
-          FROM_TAR=$(ls artifacts/marketmailer-*.tar.gz 2>/dev/null | sort -V | tail -n 1)
+          FROM_TAR=$(ls releases/marketmailer-*.tar.gz 2>/dev/null | sort -V | tail -n 1)
           FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
           TOP_TAG=$(sed -n 's/^  ~c"\(.*\)",$/\1/p' appup.exs | head -n 1)
           if [ -n "$TOP_TAG" ] && [ "$TOP_TAG" != "$VSN" ]; then
@@ -214,9 +214,9 @@ tasks:
           fi
           echo "live:update: building prod release $VSN"
           MIX_ENV=prod mix release --overwrite
-          mkdir -p artifacts
-          cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
-          echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz"
+          mkdir -p releases
+          cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
+          echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
         fi
         if ! { [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; }; then
           echo "live:update: prod release not running — built $VSN, run task start to launch it"
@@ -230,7 +230,7 @@ tasks:
           exit 1
         fi
         echo "live:update: hot-upgrading to $VSN"
-        cp "artifacts/marketmailer-$VSN.tar.gz" "_build/prod/rel/marketmailer/releases/"
+        cp "releases/marketmailer-$VSN.tar.gz" "_build/prod/rel/marketmailer/releases/"
         "$CASTLE" unpack "$VSN" && "$CASTLE" install "$VSN" && "$CASTLE" commit || (
           echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start)"
           exit 1

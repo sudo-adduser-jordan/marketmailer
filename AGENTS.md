@@ -21,7 +21,7 @@ mix ecto.migrate     # manual migration run (also happens on every boot)
 Hot upgrades use Castle OTP releases (`{:castle, "~> 1.0"}`, release
 `marketmailer`, `appup.exs` + `:appup` compiler). `task live:update` automates
 the whole flow: no-op when the tree matches the newest shipped baseline
-(`artifacts/*.tar.gz`, gitignored local staging); otherwise it patch-bumps
+(`releases/*.tar.gz`, gitignored local staging); otherwise it patch-bumps
 `mix.exs` (a shipped version is frozen — same-version upgrades can never
 install), drafts the appup edge from that baseline (`mix castle.appup.gen`),
 verifies coverage, builds (`mix release --overwrite`), stages the tarball,
@@ -204,5 +204,5 @@ then pipe to jq:
   collision)
 - `appup.exs` - Castle appup source (SemVer; bump `mix.exs` version + add an
   entry per hot-upgradeable change); `config/runtime.exs` - release runtime
-  config resolved by Castle before boot/install; `artifacts/` - staged
+  config resolved by Castle before boot/install; `releases/` - staged
   release tarballs for `tar:` upgrade baselines

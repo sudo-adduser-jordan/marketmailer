@@ -54,10 +54,10 @@ defmodule Marketmailer.MixProject do
 	# OTP release with Castle hot-upgrade support. The function wrapper
 	# delays evaluation until Castle is compiled. `upgrade_from` lists the
 	# baselines this version can hot-upgrade from; it is omitted entirely
-	# until the first shipped tarball lands under artifacts/ (Castle
+	# until the first shipped tarball lands under releases/ (Castle
 	# rejects an empty baseline list — a relup with no transitions is not
 	# an upgrade plan). SemVer: bump mix.exs version for every
-	# hot-upgradeable change, keep the shipped tarballs under artifacts/
+	# hot-upgradeable change, keep the shipped tarballs under releases/
 	# for `tar:` specs.
 	defp releases do
 		[
@@ -80,12 +80,12 @@ defmodule Marketmailer.MixProject do
 	defp upgrade_baselines do
 		vsn = Mix.Project.config()[:version]
 
-		Path.wildcard("artifacts/marketmailer-*.tar.gz")
+		Path.wildcard("releases/marketmailer-*.tar.gz")
 		|> Enum.map(&(&1 |> Path.basename(".tar.gz") |> String.trim_leading("marketmailer-")))
 		|> Enum.filter(&(Version.compare(&1, vsn) == :lt))
 		|> Enum.sort({:desc, Version})
 		|> Enum.take(1)
-		|> Enum.map(&"tar:artifacts/marketmailer-#{&1}.tar.gz")
+		|> Enum.map(&"tar:releases/marketmailer-#{&1}.tar.gz")
 	end
 
 	defp aliases do

@@ -59,7 +59,7 @@
 
     <rect x="860" y="260" width="270" height="150" rx="8" fill="#ffe8cc" stroke="#1e1e1e" stroke-width="2"/>
     <text x="995" y="288" font-weight="bold">Castle release</text>
-    <text x="995" y="310">mix release + artifacts/</text>
+    <text x="995" y="310">mix release + releases/</text>
     <text x="995" y="330">tar: baselines, appup.exs</text>
     <text x="995" y="350">bin/castle unpack/install</text>
     <text x="995" y="370">commit, restart_emulator</text>
