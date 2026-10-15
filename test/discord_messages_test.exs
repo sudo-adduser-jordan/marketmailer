@@ -230,4 +230,30 @@ defmodule Discord.MessagesTest do
 			assert text =~ ~r/^.+ • v\d+\.\d+\.\d+$/
 		end
 	end
+
+	test "channel embeds share the corrected Registration title" do
+		assert Discord.Messages.add_channel(%{channel_id: 123}).title == "Channel Registration"
+		assert Discord.Messages.channel_removed(%{channel_id: 123}).title == "Channel Registration"
+		assert Discord.Messages.list_channel(%{channel_id: 123}).title == "Channel Registration"
+	end
+
+	test "list payload paginates with clamped pages and nav buttons" do
+		items =
+			for i <- 1..25 do
+				%{item: "Item #{i}", margin: 1.0, system_name: "Jita", security_status: 0.9}
+			end
+
+		first = Discord.Messages.market_list_payload(items, 1, 10)
+		assert hd(first.embeds).title == "Items undercutting the Jita buy wall (1/3)"
+		assert [%{components: [prev, next]}] = first.components
+		assert prev.label == "Prev" and prev.disabled == true and prev.custom_id == "market_list:page:0"
+		assert next.label == "Next" and next.disabled == false and next.custom_id == "market_list:page:2"
+
+		clamped = Discord.Messages.market_list_payload(items, 99, 10)
+		assert hd(clamped.embeds).title == "Items undercutting the Jita buy wall (3/3)"
+
+		single = Discord.Messages.market_list_payload(Enum.take(items, 5), 1, 10)
+		assert hd(single.embeds).title == "Items undercutting the Jita buy wall"
+		assert single.components == []
+	end
 end
