@@ -9,51 +9,43 @@ tasks:
       - task --list
     silent: true
 
+  # SDE/name caches live in the file `task start` seeds prod from, so both
+  # steps pin to it (plain `mix` in dev would hit priv/data/dev.db via
+  # config/dev.exs). MARKETMAILER_DEV_DB is pinned too because dev.exs
+  # prefers it over MARKETMAILER_DB when set.
   setup:
     desc: Install deps, migrate the DB and load the SDE name/system caches (idempotent; SDE_BUILD overrides the pinned build)
     cmds:
       - |
-        # SDE/name caches live in the file `task start` seeds prod from, so
-        # pin both steps to it (plain `mix` in dev would hit priv/data/dev.db
-        # via config/dev.exs). MARKETMAILER_DEV_DB is pinned too because
-        # dev.exs prefers it over MARKETMAILER_DB when set.
         SDE_DB="${MARKETMAILER_DB:-priv/data/marketmailer.db}"
         MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix setup
         MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import "${SDE_BUILD:-3569502}"
 
+  # Up-to-date iff the daemon runs a release built from this exact tree. The
+  # stamp is written on every start-launch under _build (gitignored), so this
+  # check never dirties the repo. Liveness uses `bin/marketmailer pid` (rpc;
+  # fails when down) instead of pgrep -f, which matched this shell and its
+  # go-task ancestors.
   start:
     desc: Run latest tree as prod release detached (restarts when stale; never modifies the repo)
     status:
       - |
-        # Up-to-date iff the daemon runs a release built from this exact tree.
-        # The stamp is written on every start-launch under _build (gitignored),
-        # so this check never dirties the repo.
         STAMP=_build/prod/.start_stamp
         test -f "$STAMP" || exit 1
         FPRINT="$(git rev-parse HEAD 2>/dev/null || echo no-git):$(git status --porcelain 2>/dev/null | sha256sum | cut -d' ' -f1)"
         test "$(cat "$STAMP")" = "$FPRINT" || exit 1
-        # NOTE: `pgrep -f` scans full command lines, and this script's own
-        # text contains the pattern — as does every go-task wrapper shell
-        # above us — so exclude this shell AND all its ancestors. A bare
-        # `pgrep -f "[m]arketmailer"` (or filtering only $$) always matches
-        # itself and is useless here.
-        drop="^$$\$"
-        _p=$PPID
-        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
-          drop="$drop|^${_p}\$"
-          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
-        done
-        if pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
+        BIN=_build/prod/rel/marketmailer/bin/marketmailer
+        if [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; then
           echo "prod release already running current code — nothing to do"
         else
           exit 1
         fi
     cmds:
+      # Fail fast when the SDE name/system caches are not loaded: names render
+      # from the single DB, seeded from here. Checks the effective prod file
+      # (PROD_DB when it exists, else the DEV_DB seed source). Read-only; safe
+      # alongside a running daemon.
       - |
-        # Fail fast when the SDE name/system caches are not loaded: names
-        # render from the single DB, seeded from here. Checks the effective
-        # prod file (PROD_DB when it exists, else the DEV_DB seed source).
-        # Read-only; safe alongside a running daemon.
         DEV_DB="priv/data/marketmailer.db"
         PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
         EFF_DB="$DEV_DB"
@@ -81,13 +73,13 @@ tasks:
         echo "start: SDE caches present in $EFF_DB"
       - task: stop
       - MIX_ENV=prod mix release --overwrite
+      # Seed a fresh prod DB from the in-project DB so the first boot reuses
+      # warm etags/market cache instead of resweeping all of ESI. Only when
+      # prod has no DB yet and the paths differ (single-host setups share one
+      # file, so this is a no-op there). The daemon is stopped above, so plain
+      # cp is safe (copy -wal/-shm sidecars too when present — the WAL may hold
+      # committed data).
       - |
-        # Seed a fresh prod DB from the in-project DB so the first boot
-        # reuses warm etags/market cache instead of resweeping all of ESI.
-        # Only when prod has no DB yet and the paths differ (single-host
-        # setups share one file, so this is a no-op there). The daemon is
-        # stopped above, so plain cp is safe (copy -wal/-shm sidecars too
-        # when present — the WAL may hold committed data).
         DEV_DB="priv/data/marketmailer.db"
         PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
         if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
@@ -102,51 +94,45 @@ tasks:
           done
           echo "start: seeded $PROD_DB from $DEV_DB"
         fi
+      # Stale pidfile from the removed detached-dev workflow (dev is now
+      # shell-only via `task dev`); the release daemon never uses it. Records
+      # the tree this release was built from (see `status` above).
       - |
-        # Stale pidfile from the removed detached-dev workflow (dev is now
-        # shell-only via `task dev`); the release daemon never uses it.
         rm -f priv/data/marketmailer.pid
         _build/prod/rel/marketmailer/bin/marketmailer daemon
         echo "started prod release (daemon)"
-        # Record the tree this release was built from (see `status` above).
         mkdir -p _build/prod
         echo "$(git rev-parse HEAD 2>/dev/null || echo no-git):$(git status --porcelain 2>/dev/null | sha256sum | cut -d' ' -f1)" > _build/prod/.start_stamp
 
+  # Graceful prod stop via the release script (`pid` doubles as the liveness
+  # check). Stale pidfile is from the removed detached-dev workflow.
   stop:
-    desc: Stop everything (prod daemon + any legacy dev node)
+    desc: Stop prod daemon
     cmds:
       - |
-        # See `start` for why this shell and all its ancestors must be
-        # excluded from pgrep -f results.
-        drop="^$$\$"
-        _p=$PPID
-        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
-          drop="$drop|^${_p}\$"
-          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
-        done
-        # Prod daemon first (graceful via its own script).
-        LIVE=$(pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" | head -n 1 || true)
-        if [ -n "$LIVE" ]; then
-          BIN=_build/prod/rel/marketmailer/bin/marketmailer
-          if [ -x "$BIN" ]; then
-            "$BIN" stop
-          else
-            /bin/kill "$LIVE"
-          fi
+        BIN=_build/prod/rel/marketmailer/bin/marketmailer
+        if [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; then
+          LIVE=$("$BIN" pid 2>/dev/null || echo unknown)
+          "$BIN" stop >/dev/null 2>&1 || true
           echo "stopped prod release (was pid $LIVE)"
         else
           echo "prod release not running — nothing to do"
         fi
-        # Legacy detached-dev poller (removed workflow: elixir --sname
-        # marketmailer -S mix run). `task dev` shells carry no --sname in
-        # their command line, so they never match; release beams are
-        # excluded by the prod/rel filter (already stopped above).
-        for DEV in $(pgrep -f "sname marketmailer" | grep -Ev "$drop" | grep -Ev "prod/rel/marketmailer" || true); do
-          /bin/kill "$DEV" && echo "stopped legacy dev poller pid $DEV"
-        done
-        # Stale pidfile from the removed detached-dev workflow.
         rm -f priv/data/marketmailer.pid
 
+  # Living process: hot-upgrade prod when code changed (auto patch-bump,
+  # appup, build, unpack/install/commit); no-op otherwise. Shipped baselines
+  # are local staging (gitignored): linear deploys upgrade from the newest
+  # tarball older than the version being built; that single baseline gets the
+  # appup edge and the relup. A version whose tarball already shipped is
+  # frozen: patch-bump mix.exs so the relup has a from->to transition
+  # (same-version upgrades can never install). appup gen drafts edges under
+  # the file's top-level tag, which must name the version being built (mix
+  # release refuses anything else). Liveness uses `bin/marketmailer pid`.
+  # The relup only spans FROM_VER -> VSN: refuse to install onto a node that
+  # skipped the baseline instead of failing opaquely in castle. castle unpack
+  # reads the tarball from the release's own releases/ dir, but `mix release`
+  # leaves it at _build/prod/, so stage it over.
   live:update:
     desc: Hot-upgrade prod when code changed (auto patch-bump, appup, build, unpack/install/commit); no-op otherwise
     cmds:
@@ -155,9 +141,6 @@ tasks:
         test -n "$VSN" || (echo "could not read version from mix.exs" && exit 1)
         BIN=_build/prod/rel/marketmailer/bin/marketmailer
         CASTLE=_build/prod/rel/marketmailer/bin/castle
-        # Shipped baselines (local staging, gitignored). Linear deploys
-        # upgrade from the newest tarball older than the version being
-        # built; that single baseline gets the appup edge and the relup.
         ALL_TARS=$(ls artifacts/marketmailer-*.tar.gz 2>/dev/null | sort -V || true)
         DIRTY=$(git status --porcelain || true)
         if [ -z "$ALL_TARS" ]; then
@@ -204,9 +187,6 @@ tasks:
           fi
         else
           echo "live:update: code differs from $FROM_TAR"
-          # A version whose tarball already shipped is frozen: bump patch so
-          # the relup has a from->to transition (same-version upgrades can
-          # never install).
           if [ -f "artifacts/marketmailer-$VSN.tar.gz" ]; then
             NEW_VSN=$(echo "$VSN" | awk -F. '{printf "%s.%s.%d", $1, $2, $3+1}')
             case "$NEW_VSN" in
@@ -217,11 +197,8 @@ tasks:
             sed -i "s/^\([[:space:]]*version:[[:space:]]*\)\".*\"/\1\"$NEW_VSN\"/" mix.exs
             VSN="$NEW_VSN"
           fi
-          # Newest tarball older than the (possibly bumped) version.
           FROM_TAR=$(ls artifacts/marketmailer-*.tar.gz 2>/dev/null | sort -V | tail -n 1)
           FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
-          # gen drafts edges under the file's top-level tag, which must name
-          # the version being built (mix release refuses anything else).
           TOP_TAG=$(sed -n 's/^  ~c"\(.*\)",$/\1/p' appup.exs | head -n 1)
           if [ -n "$TOP_TAG" ] && [ "$TOP_TAG" != "$VSN" ]; then
             echo "live:update: retargeting appup.exs $TOP_TAG -> $VSN"
@@ -241,21 +218,11 @@ tasks:
           cp "_build/prod/marketmailer-$VSN.tar.gz" artifacts/
           echo "live:update: staged artifacts/marketmailer-$VSN.tar.gz"
         fi
-        # See `start` for why this shell and all its ancestors must be
-        # excluded from pgrep -f results.
-        drop="^$$\$"
-        _p=$PPID
-        while [ -n "$_p" ] && [ "$_p" != "1" ]; do
-          drop="$drop|^${_p}\$"
-          _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
-        done
-        if ! pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
+        if ! { [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; }; then
           echo "live:update: prod release not running — built $VSN, run task start to launch it"
           echo "live:update: remember to commit mix.exs + appup.exs"
           exit 0
         fi
-        # The relup only spans FROM_VER -> VSN: refuse to install onto a node
-        # that skipped the baseline instead of failing opaquely in castle.
         RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
         if [ -n "$RUN_VSN" ] && [ "$RUN_VSN" != "$FROM_VER" ] && [ "$RUN_VSN" != "$VSN" ]; then
           echo "live:update: prod runs $RUN_VSN but the relup spans $FROM_VER -> $VSN"
@@ -263,9 +230,6 @@ tasks:
           exit 1
         fi
         echo "live:update: hot-upgrading to $VSN"
-        # castle unpack reads the tarball from the release's own releases/
-        # dir, but `mix release` leaves it at _build/prod/. Stage it over
-        # (this path mismatch is what used to fail unpack with :no_such_file).
         cp "artifacts/marketmailer-$VSN.tar.gz" "_build/prod/rel/marketmailer/releases/"
         "$CASTLE" unpack "$VSN" && "$CASTLE" install "$VSN" && "$CASTLE" commit || (
           echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start)"
@@ -273,34 +237,25 @@ tasks:
         )
         echo "live:update: now on $VSN — remember to commit mix.exs + appup.exs"
 
+  # Isolated dev defaults so plain `task dev` coexists with the prod daemon
+  # (`task start`: :4000 + priv/data/marketmailer.db). Dev gets :4001 +
+  # priv/data/dev.db and no Discord connection (prod keeps the gateway).
+  # Opt-ins: MARKETMAILER_DEV_DB (explicit DB path), DEV_DISCORD_TOKEN (bot
+  # token for dev; steals prod's gateway), START_POLLERS=false (lightweight
+  # shell, no ESI polling), DASHBOARD_PORT / DASHBOARD_ENABLED=false. .env's
+  # MARKETMAILER_DB / DISCORD_TOKEN do not leak into dev. Refuses the live
+  # prod file while the daemon holds it (liveness via `bin/marketmailer pid`).
   dev:
     desc: Interactive shell with the app started (isolated DB/port; coexists with prod)
     cmds:
       - |
-        # Isolated dev defaults so plain `task dev` coexists with the prod
-        # daemon (`task start`: :4000 + priv/data/marketmailer.db). Dev gets
-        # :4001 + priv/data/dev.db and no Discord connection (prod keeps the
-        # gateway). Opt-ins: MARKETMAILER_DEV_DB (explicit DB path),
-        # DEV_DISCORD_TOKEN (bot token for dev; steals prod's gateway),
-        # START_POLLERS=false (lightweight shell, no ESI polling),
-        # DASHBOARD_PORT / DASHBOARD_ENABLED=false. .env's MARKETMAILER_DB /
-        # DISCORD_TOKEN do not leak into dev.
         DEV_DB="${MARKETMAILER_DEV_DB:-priv/data/dev.db}"
         DEV_PORT="${DASHBOARD_PORT:-4001}"
-        if [ "$DEV_DB" = "priv/data/marketmailer.db" ]; then
-          # See `start` for why this shell and all its ancestors must be
-          # excluded from pgrep -f results.
-          drop="^$$\$"
-          _p=$PPID
-          while [ -n "$_p" ] && [ "$_p" != "1" ]; do
-            drop="$drop|^${_p}\$"
-            _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d '[:space:]') || break
-          done
-          if pgrep -f "prod/rel/marketmailer" | grep -Ev "$drop" > /dev/null; then
-            echo "dev: refusing: $DEV_DB is the live prod file held by the daemon (see \`ps aux | grep -F marketmailer\`)"
-            echo "dev: run plain \`task dev\` for the isolated priv/data/dev.db, or \`task stop\` first"
-            exit 1
-          fi
+        BIN=_build/prod/rel/marketmailer/bin/marketmailer
+        if [ "$DEV_DB" = "priv/data/marketmailer.db" ] && [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; then
+          echo "dev: refusing: $DEV_DB is the live prod file held by the daemon (see \`ps aux | grep -F marketmailer\`)"
+          echo "dev: run plain \`task dev\` for the isolated priv/data/dev.db, or \`task stop\` first"
+          exit 1
         fi
         mkdir -p "$(dirname "$DEV_DB")"
         MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" iex -S mix run
