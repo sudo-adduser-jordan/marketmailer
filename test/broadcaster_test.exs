@@ -2,9 +2,12 @@ defmodule Discord.BroadcasterTest do
 	use ExUnit.Case, async: false
 
 	setup do
-		ensure_ets(:esi_error_state)
-		ensure_ets(:market_cache)
+		MarketmailerTest.Fixtures.ensure_ets(:esi_error_state)
+		MarketmailerTest.Fixtures.ensure_ets(:market_cache)
 
+		# `mix test` boots the app, which already starts Registry
+		# (pollers stay disabled via `start_pollers: false`).
+		# PageSup is a poller child, so tests provide it when absent.
 		if !Process.whereis(Marketmailer.Registry) do
 			start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
 		end
@@ -14,11 +17,7 @@ defmodule Discord.BroadcasterTest do
 		end
 
 		# Park every PageWorker: with maintenance active no worker calls ESI.
-		:ets.insert(:esi_error_state, {:maintenance_mode, System.system_time(:millisecond) + 120_000})
-
-		on_exit(fn ->
-			:ets.delete(:esi_error_state, :maintenance_mode)
-		end)
+		MarketmailerTest.Fixtures.park_page_workers()
 
 		unique = System.unique_integer([:positive])
 		task_supervisor = :"broadcaster_tasks_#{unique}"
@@ -51,10 +50,12 @@ defmodule Discord.BroadcasterTest do
 
 	test "ignores a failed refresh without notifying Discord", %{task_supervisor: _task_supervisor} do
 		region = 97_000_011
-		_broadcaster = start_broadcaster([region], [300], market_list(), fn channel, payload ->
-			send(self(), {:sent, channel, payload})
-			{:ok, :sent}
-		end)
+
+		_broadcaster =
+			start_broadcaster([region], [300], market_list(), fn channel, payload ->
+				send(self(), {:sent, channel, payload})
+				{:ok, :sent}
+			end)
 
 		Marketmailer.RegionManager.page_started(region, 1)
 		Marketmailer.RegionManager.page_result(region, 1, :failed, %{pages: 1, reason: :timeout})
@@ -64,10 +65,12 @@ defmodule Discord.BroadcasterTest do
 
 	test "stays silent when the market query has no items", %{task_supervisor: _task_supervisor} do
 		region = 97_000_012
-		_broadcaster = start_broadcaster([region], [400], [], fn channel, payload ->
-			send(self(), {:sent, channel, payload})
-			{:ok, :sent}
-		end)
+
+		_broadcaster =
+			start_broadcaster([region], [400], [], fn channel, payload ->
+				send(self(), {:sent, channel, payload})
+				{:ok, :sent}
+			end)
 
 		complete_cycle(region, :updated)
 
@@ -76,9 +79,11 @@ defmodule Discord.BroadcasterTest do
 
 	test "does nothing when no channels are registered", %{task_supervisor: _task_supervisor} do
 		region = 97_000_013
-		broadcaster = start_broadcaster([region], [], market_list(), fn _channel, _payload ->
-			flunk("delivery should not be called")
-		end)
+
+		broadcaster =
+			start_broadcaster([region], [], market_list(), fn _channel, _payload ->
+				flunk("delivery should not be called")
+			end)
 
 		complete_cycle(region, :updated)
 
@@ -133,10 +138,12 @@ defmodule Discord.BroadcasterTest do
 		task_supervisor: _task_supervisor
 	} do
 		region = 97_000_019
-		_broadcaster = start_broadcaster([region], [900], %{unexpected: :shape}, fn channel, payload ->
-			send(self(), {:sent, channel, payload})
-			{:ok, :sent}
-		end)
+
+		_broadcaster =
+			start_broadcaster([region], [900], %{unexpected: :shape}, fn channel, payload ->
+				send(self(), {:sent, channel, payload})
+				{:ok, :sent}
+			end)
 
 		complete_cycle(region, :updated)
 
@@ -234,12 +241,5 @@ defmodule Discord.BroadcasterTest do
 				type_id: 1_001
 			}
 		]
-	end
-
-	defp ensure_ets(name) do
-		case :ets.whereis(name) do
-			:undefined -> :ets.new(name, [:named_table, :set, :public])
-			_tid -> :ok
-		end
 	end
 end

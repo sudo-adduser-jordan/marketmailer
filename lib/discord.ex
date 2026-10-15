@@ -38,17 +38,6 @@ defmodule Discord.Messages do
 		end
 	end
 
-	def get_canvas_graph(type_id, opts \\ []), do: Janice.Capture.capture(type_id, opts)
-
-	def format_margin do
-	end
-
-	def format_price do
-	end
-
-	def format_security_status do
-	end
-
 	def server_only(_interaction) do
 		%Embed{
 			author: %Embed.Author{
@@ -145,23 +134,35 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	defp candidate_name(%{item_name: name}) when is_binary(name), do: name
-	defp candidate_name(%{item: name}) when is_binary(name), do: name
-	defp candidate_name(%{name: name}) when is_binary(name), do: name
-	defp candidate_name(%{"item_name" => name}) when is_binary(name), do: name
-	defp candidate_name(%{"item" => name}) when is_binary(name), do: name
-	defp candidate_name(%{"name" => name}) when is_binary(name), do: name
-	defp candidate_name(_), do: nil
+	# Accepts maps or string-keyed maps; shared with Discord.Consumer.
+	def candidate_name(%{item_name: name}) when is_binary(name), do: name
+	def candidate_name(%{item: name}) when is_binary(name), do: name
+	def candidate_name(%{name: name}) when is_binary(name), do: name
+	def candidate_name(%{"item_name" => name}) when is_binary(name), do: name
+	def candidate_name(%{"item" => name}) when is_binary(name), do: name
+	def candidate_name(%{"name" => name}) when is_binary(name), do: name
+	def candidate_name(_), do: nil
+
+	# Discord-only safety cap on how many undercut rows get rendered.
+	@list_max 100
+
+	# Cap, validate, and clamp once so the rendered page and the page
+	# buttons can never disagree. Shared by market_list_embed/3 and
+	# market_list_payload/3.
+	defp paginate(items, page, per_page) do
+		list = Enum.take(items, @list_max)
+		per_page = if is_integer(per_page) and per_page > 0, do: per_page, else: list_per_page()
+		page = clamp_page(page, max(1, ceil_div(length(list), per_page)))
+
+		{list, page, per_page}
+	end
 
 	def market_list_embed(items, page \\ 1, per_page \\ 10)
 
 	def market_list_embed(nil, _page, _per_page), do: market_list_embed([], 1, 10)
 
 	def market_list_embed(items, page, per_page) when is_list(items) do
-		capped = Enum.take(items, 100)
-		per_page = if is_integer(per_page) and per_page > 0, do: per_page, else: 10
-		total_pages = max(1, ceil_div(length(capped), per_page))
-		page = clamp_page(page, total_pages)
+		{capped, page, per_page} = paginate(items, page, per_page)
 		page_items = list_page_slice(capped, page, per_page)
 		offset = (page - 1) * per_page
 
@@ -177,8 +178,10 @@ defmodule Discord.Messages do
 				"```\n" <> list_header() <> "\n" <> truncate_lines(lines, "") <> "\n```"
 			end
 
+		total_pages = max(1, ceil_div(length(capped), per_page))
+
 		title =
-			if length(capped) > per_page do
+			if total_pages > 1 do
 				"Items undercutting the Jita buy wall (#{page}/#{total_pages})"
 			else
 				"Items undercutting the Jita buy wall"
@@ -206,16 +209,14 @@ defmodule Discord.Messages do
 	# Paginated payload: page-1 embed plus Prev/Next buttons. Empty lists
 	# carry no components.
 	def market_list_payload(items, page \\ 1, per_page \\ 10) do
-		list = if is_list(items), do: Enum.take(items, 100), else: []
-		per_page = if is_integer(per_page) and per_page > 0, do: per_page, else: 10
+		items = if is_list(items), do: items, else: []
+		{list, page, per_page} = paginate(items, page, per_page)
 		total_pages = max(1, ceil_div(length(list), per_page))
-		page = clamp_page(page, total_pages)
 
 		%{embeds: [market_list_embed(list, page, per_page)], components: list_components(page, total_pages, length(list))}
 	end
 
 	def list_per_page, do: 10
-	def list_max_items, do: 100
 
 	def list_components(_page, _total_pages, 0), do: []
 
@@ -284,7 +285,8 @@ defmodule Discord.Messages do
 		name = list_truncate(list_field(item, :item, "item") || list_field(item, :item_name, "item_name"), @list_item_width)
 		margin = format_list_margin(list_field(item, :margin, "margin"))
 		system = list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
-		security = format_list_security(list_field(item, :security_status, "security_status"))
+		# to_string/1 keeps "?" and the formatted float both pad-able.
+		security = format_security(list_field(item, :security_status, "security_status")) |> to_string()
 
 		list_row(rank, name, margin, system, security)
 	end
@@ -333,19 +335,6 @@ defmodule Discord.Messages do
 	end
 
 	defp format_list_margin(_), do: "?"
-
-	defp format_list_security(nil), do: "?"
-	defp format_list_security(""), do: "?"
-
-	defp format_list_security(security) when is_binary(security) do
-		case Float.parse(String.trim(security)) do
-			{number, _} -> format_list_security(number)
-			:error -> "?"
-		end
-	end
-
-	defp format_list_security(security) when is_number(security), do: "#{Float.round(security * 1.0, 1)}"
-	defp format_list_security(_), do: "?"
 
 	# Embed descriptions cap at 4096 chars; drop lines that would overflow.
 	defp truncate_lines([], acc), do: acc
@@ -497,16 +486,18 @@ defmodule Discord.Messages do
 	defp format_security(security) when is_number(security), do: Float.round(security * 1.0, 1)
 	defp format_security(_), do: "?"
 
-	def add_channel(interaction) do
+	# add/remove/list differ only in description and color, so they share
+	# one embed skeleton.
+	defp channel_embed(description, color) do
 		%Embed{
 			author: %Embed.Author{
 				name: "Marketmailer",
 				url: "https://discord.com",
 				icon_url: @icon_success
 			},
-			title: "Channel Registiration",
-			description: "<##{interaction.channel_id}> is now registered for market alerts.",
-			color: @color_success,
+			title: "Channel Registration",
+			description: description,
+			color: color,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database
@@ -515,22 +506,12 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
+	def add_channel(interaction) do
+		channel_embed("<##{interaction.channel_id}> is now registered for market alerts.", @color_success)
+	end
+
 	def channel_removed(interaction) do
-		%Embed{
-			author: %Embed.Author{
-				name: "Marketmailer",
-				url: "https://discord.com",
-				icon_url: @icon_success
-			},
-			title: "Channel Registiration",
-			description: "<##{interaction.channel_id}> will no longer recieve market alerts.",
-			color: @color_error,
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			thumbnail: %Embed.Thumbnail{
-				url: @icon_database
-			}
-		}
-		|> with_version()
+		channel_embed("<##{interaction.channel_id}> will no longer receive market alerts.", @color_error)
 	end
 
 	def list_channel(record) do
@@ -543,21 +524,7 @@ defmodule Discord.Messages do
 				"No channel has been registered for this server yet."
 			end
 
-		%Embed{
-			author: %Embed.Author{
-				name: "Marketmailer",
-				url: "https://discord.com",
-				icon_url: @icon_success
-			},
-			title: "Channel Registiration",
-			description: description,
-			color: @color_info,
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			thumbnail: %Embed.Thumbnail{
-				url: @icon_database
-			}
-		}
-		|> with_version()
+		channel_embed(description, @color_info)
 	end
 end
 
@@ -820,13 +787,10 @@ defmodule Discord.Consumer do
 		end
 	end
 
-	defp candidate_name(%{item_name: name}) when is_binary(name), do: name
-	defp candidate_name(%{item: name}) when is_binary(name), do: name
-	defp candidate_name(%{name: name}) when is_binary(name), do: name
-	defp candidate_name(%{"item_name" => name}) when is_binary(name), do: name
-	defp candidate_name(%{"item" => name}) when is_binary(name), do: name
-	defp candidate_name(%{"name" => name}) when is_binary(name), do: name
-	defp candidate_name(_), do: nil
+	# Candidate name lookup and normalization live in
+	# `Discord.Messages` / `Market.Database` so the consumer and the
+	# embed layer always agree.
+	defp candidate_name(candidate), do: Messages.candidate_name(candidate)
 
 	defp exact_item_match?(input, item, candidates) do
 		normalize_item(input) != "" and
@@ -834,9 +798,7 @@ defmodule Discord.Consumer do
 				 Enum.any?(candidates, fn candidate -> normalize_item(input) == normalize_item(candidate_name(candidate)) end))
 	end
 
-	defp normalize_item(name) when is_binary(name) do
-		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()
-	end
+	defp normalize_item(name) when is_binary(name), do: Market.Database.normalize_item_name(name)
 
 	defp normalize_item(_), do: ""
 

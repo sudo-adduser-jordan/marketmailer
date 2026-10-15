@@ -94,8 +94,10 @@ defmodule Mix.Tasks.Test.Safe do
 	# A live prod daemon (`task start`) or dev shell (`task dev`) for this
 	# project — i.e. a Castle release (`bin/marketmailer ...`) or a
 	# `beam.smp ... marketmailer` node. Best-effort via `pgrep`; excludes this
-	# task's own re-exec chain and any `_build/test` test VMs (self-match).
-	defp poller_running? do
+	# task's own re-exec chain, its `mix test` child, and any `_build/test`
+	# test VMs (self-match). Shared with `test/test_helper.exs` so plain
+	# `mix test` and `mix test.safe` apply exactly the same guard.
+	def poller_running? do
 		case System.cmd("pgrep", ["-af", "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"],
 					 stderr_to_stdout: true
 				 ) do

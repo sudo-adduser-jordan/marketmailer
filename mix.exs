@@ -44,11 +44,12 @@ defmodule Marketmailer.MixProject do
 		]
 	end
 
-	# Define which paths to include based on the environment
-	defp elixirc_paths(_env) do
-		# "." adds the root directory
-		["lib", "hendricks_formatter.ex"]
-	end
+	# Define which paths to include based on the environment.
+	# "." adds the root directory
+	#
+	# test/support is compiled only for the suite (see test/support/fixtures.ex).
+	defp elixirc_paths(:test), do: elixirc_paths(:dev) ++ ["test/support"]
+	defp elixirc_paths(_env), do: ["lib", "hendricks_formatter.ex"]
 
 	# OTP release with Castle hot-upgrade support. The function wrapper
 	# delays evaluation until Castle is compiled. `upgrade_from` lists the

@@ -4,8 +4,8 @@ defmodule Marketmailer.RegionManagerTest do
 	use ExUnit.Case, async: false
 
 	setup do
-		ensure_ets(:esi_error_state)
-		ensure_ets(:market_cache)
+		MarketmailerTest.Fixtures.ensure_ets(:esi_error_state)
+		MarketmailerTest.Fixtures.ensure_ets(:market_cache)
 
 		# `mix test` boots the app, which already starts Registry
 		# (pollers stay disabled via `start_pollers: false`).
@@ -19,11 +19,7 @@ defmodule Marketmailer.RegionManagerTest do
 		end
 
 		# Park every PageWorker: with maintenance active no worker calls ESI.
-		:ets.insert(:esi_error_state, {:maintenance_mode, System.system_time(:millisecond) + 120_000})
-
-		on_exit(fn ->
-			:ets.delete(:esi_error_state, :maintenance_mode)
-		end)
+		MarketmailerTest.Fixtures.park_page_workers()
 
 		:ok
 	end
@@ -198,7 +194,8 @@ defmodule Marketmailer.RegionManagerTest do
 
 	# Each lookup races the manager, which handles our `send` asynchronously:
 	# retry until the workers appear (or 2s passes, then fail).
-	defp assert_all_pages(region, pages, timeout \\ 2_000) do		deadline = System.monotonic_time(:millisecond) + timeout
+	defp assert_all_pages(region, pages, timeout \\ 2_000) do
+		deadline = System.monotonic_time(:millisecond) + timeout
 
 		for page <- pages do
 			await_page(region, page, deadline)
@@ -241,13 +238,6 @@ defmodule Marketmailer.RegionManagerTest do
 					Process.sleep(10)
 					await_no_page(region, page, deadline)
 				end
-		end
-	end
-
-	defp ensure_ets(name) do
-		case :ets.whereis(name) do
-			:undefined -> :ets.new(name, [:named_table, :set, :public])
-			_tid -> :ok
 		end
 	end
 end
