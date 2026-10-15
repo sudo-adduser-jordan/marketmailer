@@ -7,12 +7,12 @@ defmodule Mix.Tasks.Test.Safe do
 
 	The suite never touches the live poller: `config/test.exs` disables
 	pollers (`start_pollers: false`), stubs ESI (maintenance ETS + fixtures),
-	and defaults to isolated `priv/data/test.db` + `priv/data/test_read.db`
+	and defaults to isolated `priv/data/test.db`
 	(or per-suite tmp files). A live
 	prod daemon (`task start`, i.e. a Castle release, `bin/marketmailer`) or a
 	dev shell (`task dev`) is therefore
-	allowed to keep running as long as the test DB files are isolated from the
-	live `priv/data/marketmailer.db` + `priv/data/marketmailer_read.db`. Refusal happens only on a DB collision (e.g.
+	allowed to keep running as long as the test DB file is isolated from the
+	live `priv/data/marketmailer.db`. Refusal happens only on a DB collision (e.g.
 	`MARKETMAILER_DB=priv/data/marketmailer.db` while a poller holds it).
 
 	A stale `-wal`/`-shm` sidecar alone is only a warning: WAL files can
@@ -22,14 +22,12 @@ defmodule Mix.Tasks.Test.Safe do
 	use Mix.Task
 
 	@live_db "priv/data/marketmailer.db"
-	@live_read_db "priv/data/marketmailer_read.db"
 
 	@impl true
 	def run(args) do
 		# What the test run will actually use: explicit env wins, otherwise
 		# config/test.exs defaults to priv/data/test.db (never the live default).
 		test_db = System.get_env("MARKETMAILER_DB", "priv/data/test.db")
-		test_read_db = System.get_env("MARKETMAILER_READ_DB", "priv/data/test_read.db")
 
 		cond do
 			!poller_running?() ->
@@ -39,11 +37,11 @@ defmodule Mix.Tasks.Test.Safe do
 
 				run_tests(args)
 
-			db_collision?(test_db) or db_collision?(test_read_db, @live_read_db) ->
+			db_collision?(test_db) ->
 				Mix.shell().error(
 					"Refusing: a live poller seems to be running and the test DB " <>
-						"#{test_db} (read: #{test_read_db}) collides with the live #{@live_db} " <>
-						"(read: #{@live_read_db}) (see `ps aux | grep -F marketmailer`). Unset MARKETMAILER_DB " <>
+						"#{test_db} collides with the live #{@live_db} " <>
+						"(see `ps aux | grep -F marketmailer`). Unset MARKETMAILER_DB " <>
 						"(tests default to isolated priv/data/test.db) or point it at a tmp file."
 				)
 
@@ -52,7 +50,7 @@ defmodule Mix.Tasks.Test.Safe do
 			true ->
 				Mix.shell().info(
 					"test.safe: live poller detected but test DB is isolated " <>
-						"(#{test_db} / #{test_read_db} vs live #{@live_db} / #{@live_read_db}); continuing"
+						"(#{test_db} vs live #{@live_db}); continuing"
 				)
 
 				run_tests(args)
@@ -67,8 +65,7 @@ defmodule Mix.Tasks.Test.Safe do
 				if db = System.get_env("MARKETMAILER_DB"),
 					do: [
 						{"MIX_ENV", "test"},
-						{"MARKETMAILER_DB", db},
-						{"MARKETMAILER_READ_DB", System.get_env("MARKETMAILER_READ_DB", "")}
+						{"MARKETMAILER_DB", db}
 					],
 					else: [{"MIX_ENV", "test"}]
 

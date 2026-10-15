@@ -51,7 +51,7 @@ tasks:
     cmds:
       - |
         # Fail fast when the SDE name/system caches are not loaded: names
-        # render from the read DB, which syncs from here. Checks the effective
+        # render from the single DB, seeded from here. Checks the effective
         # prod file (PROD_DB when it exists, else the DEV_DB seed source).
         # Read-only; safe alongside a running daemon.
         DEV_DB="priv/data/marketmailer.db"

@@ -148,11 +148,10 @@ defmodule Universe.Database do
 	import Ecto.Query
 
 	# Local cache read only - never blocks on HTTP, so embed rendering and
-	# the 100ms broadcaster test windows stay fast. Served from the read
-	# database; caches fill via SDE import, the background ticker, and the
-	# write -> read sync.
+	# the 100ms broadcaster test windows stay fast. Served from the single
+	# database; caches fill via SDE import and the background ticker.
 	def get_name(id) when is_integer(id) do
-		ReadDatabase.one(from name in "names", where: name.id == ^id, select: name.name)
+		Database.one(from name in "names", where: name.id == ^id, select: name.name)
 	rescue
 		_ -> nil
 	catch

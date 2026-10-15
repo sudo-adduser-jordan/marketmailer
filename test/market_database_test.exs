@@ -14,23 +14,8 @@ defmodule Market.DatabaseTest do
 				"marketmailer-market-database-#{System.unique_integer([:positive])}.db"
 			)
 
-		read_path =
-			Path.join(
-				System.tmp_dir!(),
-				"marketmailer-market-read-#{System.unique_integer([:positive])}.db"
-			)
-
 		Application.put_env(:marketmailer, Database,
 			database: path,
-			priv: "priv/repo",
-			journal_mode: :wal,
-			busy_timeout: 5_000,
-			pool_size: 1,
-			log: false
-		)
-
-		Application.put_env(:marketmailer, ReadDatabase,
-			database: read_path,
 			priv: "priv/repo",
 			journal_mode: :wal,
 			busy_timeout: 5_000,
@@ -49,17 +34,6 @@ defmodule Market.DatabaseTest do
 					pid
 			end
 
-		read_pid =
-			case Process.whereis(ReadDatabase) do
-				nil ->
-					{:ok, pid} = ReadDatabase.start_link()
-					Process.unlink(pid)
-					pid
-
-				pid ->
-					pid
-			end
-
 		Ecto.Migrator.run(
 			Database,
 			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
@@ -67,13 +41,9 @@ defmodule Market.DatabaseTest do
 			all: true
 		)
 
-		:ok = Market.Sync.ensure_read_schema()
-
 		on_exit(fn ->
 			if Process.alive?(repo_pid), do: GenServer.stop(repo_pid)
-			if Process.alive?(read_pid), do: GenServer.stop(read_pid)
 			File.rm_rf!(path)
-			File.rm_rf!(read_path)
 		end)
 
 		:ok
@@ -84,17 +54,11 @@ defmodule Market.DatabaseTest do
 		Database.delete_all("names")
 		Database.delete_all("systems")
 		Database.delete_all("discord")
-		ReadDatabase.delete_all("market")
-		ReadDatabase.delete_all("names")
-		ReadDatabase.delete_all("systems")
-		ReadDatabase.query!("DELETE FROM _sync_watermark", [])
 		:ok
 	end
 
 	test "finds the cheapest cached sell order by case-insensitive item name" do
 		insert_fixture()
-		assert :ok = Market.Sync.run()
-
 		item = MarketRead.get_market_item("  tRiTaNiUm  ")
 
 		assert %MarketView{} = item
@@ -108,8 +72,6 @@ defmodule Market.DatabaseTest do
 
 	test "returns nil when the name is not present in the market" do
 		insert_fixture()
-		assert :ok = Market.Sync.run()
-
 		assert MarketRead.get_market_item("Rifter") == nil
 	end
 
@@ -165,8 +127,6 @@ defmodule Market.DatabaseTest do
 				updated_at: now
 			}
 		])
-
-		assert :ok = Market.Sync.run()
 
 		for query <- ["plex", "PLEX", "  Plex  ", "pLeX"] do
 			item = MarketRead.get_market_item(query)
@@ -233,8 +193,6 @@ defmodule Market.DatabaseTest do
 			}
 		])
 
-		assert :ok = Market.Sync.run()
-
 		for query <- ["squall", "SQUALL", "  Squall  "] do
 			item = MarketRead.get_market_item(query)
 
@@ -249,8 +207,6 @@ defmodule Market.DatabaseTest do
 
 	test "returns nil for a known type with no market order" do
 		Database.insert_all("names", [%{id: 2_001, name: "Empty Item"}])
-		assert :ok = Market.Sync.run()
-
 		assert MarketRead.get_market_item("Empty Item") == nil
 		assert MarketRead.get_market_item("") == nil
 		assert MarketRead.get_market_item(nil) == nil
@@ -315,8 +271,6 @@ defmodule Market.DatabaseTest do
 				updated_at: now
 			}
 		])
-
-		assert :ok = Market.Sync.run()
 
 		assert [%{item_name: "Squall"}] = MarketRead.suggest_items("squ")
 		assert [%{item_name: "Squall"}] = MarketRead.suggest_items("  SQUA  ")
@@ -418,13 +372,9 @@ defmodule Market.DatabaseTest do
 		assert Universe.Database.missing_system_count() == 1
 	end
 
-	test "sync copies write rows to the read database idempotently" do
+	test "reads persist idempotently in the single database" do
 		insert_fixture()
-		assert :ok = Market.Sync.run()
-		assert :ok = Market.Sync.run()
-
-		assert Database.aggregate("market", :count) == ReadDatabase.aggregate("market", :count)
-		assert ReadDatabase.aggregate("market", :count) == 3
+		assert Database.aggregate("market", :count) == 3
 
 		items = MarketRead.get_items_less_than_jita_buy()
 		assert length(items) == 2
@@ -432,22 +382,16 @@ defmodule Market.DatabaseTest do
 		assert Enum.at(items, 0).security_status == 0.7
 	end
 
-	test "sync propagates same-second price updates to the read database" do
+	test "same-second price updates are visible to reads" do
 		insert_fixture()
-		assert :ok = Market.Sync.run()
-
-		# Same-second re-upsert (identical updated_at): the boundary re-copy
-		# must still carry the new price across.
+		# Same-second re-upsert (identical updated_at) must still carry the
+		# new price to subsequent reads.
 		MarketDatabase.upsert_orders([order_fixture(101, 99.5)])
-		assert :ok = Market.Sync.run()
-
-		assert %{price: 99.5} = ReadDatabase.one(from m in "market", where: m.order_id == 101, select: %{price: m.price})
+		assert %{price: 99.5} = Database.one(from m in "market", where: m.order_id == 101, select: %{price: m.price})
 	end
 
 	test "reads ordered undercutting rows from the market list view" do
 		insert_fixture()
-		assert :ok = Market.Sync.run()
-
 		items = MarketRead.get_items_less_than_jita_buy()
 
 		assert length(items) == 2

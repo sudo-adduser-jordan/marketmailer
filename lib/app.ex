@@ -16,16 +16,9 @@ defmodule Marketmailer.Application do
 
 		:ok = migrate()
 
-		# The read database has no migrations (rebuilt, not migrated): ensure
-		# its tables + view exist before any user-facing query can run. Cheap
-		# idempotent DDL on a temporary connection; deltas arrive via
-		# Market.Sync after each refresh.
-		{:ok, _, _} = Ecto.Migrator.with_repo(ReadDatabase, fn _ -> Market.Sync.ensure_read_schema() end)
-
 		children =
 			[
 				Database,
-				ReadDatabase,
 				Market.DbWriter,
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},

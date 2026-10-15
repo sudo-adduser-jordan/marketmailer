@@ -87,9 +87,8 @@ open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 SQLite at `priv/data/marketmailer.db` (WAL, gitignored): `market` order
 cache, `etags` per-page ETag/Expires, `names`/`systems` EVE caches (SDE-seeded,
 ticker-backed), `discord` channel routing, plus the `marketListView` undercut
-view. Every refresh cycle deltas into `priv/data/marketmailer_read.db`, which
-serves all user-facing queries; see `AGENTS.md` for the fetch -> write ->
-copy -> read policy.
+view serving all user-facing queries; see `AGENTS.md` for the fetch ->
+write -> read policy.
 `MarketView` (`lib/schema.ex`) is a query struct, not a DB view. Arrows
 are logical FKs joined by the app, not DB constraints.
 
@@ -103,7 +102,7 @@ open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 
 Flow: per-page `PageWorker`s poll ESI with their own ETag/Expires TTL
 (unchanged pages stay cheap `304`s), upsert into SQLite + ETS, report to
-`UpdateCoordinator`; each completed cycle syncs deltas to the read database,
+`UpdateCoordinator`;
 and SQL queries `LEFT JOIN` the SDE-seeded `names`/`systems` caches (no
 per-request fetching); results go to Discord
 embeds/broadcasts. See `AGENTS.md` for architecture, database, and logging

@@ -8,9 +8,8 @@ defmodule Mix.Tasks.Sde.Import do
 	# Downloads eve-online-static-data-<build>-jsonl.zip (resolving "latest"
 	# via tranquility/latest.jsonl when no build is given), extracts only the
 	# datasets backing our caches, and streams each JSONL file line-by-line
-	# into the write-database caches through the single-writer path. The
-	# write -> read sync then carries the rows to the read database like any
-	# other cache fill. No per-request ESI backfill is needed for SDE-covered
+	# into the database caches through the single-writer path. No per-request
+	# ESI backfill is needed for SDE-covered
 	# ids; the ticker stays as the fallback for the rest.
 	use Mix.Task
 

@@ -5,15 +5,6 @@ defmodule Database do
 		adapter: Ecto.Adapters.SQLite3
 end
 
-defmodule ReadDatabase do
-	# Read-only replica: synced copy of the write database serving every
-	# user-facing query (fetch -> write -> copy -> read). Only Market.Sync
-	# writes here; everything else reads.
-	use Ecto.Repo,
-		otp_app: :marketmailer,
-		adapter: Ecto.Adapters.SQLite3
-end
-
 defmodule Etag.Database do
 	import Ecto.Query
 
@@ -242,9 +233,9 @@ defmodule Market.Database do
 end
 
 defmodule Market.Read do
-	# Every user-facing market query, served from the read database only.
+	# Every user-facing market query, served from the single database.
 	# Pure reads: no ESI, no backfill — gaps render as "?" and fill via the
-	# SDE import, the background ticker, and the write -> read sync.
+	# SDE import and the background ticker.
 	def get_best_order do
 		load_rows("getBestOrder.sql")
 	rescue
@@ -316,12 +307,12 @@ defmodule Market.Read do
 			[]
 	end
 
-	# Runs a query file from lib/ against the read database and returns one
+	# Runs a query file from lib/ against the database and returns one
 	# map/struct per row. Never raises into the Discord interaction handler:
 	# a DB error logs once and yields [], which the caller renders as the
 	# not-found embed.
 	defp load_rows(file, params \\ []) do
-		case ReadDatabase.query(read_sql(file), params) do
+		case Database.query(read_sql(file), params) do
 			{:ok, %{rows: rows, columns: cols}} ->
 				Enum.map(rows, fn row ->
 					data = cols |> Enum.map(&String.to_atom/1) |> Enum.zip(row) |> Map.new()

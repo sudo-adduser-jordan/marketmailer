@@ -92,33 +92,22 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   (gitignored, `priv/data/.gitkeep` keeps the directory) — single-host
   prod uses the same in-project file via `MARKETMAILER_DB` in `.env`, and
   `task docker:run` bind-mounts `./priv/data` for containers. WAL journal mode.
-- **Fetch -> write -> copy -> read.** ESI pollers write only to the write DB.
-  After each market sync cycle, `Market.Sync` (`lib/sync.ex`) delta-copies
-  `market` (watermark on `(updated_at, order_id)`, boundary rows recopied) and
-  fully replaces the small `names`/`systems` caches into the read database
-  (`priv/data/marketmailer_read.db`, derived from the write path in every
-  env; `MARKETMAILER_READ_DB` overrides it in test). Broadcasts render from
-  the read DB only after the sync completes; a failed sync skips the broadcast
-  instead of advertising stale-as-fresh data. The read DB has no Ecto
-  migrations — `lib/sync.ex` ensures its tables + `marketListView` view
-  idempotently (rebuilt, not migrated); the `ReadDatabase` repo serves every
-  user-facing query via `Market.Read` (`lib/database.ex`), which never touches
-  the network. All writes (either file) funnel through `Market.DbWriter`.
+- **Fetch -> write -> read.** ESI pollers write only to the single DB file.
+  Broadcasts render from the same file via `Market.Read` (`lib/database.ex`),
+  which never touches the network. All writes funnel through `Market.DbWriter`.
 - **Standard Ecto migrations** live in `priv/repo/migrations` and apply to the
-  write DB only. `Marketmailer.
+  single DB. `Marketmailer.
   Application.start/2` runs pending migrations on every boot before the
   supervision tree starts, so `mix run` and containers never need a separate
   migrate step; use `mix ecto.migrate` / `mix ecto.rollback` for manual control.
-- To change the schema, add a new migration (`mix ecto.gen.migration <name>`)
-  and mirror the table/view in `Market.Sync.ensure_read_schema/0`.
+- To change the schema, add a new migration (`mix ecto.gen.migration <name>`).
 - Databases created by the pre-migration bootstrap (tables but no
   `schema_migrations`) are detected at boot, dropped once, and rebuilt -
   data is derived cache and intentionally discarded.
 - SDE snapshots: `mix sde.import [BUILD]` downloads the official JSONL SDE
   into `priv/data/sde/<build>/` (gitignored), extracts only
   `types`/`mapSolarSystems`/`mapConstellations`/`mapRegions`/`npcStations`,
-  and streams them into the write-DB caches (sync carries them to the read DB
-  like any other fill).
+  and streams them into the `names`/`systems` caches.
 - Gotcha: `insert_all/3` with a bare table name skips ecto type casting.
   Booleans must be coerced to `1`/`0` (see `Market.Database.upsert_orders`),
   and `on_conflict: :replace_all` is unavailable - list fields explicitly.
@@ -135,8 +124,8 @@ the network:
 
 Query SQL (`lib/getBestOrder.sql`, `lib/getItemsLessThan.sql`) LEFT JOINs these
 tables. There is no per-request backfill: gaps render as `?` and fill via the
-SDE import, the background ticker (each cache drains on its own backlog — a
-finished cache never gates the others), and the write -> read sync. Any new
+SDE import and the background ticker (each cache drains on its own backlog — a
+finished cache never gates the others). Any new
 query must still SELECT the raw id columns (`system_id`, `location_id`,
 `type_id`) so gaps stay visible as `?` instead of silently wrong.
 
@@ -184,10 +173,9 @@ then pipe to jq:
 
 - `lib/app.ex` - supervision tree + boot-time migration run (see policy above)
 - `priv/repo/migrations` - schema migrations
-- `lib/database.ex` - `Database` (write) + `ReadDatabase` (read) repos;
+- `lib/database.ex` - `Database` repo + `Market.DbWriter` (serialized writes);
   `Etag.Database`, `Discord.Database`, `Market.Database` (writes),
   `Market.Read` (user-facing reads, never touches the network)
-- `lib/sync.ex` - `Market.Sync`: write -> read delta copy + read-schema ensure
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
 - `lib/names.ex` - `ESI.Names`, `ESI.SystemInfo`, `Universe.Database` (ticker fills)
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
