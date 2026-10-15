@@ -374,8 +374,9 @@ defmodule Mix.Tasks.Chartdb do
 			`assets/` after edits.
 
 			SQLite at `priv/data/marketmailer.db` (WAL, gitignored): `market` order
-			cache, `etags` per-page ETag/Expires, lazy `names`/`systems` EVE caches,
-			`discord` channel routing, plus the `marketListView` undercut view.
+			cache, `etags` per-page ETag/Expires, SDE-seeded `names`/`systems` EVE
+			caches (`mix sde.import`), `discord` channel routing, plus the
+			`marketListView` undercut view serving all user-facing queries.
 			`MarketView` (`lib/schema.ex`) is a query struct, not a DB view. Arrows
 			are logical FKs joined by the app, not DB constraints.
 

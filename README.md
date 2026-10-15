@@ -51,8 +51,9 @@ Pending migrations run automatically on every boot, so containers and
 - **Discord bot** (`Discord.BotSupervisor`) — slash commands, embeds,
   and market-update broadcasts.
 - **Name resolution** — type/system/station names bulk-seeded from the
-  official JSONL SDE (`mix sde.import`) into local cache tables, with an ESI
-  ticker covering drift; no per-request fetching.
+  official JSONL SDE (`mix sde.import`) into local cache tables. There is
+  no per-request name fetching: nothing queries ESI for names, and the
+  SDE import is the only thing that fills these tables.
 - **LiveDashboard** (`MarketmailerWeb.Endpoint`) — BEAM/supervision/ETS
   (`:market_cache`, `:esi_error_state`) and Ecto `Database` stats at
   `/dashboard` (prod: `:4000` on the host; dev: http://localhost:4001/dashboard).

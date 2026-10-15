@@ -2,7 +2,9 @@
 
 EVE Online market watcher: ESI market-order pollers write to a local SQLite
 database; queries surface arbitrage opportunities ("best order" to flip into
-the Jita buy wall). The Discord bot feature exists but is currently disabled.
+the Jita buy wall). The Discord bot broadcasts the same data when
+`DISCORD_TOKEN` is set (otherwise it is skipped with a warning and the rest
+of the app keeps running).
 
 ## Commands
 
