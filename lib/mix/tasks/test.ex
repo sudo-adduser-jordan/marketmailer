@@ -15,6 +15,10 @@ defmodule Mix.Tasks.Test.Safe do
 	live `priv/data/marketmailer.db`. Refusal happens only on a DB collision (e.g.
 	`MARKETMAILER_DB=priv/data/marketmailer.db` while a poller holds it).
 
+	Plain `mix test` enforces the same guard via `test/test_helper.exs`, so
+	`task test` and `mix test` are safe by construction; this task is the
+	explicit entrypoint with poller-status messaging.
+
 	A stale `-wal`/`-shm` sidecar alone is only a warning: WAL files can
 	linger after an unclean shutdown without any live holder.
 	"""
@@ -90,7 +94,7 @@ defmodule Mix.Tasks.Test.Safe do
 	# A live prod daemon (`task start`) or dev shell (`task dev`) for this
 	# project — i.e. a Castle release (`bin/marketmailer ...`) or a
 	# `beam.smp ... marketmailer` node. Best-effort via `pgrep`; excludes this
-	# task's own re-exec chain.
+	# task's own re-exec chain and any `_build/test` test VMs (self-match).
 	defp poller_running? do
 		case System.cmd("pgrep", ["-af", "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"],
 					 stderr_to_stdout: true
@@ -100,6 +104,8 @@ defmodule Mix.Tasks.Test.Safe do
 				|> String.split("\n", trim: true)
 				|> Enum.reject(&String.contains?(&1, "pgrep"))
 				|> Enum.reject(&String.contains?(&1, "test.safe"))
+				|> Enum.reject(&String.contains?(&1, "_build/test"))
+				|> Enum.reject(&String.contains?(&1, "mix test"))
 				|> Enum.any?()
 
 			{_out, _} ->

@@ -297,9 +297,9 @@ tasks:
       - mix chartdb
 
   test:
-    desc: Run the test suite
+    desc: Run the test suite (safe alongside live poller when DB-isolated)
     cmds:
-      - mix test
+      - mix test.safe
 
   test:safe:
     desc: Test in MIX_ENV=test alongside a live poller when DB-isolated (stubbed ESI, priv/data/test.db)

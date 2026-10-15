@@ -1,7 +1,8 @@
 import Config
 
 # Isolated dev-test env: never touch the live poller DB/ESI/Discord.
-# Run with `MIX_ENV=test mix test` (or `mix test.safe` for the live guard).
+# `mix test` is safe by construction (test_helper.exs refuses on DB collision);
+# `mix test.safe` is the explicit entrypoint with poller-status messaging.
 config :marketmailer, Database,
 	database: System.get_env("MARKETMAILER_DB", "priv/data/test.db"),
 	priv: "priv/repo",
