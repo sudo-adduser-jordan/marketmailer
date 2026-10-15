@@ -159,12 +159,25 @@ tasks:
           fi
         done
         if [ -z "$FROM_TAR" ]; then
-          echo "live:update: no baseline older than $VSN — building without upgrade path"
-          MIX_ENV=prod mix release --overwrite
-          mkdir -p releases
-          cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
-          echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
-          exit 0
+          # Steady state: mix.exs still names the newest shipped build, so no
+          # baseline is strictly older. Use that build as the baseline instead
+          # of rebuilding it in place (which would clobber the shipped tar
+          # with the new code while the running node keeps the old). The
+          # coverage check below then reports the modules that moved and the
+          # branch below patch-bumps + hot-upgrades; with no code change it
+          # passes and reports a no-op.
+          NEWEST_TAR=$(echo "$ALL_TARS" | tail -n 1)
+          NEWEST_VER=$(basename "$NEWEST_TAR" .tar.gz | sed 's/^marketmailer-//')
+          if [ "$NEWEST_VER" = "$VSN" ]; then
+            FROM_TAR="$NEWEST_TAR"
+          else
+            echo "live:update: no baseline older than $VSN — building without upgrade path"
+            MIX_ENV=prod mix release --overwrite
+            mkdir -p releases
+            cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
+            echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
+            exit 0
+          fi
         fi
         FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
         mix compile >/dev/null 2>&1 || (echo "live:update: compile failed" && exit 1)
