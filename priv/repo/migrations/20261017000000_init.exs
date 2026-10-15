@@ -8,7 +8,7 @@ defmodule Database.Migrations.Schema do
 	# builds fresh ones. Name data itself comes only from `mix sde.import`,
 	# never from seeds here.
 	def up do
-		unless table_exists?("market") do
+		if !table_exists?("market") do
 			create table(:market, primary_key: false) do
 				add :order_id, :bigint, primary_key: true
 				add :duration, :integer
@@ -29,15 +29,13 @@ defmodule Database.Migrations.Schema do
 			create index(:market, [:type_id, :system_id, :is_buy_order])
 			create index(:market, [:price])
 
-			create index(:market, [:type_id],
-				where: "system_id = 30000142 AND is_buy_order = 1"
-			)
+			create index(:market, [:type_id], where: "system_id = 30000142 AND is_buy_order = 1")
 
 			create index(:market, [:type_id, :price], where: "is_buy_order = 0")
 			create index(:market, [:updated_at, :order_id])
 		end
 
-		unless table_exists?("etags") do
+		if !table_exists?("etags") do
 			create table(:etags, primary_key: false) do
 				add :url, :string, primary_key: true
 				add :etag, :string
@@ -46,7 +44,7 @@ defmodule Database.Migrations.Schema do
 			end
 		end
 
-		unless table_exists?("discord") do
+		if !table_exists?("discord") do
 			create table(:discord, primary_key: false) do
 				add :guild_id, :bigint, primary_key: true
 				add :channel_id, :bigint, null: false
@@ -54,7 +52,7 @@ defmodule Database.Migrations.Schema do
 			end
 		end
 
-		unless table_exists?("names") do
+		if !table_exists?("names") do
 			create table(:names, primary_key: false) do
 				add :id, :integer, primary_key: true
 				add :name, :string, null: false
@@ -64,7 +62,7 @@ defmodule Database.Migrations.Schema do
 			create index(:names, [:name])
 		end
 
-		unless table_exists?("systems") do
+		if !table_exists?("systems") do
 			create table(:systems, primary_key: false) do
 				add :system_id, :integer, primary_key: true
 				add :name, :string, null: false
@@ -122,13 +120,6 @@ defmodule Database.Migrations.Schema do
 			AND s.price < jb.buy_price
 		""")
 	end
-	defp table_exists?(table) do
-		%{rows: [[count]]} =
-			repo().query!("SELECT COUNT\(*) FROM sqlite_master WHERE type = 'table' AND name = ?", [table])
-
-		count > 0
-	end
-
 
 	defp table_exists?(table) do
 		%{rows: [[count]]} =

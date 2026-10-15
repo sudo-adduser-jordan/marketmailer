@@ -1,6 +1,19 @@
 defmodule Janice.CaptureTest do
 	use ExUnit.Case, async: true
 
+	# ExUnit randomizes order within a module: the "serves fresh cached
+	# charts" test writes type 1001 into the shared :janice_chart_cache, so
+	# every test starts with that key absent or the "adapter reports
+	# unavailable" assertions see a cache hit instead of a miss.
+	setup do
+		ensure_cache_table()
+		:ets.delete(:janice_chart_cache, 1_001)
+
+		on_exit(fn -> :ets.delete(:janice_chart_cache, 1_001) end)
+
+		:ok
+	end
+
 	defmodule Adapter do
 		def capture(type_id, opts) do
 			case Keyword.fetch!(opts, :result) do
