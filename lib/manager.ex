@@ -94,9 +94,12 @@ defmodule Marketmailer.RegionManager do
 			expected_pages = expected_pages(context, state.expected_pages)
 			result = %{status: status, reason: Map.get(context, :reason)}
 			state = %{state | expected_pages: expected_pages, results: Map.put(state.results, page, result)}
-			{event, state} = maybe_complete(state)
 
-			{:noreply, emit(state, event)}
+			case check_cycle(state) do
+				{:completed, nil, state} -> {:noreply, state}
+				{:completed, event, state} -> {:noreply, emit(state, event)}
+				{:pending, state} -> {:noreply, state}
+			end
 		else
 			{:noreply, state}
 		end
@@ -135,8 +138,13 @@ defmodule Marketmailer.RegionManager do
 	# Shared fan-out + cycle-expectation update for both cast and info paths.
 	defp handle_page_count(count, state) do
 		state = set_expected_pages(state, count)
-		{event, state} = maybe_complete(state)
-		state = emit(state, event)
+
+		state =
+			case check_cycle(state) do
+				{:completed, nil, state} -> state
+				{:completed, event, state} -> emit(state, event)
+				{:pending, state} -> state
+			end
 
 		if count == state.page_count do
 			{:noreply, state}
@@ -168,9 +176,9 @@ defmodule Marketmailer.RegionManager do
 	defp expected_pages(%{pages: pages}, _current) when is_integer(pages) and pages > 0, do: pages
 	defp expected_pages(_context, current), do: current
 
-	defp maybe_complete(%{expected_pages: nil} = state), do: {nil, state}
+	defp check_cycle(%{expected_pages: nil} = state), do: {:pending, state}
 
-	defp maybe_complete(state) do
+	defp check_cycle(state) do
 		expected_pages = state.expected_pages
 
 		if complete?(expected_pages, state.results) do
@@ -211,9 +219,9 @@ defmodule Marketmailer.RegionManager do
 						nil
 				end
 
-			{event, new_cycle(%{state | expected_pages: expected_pages})}
+			{:completed, event, new_cycle(%{state | expected_pages: expected_pages})}
 		else
-			{nil, refresh_timer(state)}
+			{:pending, refresh_timer(state)}
 		end
 	end
 
@@ -268,8 +276,6 @@ defmodule Marketmailer.RegionManager do
 		Process.cancel_timer(timer_handle)
 		:ok
 	end
-
-	defp emit(state, nil), do: state
 
 	defp emit(state, {event, payload}) do
 		Enum.each(state.listeners, &send(&1, {event, payload}))
