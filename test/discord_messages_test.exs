@@ -29,14 +29,17 @@ defmodule Discord.MessagesTest do
 
 		assert %Embed{title: "Tritanium"} = embed
 		assert embed.author == nil
-		assert fields["Location"] == "```ansi\n\e[32mJita IV - Moon 4 - Jita - The Forge (0.9)\e[0m\n```"
-		assert fields["Sell"] == "```ansi\n\e[32m10.00 ISK\e[0m\n```"
-		assert fields["Buy"] == "```ansi\n\e[32m110.00 ISK\e[0m\n```"
-		assert fields["Margin"] == "```ansi\n\e[32m+1000.00 ISK\e[0m\n```"
+		assert fields["Location"] == "🟢 Jita IV - Moon 4 - Jita - The Forge (0.9)"
+		assert fields["Sell"] == "10.00 ISK"
+		assert fields["Buy"] == "110.00 ISK"
+		assert fields["Margin"] == "🟢 +1000.00 ISK"
 		assert embed.description =~ "janice.e-351.com/i/1001/market/2"
 		assert embed.description =~ "[Janice](https://janice.e-351.com/i/1001/market/2)"
 		assert embed.description =~ "[Eve Ref](https://everef.net/types/1001)"
 		assert embed.description =~ "[Eve Tycoon](https://evetycoon.com/market/1001)"
+
+		assert embed.description ==
+						 "[Janice](https://janice.e-351.com/i/1001/market/2)\n[Eve Ref](https://everef.net/types/1001)\n[Eve Tycoon](https://evetycoon.com/market/1001)"
 
 		lines = embed.description |> String.split("\n") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
 
@@ -49,7 +52,7 @@ defmodule Discord.MessagesTest do
 		assert embed.color == 0x43B581
 	end
 
-	test "colors loss red and unknown margin neutral" do
+	test "signals loss red and unknown margin neutral without code blocks" do
 		loss = %MarketView{
 			type_id: 1_001,
 			item_name: "Tritanium",
@@ -61,7 +64,7 @@ defmodule Discord.MessagesTest do
 		loss_embed = Discord.Messages.market_embed(loss)
 		loss_fields = Map.new(loss_embed.fields, &{&1.name, &1.value})
 
-		assert loss_fields["Margin"] == "```ansi\n\e[31m-100.00 ISK\e[0m\n```"
+		assert loss_fields["Margin"] == "🔴 -100.00 ISK"
 		assert loss_embed.color == 0xF04747
 
 		unknown = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0}
@@ -69,9 +72,9 @@ defmodule Discord.MessagesTest do
 		unknown_embed = Discord.Messages.market_embed(unknown)
 		unknown_fields = Map.new(unknown_embed.fields, &{&1.name, &1.value})
 
-		assert unknown_fields["Buy"] == "```ansi\n\e[90m? ISK\e[0m\n```"
-		assert unknown_fields["Margin"] == "```ansi\n\e[90m? ISK\e[0m\n```"
-		assert unknown_fields["Location"] == "```ansi\n\e[90m? - ? - ? (?)\e[0m\n```"
+		assert unknown_fields["Buy"] == "? ISK"
+		assert unknown_fields["Margin"] == "⚪ ? ISK"
+		assert unknown_fields["Location"] == "⚪ ? - ? - ? (?)"
 		assert unknown_embed.color == 0x7289DA
 	end
 
@@ -126,7 +129,7 @@ defmodule Discord.MessagesTest do
 		assert embed.description =~ "Plex"
 	end
 
-	test "list embed renders a fixed-width table with no pipe dividers" do
+	test "list embed renders plain mobile-friendly rows with no code blocks" do
 		embed =
 			Discord.Messages.market_list_embed([
 				%{item: "Tritanium", margin: 1_250.5, system_name: "Jita", security_status: 0.9},
@@ -134,23 +137,17 @@ defmodule Discord.MessagesTest do
 			])
 
 		description = embed.description
-		assert String.starts_with?(description, "```\n")
-		assert String.ends_with?(description, "\n```")
+		refute String.contains?(description, "```")
 		refute String.contains?(description, "|")
+		refute String.contains?(description, "\e[")
 
-		["```", header | rows] = String.split(description, "\n")
-		assert header =~ "ITEM"
-		assert header =~ "MARGIN"
-		assert header =~ "SYSTEM"
-		assert header =~ "SEC"
-
-		rows = Enum.reject(rows, &(&1 == "```" or &1 == ""))
+		rows = description |> String.split("\n") |> Enum.reject(&(&1 == ""))
 		assert length(rows) == 2
-		assert rows |> Enum.map(&String.length/1) |> Enum.uniq() |> length() == 1
-		assert String.length(header) == String.length(hd(rows))
 		assert hd(rows) =~ "Tritanium"
 		assert hd(rows) =~ "+1.3k"
+		assert hd(rows) =~ "🟢"
 		assert List.last(rows) =~ "?"
+		assert List.last(rows) =~ "⚪"
 	end
 
 	test "disambiguation embed lists candidates with a re-run hint" do
@@ -174,7 +171,7 @@ defmodule Discord.MessagesTest do
 		assert embed.description =~ "No cached market order was found for **zzz**."
 	end
 
-	test "colors location by security and keeps station-system-region order" do
+	test "signals location security with emoji and keeps station-system-region order" do
 		base = %MarketView{
 			type_id: 1_001,
 			item_name: "Tritanium",
@@ -191,13 +188,13 @@ defmodule Discord.MessagesTest do
 		fields = fn embed -> Map.new(embed.fields, &{&1.name, &1.value}) end
 
 		assert fields.(high)["Location"] ==
-						 "```ansi\n\e[32mJita IV - Moon 4 - Jita - The Forge (0.9)\e[0m\n```"
+						 "🟢 Jita IV - Moon 4 - Jita - The Forge (0.9)"
 
 		assert fields.(low)["Location"] ==
-						 "```ansi\n\e[33mJita IV - Moon 4 - Jita - The Forge (0.3)\e[0m\n```"
+						 "🟡 Jita IV - Moon 4 - Jita - The Forge (0.3)"
 
 		assert fields.(null)["Location"] ==
-						 "```ansi\n\e[31mJita IV - Moon 4 - Jita - The Forge (-0.5)\e[0m\n```"
+						 "🔴 Jita IV - Moon 4 - Jita - The Forge (-0.5)"
 	end
 
 	test "all embeds carry a SemVer version badge in the footer" do

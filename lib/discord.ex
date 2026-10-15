@@ -175,7 +175,7 @@ defmodule Discord.Messages do
 			if page_items == [] do
 				"No items are undercutting the Jita buy wall right now."
 			else
-				"```\n" <> list_header() <> "\n" <> truncate_lines(lines, "") <> "\n```"
+				truncate_lines(lines, "")
 			end
 
 		total_pages = max(1, ceil_div(length(capped), per_page))
@@ -269,35 +269,20 @@ defmodule Discord.Messages do
 		if atom_val == nil, do: if(is_map(item), do: Map.get(item, string_key)), else: atom_val
 	end
 
-	# Fixed-width table columns (monospace code block): item, margin,
-	# system, security. No region column, no pipe dividers.
+	# Short mobile-width truncation with an ellipsis marker.
+	# Plain (non-monospace) rows: no padding, each row wraps naturally.
 	@list_item_width 18
-	@list_margin_width 8
 	@list_system_width 10
-	@list_sec_width 4
-
-	defp list_header do
-		list_row(String.pad_leading("#", 3), "ITEM", "MARGIN", "SYSTEM", "SEC")
-	end
 
 	defp list_line(item, i) do
-		rank = i |> to_string() |> String.pad_leading(3)
 		name = list_truncate(list_field(item, :item, "item") || list_field(item, :item_name, "item_name"), @list_item_width)
 		margin = format_list_margin(list_field(item, :margin, "margin"))
 		system = list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
-		# to_string/1 keeps "?" and the formatted float both pad-able.
 		security = format_security(list_field(item, :security_status, "security_status")) |> to_string()
 
-		list_row(rank, name, margin, system, security)
+		"#{i}. #{sec_emoji(list_field(item, :security_status, "security_status"))} **#{name}** — #{margin} • #{system} (#{security})"
 	end
 
-	# Rank + name left-aligned, margin + security right-aligned so the
-	# decimals line up. Every row is the same width by construction.
-	defp list_row(rank, name, margin, system, security) do
-		"#{rank}. #{String.pad_trailing(name, @list_item_width)} #{String.pad_leading(margin, @list_margin_width)} #{String.pad_trailing(system, @list_system_width)} #{String.pad_leading(security, @list_sec_width)}"
-	end
-
-	# Short mobile-width truncation with an ellipsis marker.
 	defp list_truncate(nil, _max), do: "?"
 	defp list_truncate("", _max), do: "?"
 
@@ -363,45 +348,34 @@ defmodule Discord.Messages do
 
 	defp format_isk(_), do: "?"
 
-	# ANSI code-block colors (Discord only renders color inside code blocks).
-	@ansi_reset "\e[0m"
-	@ansi_green "\e[32m"
-	@ansi_yellow "\e[33m"
-	@ansi_red "\e[31m"
-	@ansi_gray "\e[90m"
+	# Mobile-friendly security signal: plain emoji, no ANSI code blocks.
+	# Highsec green, lowsec yellow, nullsec red, unknown white.
+	defp sec_emoji(nil), do: "⚪"
+	defp sec_emoji(""), do: "⚪"
 
-	defp ansi_block(color, text), do: "```ansi\n#{color}#{text}#{@ansi_reset}\n```"
-
-	# Highsec green, lowsec yellow, nullsec red, unknown gray.
-	defp security_color(nil), do: @ansi_gray
-	defp security_color(""), do: @ansi_gray
-
-	defp security_color(security) when is_binary(security) do
+	defp sec_emoji(security) when is_binary(security) do
 		case Float.parse(String.trim(security)) do
-			{number, _} -> security_color(number)
-			:error -> @ansi_gray
+			{number, _} -> sec_emoji(number)
+			:error -> "⚪"
 		end
 	end
 
-	defp security_color(security) when is_number(security) do
+	defp sec_emoji(security) when is_number(security) do
 		cond do
-			security >= 0.5 -> @ansi_green
-			security >= 0.0 -> @ansi_yellow
-			true -> @ansi_red
+			security >= 0.5 -> "🟢"
+			security >= 0.0 -> "🟡"
+			true -> "🔴"
 		end
 	end
 
-	defp security_color(_), do: @ansi_gray
+	defp sec_emoji(_), do: "⚪"
 
 	defp location_value(item) do
-		text =
-			"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
-
-		ansi_block(security_color(item.security_status), text)
+		"#{sec_emoji(item.security_status)} #{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
 	end
 
-	defp price_value(nil), do: ansi_block(@ansi_gray, "? ISK")
-	defp price_value(price), do: ansi_block(@ansi_green, "#{format_isk(price)} ISK")
+	defp price_value(nil), do: "? ISK"
+	defp price_value(price), do: "#{format_isk(price)} ISK"
 
 	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
 		janice_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
@@ -413,11 +387,7 @@ defmodule Discord.Messages do
 
 		%Embed{
 			title: item.item_name || "Market order",
-			description: "
-						[Janice](#{janice_url})
-						[Eve Ref](#{eve_ref_url})
-						[Eve Tycoon](#{eve_tycoon_url})
-						",
+			description: "[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Tycoon](#{eve_tycoon_url})",
 			# url: "https://discord.com",
 			color: embed_color(item.instant_sell_profit),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -458,16 +428,16 @@ defmodule Discord.Messages do
 	defp embed_color(profit) when is_number(profit) and profit > 0, do: @color_success
 	defp embed_color(_profit), do: @color_error
 
-	# ANSI blocks render green/red/gray text in Discord.
-	defp margin_value(nil), do: ansi_block(@ansi_gray, "? ISK")
+	# Plain margin text with an emoji signal (no code block).
+	defp margin_value(nil), do: "⚪ ? ISK"
 
 	defp margin_value(profit) when is_number(profit) do
 		sign = if profit >= 0, do: "+", else: "-"
-		color = if profit >= 0, do: @ansi_green, else: @ansi_red
-		ansi_block(color, "#{sign}#{format_isk(abs(profit))} ISK")
+		emoji = if profit >= 0, do: "🟢", else: "🔴"
+		"#{emoji} #{sign}#{format_isk(abs(profit))} ISK"
 	end
 
-	defp margin_value(_), do: ansi_block(@ansi_gray, "? ISK")
+	defp margin_value(_), do: "⚪ ? ISK"
 
 	defp or_unknown(nil), do: "?"
 	defp or_unknown(""), do: "?"
