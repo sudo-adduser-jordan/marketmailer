@@ -1,5 +1,5 @@
 {
-  ~c"0.1.15",
+  ~c"0.1.16",
   [
     {~c"0.1.14",
      [
@@ -12,8 +12,15 @@
        #
        # Database.Writer: added by this transition.
        {:add_module, Database.Writer},
+       # Discord.BotSupervisor: added by this transition.
+       {:add_module, Discord.BotSupervisor},
+       # Janice.Padding: added by this transition.
+       {:add_module, Janice.Padding},
        # Mix.Tasks.Sde.Import: added by this transition.
        {:add_module, Mix.Tasks.Sde.Import},
+       # Discord.Broadcaster: behaviour GenServer. The update suspends the process and
+       # calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Discord.Broadcaster, {:advanced, []}},
        # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
        # for it, so the code is replaced without suspending anything. If the module holds
        # state that changes shape, load_module is not enough.
@@ -21,8 +28,15 @@
        # Discord.Database: no behaviour. The code is replaced without suspending
        # anything.
        {:load_module, Discord.Database},
+       # Discord.Messages: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Messages},
+       # Etag: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Etag},
        # Etag.Database: no behaviour. The code is replaced without suspending anything.
        {:load_module, Etag.Database},
+       # Janice.Capture: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Janice.Capture},
        # Market.Database: no behaviour. The code is replaced without suspending anything.
        {:load_module, Market.Database},
        # Marketmailer.Application: behaviour Application. release_handler migrates no
@@ -35,6 +49,17 @@
        # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
        # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
        {:update, Marketmailer.PageWorker, {:advanced, []}},
+       # Marketmailer.RegionManager: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.RegionManager, {:advanced, []}},
+       # MarketmailerWeb.Router: behaviours Plug, Phoenix.VerifiedRoutes. release_handler
+       # migrates no state for it, so the code is replaced without suspending anything.
+       # If the module holds state that changes shape, load_module is not enough.
+       {:load_module, MarketmailerWeb.Router},
+       # Mix.Tasks.Chartdb: behaviour Mix.Task. release_handler migrates no state for it,
+       # so the code is replaced without suspending anything. If the module holds state
+       # that changes shape, load_module is not enough.
+       {:load_module, Mix.Tasks.Chartdb},
        # Mix.Tasks.Test.Safe: behaviour Mix.Task. release_handler migrates no state for
        # it, so the code is replaced without suspending anything. If the module holds
        # state that changes shape, load_module is not enough.
@@ -51,9 +76,23 @@
        # Market.DbWriter: removed by this transition. delete_module purges the module and
        # loads nothing, so never use it for a module the target build still has.
        {:delete_module, Market.DbWriter},
+       # Market.UpdateCoordinator: removed by this transition. delete_module purges the
+       # module and loads nothing, so never use it for a module the target build still
+       # has.
+       {:delete_module, Market.UpdateCoordinator},
+       # Marketmailer.BotSupervisor: removed by this transition. delete_module purges the
+       # module and loads nothing, so never use it for a module the target build still
+       # has.
+       {:delete_module, Marketmailer.BotSupervisor},
        # Universe.Database: removed by this transition. delete_module purges the module
        # and loads nothing, so never use it for a module the target build still has.
        {:delete_module, Universe.Database}
+     ]},
+    {~c"0.1.15",
+     [
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format}
      ]},
     {~c"0.1.13",
      [
@@ -374,8 +413,15 @@
        {:add_module, ESI.SystemInfo},
        # Market.DbWriter: added by this transition.
        {:add_module, Market.DbWriter},
+       # Market.UpdateCoordinator: added by this transition.
+       {:add_module, Market.UpdateCoordinator},
+       # Marketmailer.BotSupervisor: added by this transition.
+       {:add_module, Marketmailer.BotSupervisor},
        # Universe.Database: added by this transition.
        {:add_module, Universe.Database},
+       # Discord.Broadcaster: behaviour GenServer. The update suspends the process and
+       # calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Discord.Broadcaster, {:advanced, []}},
        # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
        # for it, so the code is replaced without suspending anything. If the module holds
        # state that changes shape, load_module is not enough.
@@ -383,8 +429,15 @@
        # Discord.Database: no behaviour. The code is replaced without suspending
        # anything.
        {:load_module, Discord.Database},
+       # Discord.Messages: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Messages},
+       # Etag: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Etag},
        # Etag.Database: no behaviour. The code is replaced without suspending anything.
        {:load_module, Etag.Database},
+       # Janice.Capture: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Janice.Capture},
        # Market.Database: no behaviour. The code is replaced without suspending anything.
        {:load_module, Market.Database},
        # Marketmailer.Application: behaviour Application. release_handler migrates no
@@ -397,6 +450,17 @@
        # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
        # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
        {:update, Marketmailer.PageWorker, {:advanced, []}},
+       # Marketmailer.RegionManager: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.RegionManager, {:advanced, []}},
+       # MarketmailerWeb.Router: behaviours Plug, Phoenix.VerifiedRoutes. release_handler
+       # migrates no state for it, so the code is replaced without suspending anything.
+       # If the module holds state that changes shape, load_module is not enough.
+       {:load_module, MarketmailerWeb.Router},
+       # Mix.Tasks.Chartdb: behaviour Mix.Task. release_handler migrates no state for it,
+       # so the code is replaced without suspending anything. If the module holds state
+       # that changes shape, load_module is not enough.
+       {:load_module, Mix.Tasks.Chartdb},
        # Mix.Tasks.Test.Safe: behaviour Mix.Task. release_handler migrates no state for
        # it, so the code is replaced without suspending anything. If the module holds
        # state that changes shape, load_module is not enough.
@@ -404,10 +468,23 @@
        # Database.Writer: removed by this transition. delete_module purges the module and
        # loads nothing, so never use it for a module the target build still has.
        {:delete_module, Database.Writer},
+       # Discord.BotSupervisor: removed by this transition. delete_module purges the
+       # module and loads nothing, so never use it for a module the target build still
+       # has.
+       {:delete_module, Discord.BotSupervisor},
+       # Janice.Padding: removed by this transition. delete_module purges the module and
+       # loads nothing, so never use it for a module the target build still has.
+       {:delete_module, Janice.Padding},
        # Mix.Tasks.Sde.Import: removed by this transition. delete_module purges the
        # module and loads nothing, so never use it for a module the target build still
        # has.
        {:delete_module, Mix.Tasks.Sde.Import}
+     ]},
+    {~c"0.1.15",
+     [
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format}
      ]},
     {~c"0.1.13",
      [

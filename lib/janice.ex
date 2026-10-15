@@ -1,3 +1,219 @@
+defmodule Janice.Padding do
+	@moduledoc """
+	Adds a white border around Janice chart PNGs so the graph no longer
+	touches the Discord embed edge.
+
+	Pure OTP (`:zlib` + binary matching, no extra deps). Only 8-bit
+	non-interlaced grayscale/RGB/RGBA are padded; anything else (palette,
+	16-bit, interlaced, corrupt) is returned unchanged so a capture can
+	never break because of its border.
+	"""
+
+	@signature <<137, 80, 78, 71, 13, 10, 26, 10>>
+	@default_pad 16
+
+	def default_pad, do: @default_pad
+
+	@doc "Returns `png` with `pad` white pixels on every side, or unchanged when unsupported."
+	def pad(png, pad \\ @default_pad)
+
+	def pad(png, pad) when is_binary(png) and is_integer(pad) and pad > 0 do
+		with {:ok, parts} <- parse(png),
+				 {:ok, out} <- render(parts, pad) do
+			out
+		else
+			_ -> png
+		end
+	end
+
+	def pad(png, _pad) when is_binary(png), do: png
+	def pad(other, _pad), do: other
+
+	@doc "Reads `{:ok, {width, height}}` from a PNG binary."
+	def dimensions(<<@signature, rest::binary>>) do
+		with {:ok, header, _others, _idat} <- parse_chunks(rest, nil, [], []),
+				 {:ok, {w, h, _color}, _bpp} <- pixel_info(header) do
+			{:ok, {w, h}}
+		else
+			_ -> :error
+		end
+	end
+
+	def dimensions(_), do: :error
+
+	# --- Parse ---
+
+	defp parse(<<@signature, rest::binary>>) do
+		with {:ok, header, others, idat} <- parse_chunks(rest, nil, [], []),
+				 {:ok, {w, h, color}, bpp} <- pixel_info(header) do
+			{:ok, {header, others, idat, w, h, color, bpp}}
+		else
+			_ -> :error
+		end
+	end
+
+	defp parse(_), do: :error
+
+	defp parse_chunks(
+				 <<len::32-big, type::binary-4, data::binary-size(len), _crc::32-big, rest::binary>>,
+				 header,
+				 others,
+				 idats
+			 ) do
+		cond do
+			type == "IHDR" -> parse_chunks(rest, data, others, idats)
+			type == "IDAT" -> parse_chunks(rest, header, others, [data | idats])
+			type == "IEND" -> {:ok, header, Enum.reverse(others), idats |> Enum.reverse() |> IO.iodata_to_binary()}
+			true -> parse_chunks(rest, header, [{type, data} | others], idats)
+		end
+	end
+
+	defp parse_chunks(_, _, _, _), do: :error
+
+	# Header: width, height, bit_depth, color_type, compression, filter, interlace.
+	defp pixel_info(<<w::32-big, h::32-big, 8, color, 0, 0, 0>>) when color in [0, 2, 6] and w > 0 and h > 0 do
+		bpp = if color == 0, do: 1, else: if(color == 2, do: 3, else: 4)
+		{:ok, {w, h, color}, bpp}
+	end
+
+	defp pixel_info(_), do: :error
+
+	# --- Render ---
+
+	defp render({header, others, idat, w, h, color, bpp}, pad) do
+		<<_old_w::32-big, _old_h::32-big, depth, _color, comp, filter, interlace>> = header
+
+		with {:ok, rows} <- inflate_rows(idat, w, h, bpp),
+				 {:ok, compressed} <- border_rows(rows, w, color, pad) |> deflate() do
+			new_header = <<w + pad * 2::32-big, h + pad * 2::32-big, depth, color, comp, filter, interlace>>
+
+			{:ok,
+			 @signature <>
+				 chunk("IHDR", new_header) <>
+				 Enum.map_join(others, fn {type, data} -> chunk(type, data) end) <>
+				 chunk("IDAT", compressed) <>
+				 chunk("IEND", "")}
+		else
+			_ -> :error
+		end
+	end
+
+	defp chunk(type, data),
+		do: <<byte_size(data)::32-big, type::binary, data::binary, :erlang.crc32(type <> data)::32-big>>
+
+	defp inflate_rows(idat, w, h, bpp) do
+		z = :zlib.open()
+
+		try do
+			:ok = :zlib.inflateInit(z)
+			raw = :zlib.inflate(z, idat) |> IO.iodata_to_binary()
+			:ok = :zlib.inflateEnd(z)
+			unfilter_rows(raw, w, h, bpp)
+		catch
+			_, _ -> :error
+		after
+			:zlib.close(z)
+		end
+	end
+
+	defp deflate(raw) do
+		z = :zlib.open()
+
+		try do
+			:ok = :zlib.deflateInit(z)
+			compressed = :zlib.deflate(z, raw, :finish) |> IO.iodata_to_binary()
+			:ok = :zlib.deflateEnd(z)
+			{:ok, compressed}
+		catch
+			_, _ -> :error
+		after
+			:zlib.close(z)
+		end
+	end
+
+	# --- Scanline unfiltering (RFC 2083 §6.5) ---
+
+	defp unfilter_rows(raw, w, h, bpp) do
+		stride = w * bpp
+		unfilter_loop(raw, h, stride, bpp, :binary.copy(<<0>>, stride), [])
+	end
+
+	defp unfilter_loop(<<>>, 0, _stride, _bpp, _prev, acc), do: {:ok, Enum.reverse(acc)}
+
+	defp unfilter_loop(<<f::8, rest::binary>>, n, stride, bpp, prev, acc) when f in 0..4 and n > 0 do
+		case rest do
+			<<scan::binary-size(^stride), tail::binary>> ->
+				row = recon_row(f, scan, prev, bpp)
+				unfilter_loop(tail, n - 1, stride, bpp, row, [row | acc])
+
+			_ ->
+				:error
+		end
+	end
+
+	defp unfilter_loop(_, _, _, _, _, _), do: :error
+
+	# Left-to-right reconstruction; `acc` holds the newest byte first, so
+	# the byte `bpp` positions behind the current one is at index `bpp - 1`
+	# (`bpp <= 4`, so the lookup stays constant-time).
+	defp recon_row(f, scan, prev, bpp) do
+		s = scan |> :binary.bin_to_list() |> List.to_tuple()
+		p = prev |> :binary.bin_to_list() |> List.to_tuple()
+		build_row(f, s, p, bpp, 1, tuple_size(s), [])
+	end
+
+	defp build_row(_f, _s, _p, _bpp, x, n, acc) when x > n, do: acc |> Enum.reverse() |> :binary.list_to_bin()
+
+	defp build_row(f, s, p, bpp, x, n, acc) do
+		sv = elem(s, x - 1)
+		a = if x - bpp >= 1, do: Enum.at(acc, bpp - 1), else: 0
+		b = elem(p, x - 1)
+		c = if x - bpp >= 1, do: elem(p, x - bpp - 1), else: 0
+
+		raw =
+			case f do
+				0 -> sv
+				1 -> sv + a
+				2 -> sv + b
+				3 -> sv + div(a + b, 2)
+				4 -> sv + paeth(a, b, c)
+			end
+
+		build_row(f, s, p, bpp, x + 1, n, [rem(raw, 256) | acc])
+	end
+
+	defp paeth(a, b, c) do
+		p = a + b - c
+		pa = abs(p - a)
+		pb = abs(p - b)
+		pc = abs(p - c)
+
+		cond do
+			pa <= pb and pa <= pc -> a
+			pb <= pc -> b
+			true -> c
+		end
+	end
+
+	# --- Border ---
+
+	# Rows carry no filter byte here; filter 0 is prepended per row.
+	defp border_rows(rows, w, color, pad) do
+		white_px =
+			case color do
+				0 -> <<255>>
+				2 -> <<255, 255, 255>>
+				_ -> <<255, 255, 255, 255>>
+			end
+
+		side = :binary.copy(white_px, pad)
+		edge = [0, :binary.copy(white_px, w + pad * 2)]
+		middle = Enum.map(rows, fn row -> [0, side, row, side] end)
+
+		IO.iodata_to_binary(List.duplicate(edge, pad) ++ middle ++ List.duplicate(edge, pad))
+	end
+end
+
 defmodule Janice.Capture do
 	@moduledoc """
 	Provides an injectable boundary for capturing Janice market charts.
@@ -11,7 +227,8 @@ defmodule Janice.Capture do
 	def fallback_filename, do: "janice-failed.png"
 
 	def fallback_image do
-		[__DIR__, "..", "assets", fallback_filename()] |> Path.join() |> Path.expand() |> File.read!()
+		png = [__DIR__, "..", "assets", fallback_filename()] |> Path.join() |> Path.expand() |> File.read!()
+		Janice.Padding.pad(png)
 	end
 
 	def capture(type_id, opts \\ []) when is_integer(type_id) do
@@ -22,7 +239,13 @@ defmodule Janice.Capture do
 				Application.get_env(:marketmailer, :janice_capture_adapter, Janice.Playwright)
 			)
 
-		adapter.capture(type_id, Keyword.delete(opts, :adapter))
+		padding = Keyword.get(opts, :padding, Janice.Padding.default_pad())
+		inner_opts = opts |> Keyword.drop([:adapter, :padding])
+
+		case adapter.capture(type_id, inner_opts) do
+			{:ok, png} -> {:ok, Janice.Padding.pad(png, padding)}
+			other -> other
+		end
 	end
 end
 
