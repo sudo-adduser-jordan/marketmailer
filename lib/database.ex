@@ -110,10 +110,11 @@ defmodule Etag.Database do
 	# unexpected entry (bad Expires header / clock skew) and refetched.
 	@max_ttl_ms 1_800_000
 
+	# Rows are always {url, etag, expires_at}: EtagCache warms the table in
+	# that shape and every upsert writes it back the same way.
 	def get_etag(url) do
 		case :ets.lookup(:market_cache, url) do
 			[{^url, etag, _expires_at}] -> etag
-			[{^url, etag}] -> etag
 			_ -> fetch_etag(url)
 		end
 	end
@@ -121,7 +122,6 @@ defmodule Etag.Database do
 	def get_expiry(url) do
 		case :ets.lookup(:market_cache, url) do
 			[{^url, _etag, expires_at}] when is_integer(expires_at) -> expires_at
-			[{^url, _etag}] -> fetch_expiry(url)
 			_ -> fetch_expiry(url)
 		end
 	end
@@ -197,8 +197,6 @@ defmodule Etag.Database do
 			_ -> nil
 		end
 	end
-
-	def max_ttl_ms, do: @max_ttl_ms
 
 	defp fetch_etag(url) do
 		query = from(tag in "etags", where: tag.url == ^url, select: {tag.etag, tag.expires_at})
@@ -327,8 +325,6 @@ defmodule Market.Database do
 
 	def upsert_chunk_size, do: @upsert_chunk_size
 
-	def get_list_less_than_jita_buy, do: []
-
 	# Every user-facing market query, served from the single database.
 	# Pure reads, fully SDE-sourced: types, systems and NPC station names
 	# come from `mix sde.import`. Player-owned structures are dynamic and
@@ -449,8 +445,10 @@ defmodule Market.Database do
 	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
 
 	# Flatten for matching: trim, collapse all whitespace runs to one space,
-	# downcase. Returns "" for non-matching input.
-	defp normalize_item_name(name) do
+	# downcase. Returns "" for non-matching input. Public so every
+	# name-normalizing caller (suggest, item lookup, the Discord consumer's
+	# exact-match check) shares one definition.
+	def normalize_item_name(name) do
 		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()
 	end
 

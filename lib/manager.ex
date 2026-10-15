@@ -105,13 +105,6 @@ defmodule Marketmailer.RegionManager do
 		end
 	end
 
-	# Legacy direct sends from workers (`send(manager, {:update_page_count, n})`).
-	@impl true
-	def handle_info({:update_page_count, count}, state) do
-		count = max(count, 1)
-		handle_page_count(count, state)
-	end
-
 	@impl true
 	def handle_info({:cycle_timeout, timer_token}, state) do
 		case state.timer do
@@ -164,8 +157,7 @@ defmodule Marketmailer.RegionManager do
 		%{state | cycle_id: nil, started: MapSet.new(), results: %{}, timer: nil}
 	end
 
-	defp set_expected_pages(%{expected_pages: previous} = state, count)
-			 when is_integer(previous) and previous > count do
+	defp set_expected_pages(%{expected_pages: previous} = state, count) when is_integer(previous) and previous > count do
 		started = MapSet.filter(state.started, &(&1 <= count))
 		results = Map.filter(state.results, fn {page, _result} -> page <= count end)
 		%{state | expected_pages: count, started: started, results: results}
@@ -260,8 +252,7 @@ defmodule Marketmailer.RegionManager do
 	# embed shows "Page 3: cycle_timeout" instead of "Page ?".
 	defp pending_failures(%{expected_pages: nil}), do: [%{page: nil, reason: :cycle_timeout}]
 
-	defp pending_failures(%{expected_pages: expected, results: results})
-			 when is_integer(expected) and expected > 0 do
+	defp pending_failures(%{expected_pages: expected, results: results}) when is_integer(expected) and expected > 0 do
 		pending = for page <- 1..expected//1, not Map.has_key?(results, page), do: page
 
 		case pending do

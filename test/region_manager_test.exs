@@ -36,8 +36,8 @@ defmodule Marketmailer.RegionManagerTest do
 		assert [{_pid, _}] = Registry.lookup(Marketmailer.Registry, {:page, region, 1})
 
 		# PageWorker 1 reports X-Pages -> manager provides workers for the rest.
-		# `send` is fire-and-forget, so keep checking until the workers show up.
-		send(manager, {:update_page_count, 3})
+		# The cast is fire-and-forget, so keep checking until workers appear.
+		Marketmailer.RegionManager.page_count(region, 3)
 		assert_all_pages(region, [1, 2, 3])
 
 		assert %{page_count: 3} = :sys.get_state(manager)
@@ -48,10 +48,10 @@ defmodule Marketmailer.RegionManagerTest do
 		region = 99_000_002
 		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
 
-		send(manager, {:update_page_count, 3})
+		Marketmailer.RegionManager.page_count(region, 3)
 		assert_all_pages(region, [1, 2, 3])
 
-		send(manager, {:update_page_count, 1})
+		Marketmailer.RegionManager.page_count(region, 1)
 		assert_no_pages(region, [2, 3])
 		assert_all_pages(region, [1])
 
@@ -64,7 +64,7 @@ defmodule Marketmailer.RegionManagerTest do
 		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
 
 		before = DynamicSupervisor.count_children(Marketmailer.PageSup)
-		send(manager, {:update_page_count, 1})
+		Marketmailer.RegionManager.page_count(region, 1)
 		# Asserting nothing happened: give the manager 200ms to misbehave first.
 		Process.sleep(200)
 
