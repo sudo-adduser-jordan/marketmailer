@@ -2,25 +2,42 @@ defmodule Discord.BroadcasterTest do
 	use ExUnit.Case, async: false
 
 	setup do
+		ensure_ets(:esi_error_state)
+		ensure_ets(:market_cache)
+
+		if !Process.whereis(Marketmailer.Registry) do
+			start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
+		end
+
+		if !Process.whereis(Marketmailer.PageSup) do
+			start_supervised!({DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup})
+		end
+
+		# Park every PageWorker: with maintenance active no worker calls ESI.
+		:ets.insert(:esi_error_state, {:maintenance_mode, System.system_time(:millisecond) + 120_000})
+
+		on_exit(fn ->
+			:ets.delete(:esi_error_state, :maintenance_mode)
+		end)
+
 		unique = System.unique_integer([:positive])
-		coordinator = :"broadcaster_coordinator_#{unique}"
 		task_supervisor = :"broadcaster_tasks_#{unique}"
-		start_supervised!({Market.UpdateCoordinator, name: coordinator, cycle_timeout: 1_000})
 		start_supervised!({Task.Supervisor, name: task_supervisor})
-		{:ok, coordinator: coordinator, task_supervisor: task_supervisor}
+		{:ok, task_supervisor: task_supervisor}
 	end
 
-	test "broadcasts the undercut list to every channel", %{coordinator: coordinator} do
+	test "broadcasts the undercut list to every channel", %{task_supervisor: task_supervisor} do
 		test_pid = self()
 		channel_ids = [100, 200]
+		region = 97_000_010
 
-		broadcaster =
-			start_broadcaster(coordinator, channel_ids, market_list(), fn channel, payload ->
+		_broadcaster =
+			start_broadcaster([region], channel_ids, market_list(), fn channel, payload ->
 				send(test_pid, {:sent, channel, payload})
 				{:ok, :sent}
 			end)
 
-		complete_cycle(coordinator, 10, :updated)
+		complete_cycle(region, :updated)
 
 		assert_receive {:sent, 100, first_payload}
 		assert_receive {:sent, 200, second_payload}
@@ -30,56 +47,56 @@ defmodule Discord.BroadcasterTest do
 		assert embed.description =~ "Tritanium"
 		refute Map.has_key?(first_payload, :files)
 		assert second_payload == first_payload
+	end
+
+	test "ignores a failed refresh without notifying Discord", %{task_supervisor: _task_supervisor} do
+		region = 97_000_011
+		_broadcaster = start_broadcaster([region], [300], market_list(), fn channel, payload ->
+			send(self(), {:sent, channel, payload})
+			{:ok, :sent}
+		end)
+
+		Marketmailer.RegionManager.page_started(region, 1)
+		Marketmailer.RegionManager.page_result(region, 1, :failed, %{pages: 1, reason: :timeout})
+
+		refute_receive {:sent, _channel, _payload}, 150
+	end
+
+	test "stays silent when the market query has no items", %{task_supervisor: _task_supervisor} do
+		region = 97_000_012
+		_broadcaster = start_broadcaster([region], [400], [], fn channel, payload ->
+			send(self(), {:sent, channel, payload})
+			{:ok, :sent}
+		end)
+
+		complete_cycle(region, :updated)
+
+		refute_receive {:sent, _channel, _payload}, 150
+	end
+
+	test "does nothing when no channels are registered", %{task_supervisor: _task_supervisor} do
+		region = 97_000_013
+		broadcaster = start_broadcaster([region], [], market_list(), fn _channel, _payload ->
+			flunk("delivery should not be called")
+		end)
+
+		complete_cycle(region, :updated)
+
+		refute_receive {:sent, _channel, _payload}, 150
 		assert Process.alive?(broadcaster)
 	end
 
-	test "ignores a failed refresh without notifying Discord", %{coordinator: coordinator} do
-		_broadcaster =
-			start_broadcaster(coordinator, [300], market_list(), fn channel, payload ->
-				send(self(), {:sent, channel, payload})
-				{:ok, :sent}
-			end)
-
-		Market.UpdateCoordinator.page_started(11, 1, coordinator)
-		Market.UpdateCoordinator.page_result(11, 1, :failed, %{pages: 1, reason: :timeout}, coordinator)
-
-		refute_receive {:sent, _channel, _payload}, 150
-	end
-
-	test "stays silent when the market query has no items", %{coordinator: coordinator} do
-		_broadcaster =
-			start_broadcaster(coordinator, [400], [], fn channel, payload ->
-				send(self(), {:sent, channel, payload})
-				{:ok, :sent}
-			end)
-
-		complete_cycle(coordinator, 12, :updated)
-
-		refute_receive {:sent, _channel, _payload}, 150
-	end
-
-	test "does nothing when no channels are registered", %{coordinator: coordinator} do
-		broadcaster =
-			start_broadcaster(coordinator, [], market_list(), fn _channel, _payload ->
-				flunk("delivery should not be called")
-			end)
-
-		complete_cycle(coordinator, 13, :updated)
-
-		refute_receive {:sent, _channel, _payload}, 150
-		assert Process.alive?(broadcaster)
-	end
-
-	test "suppresses duplicate events for the same refresh cycle", %{coordinator: coordinator} do
+	test "suppresses duplicate events for the same refresh cycle", %{task_supervisor: _task_supervisor} do
 		test_pid = self()
+		region = 97_000_014
 
 		broadcaster =
-			start_broadcaster(coordinator, [500], market_list(), fn channel, payload ->
+			start_broadcaster([region], [500], market_list(), fn channel, payload ->
 				send(test_pid, {:sent, channel, payload})
 				{:ok, :sent}
 			end)
 
-		summary = %{region: 14, cycle_id: 99, pages: 1, updated_pages: [1]}
+		summary = %{region: region, cycle_id: 99, pages: 1, updated_pages: [1]}
 		GenServer.cast(broadcaster, {:region_refresh_complete, summary})
 		GenServer.cast(broadcaster, {:region_refresh_complete, summary})
 
@@ -87,50 +104,54 @@ defmodule Discord.BroadcasterTest do
 		refute_receive {:sent, 500, _payload}, 150
 	end
 
-	test "keeps the broadcaster alive when Discord delivery fails", %{coordinator: coordinator} do
+	test "keeps the broadcaster alive when Discord delivery fails", %{task_supervisor: _task_supervisor} do
 		test_pid = self()
+		region = 97_000_015
 
 		broadcaster =
-			start_broadcaster(coordinator, [600], market_list(), fn channel, _payload ->
+			start_broadcaster([region], [600], market_list(), fn channel, _payload ->
 				send(test_pid, {:attempted, channel})
 				{:error, :forbidden}
 			end)
 
-		complete_cycle(coordinator, 15, :updated)
+		complete_cycle(region, :updated)
 
 		assert_receive {:attempted, 600}
 		assert Process.alive?(broadcaster)
 	end
 
-	test "handles a missing Discord bot without crashing", %{coordinator: coordinator} do
-		broadcaster = start_broadcaster(coordinator, [700], market_list(), nil)
+	test "handles a missing Discord bot without crashing", %{task_supervisor: _task_supervisor} do
+		region = 97_000_016
+		broadcaster = start_broadcaster([region], [700], market_list(), nil)
 
-		complete_cycle(coordinator, 16, :updated)
+		complete_cycle(region, :updated)
 
 		assert Process.alive?(broadcaster)
 	end
 
-	test "stays silent when the market query returns an invalid shape", %{coordinator: coordinator} do
-		_broadcaster =
-			start_broadcaster(coordinator, [900], %{unexpected: :shape}, fn channel, payload ->
-				send(self(), {:sent, channel, payload})
-				{:ok, :sent}
-			end)
+	test "stays silent when the market query returns an invalid shape", %{
+		task_supervisor: _task_supervisor
+	} do
+		region = 97_000_019
+		_broadcaster = start_broadcaster([region], [900], %{unexpected: :shape}, fn channel, payload ->
+			send(self(), {:sent, channel, payload})
+			{:ok, :sent}
+		end)
 
-		complete_cycle(coordinator, 19, :updated)
+		complete_cycle(region, :updated)
 
 		refute_receive {:sent, _channel, _payload}, 150
 	end
 
 	test "keeps the broadcaster alive after an async refresh completes", %{
-		coordinator: coordinator,
 		task_supervisor: task_supervisor
 	} do
 		test_pid = self()
+		region = 97_000_017
 
 		broadcaster =
 			start_broadcaster(
-				coordinator,
+				[region],
 				[800],
 				market_list(),
 				fn channel, _payload ->
@@ -141,15 +162,17 @@ defmodule Discord.BroadcasterTest do
 				task_supervisor: task_supervisor
 			)
 
-		complete_cycle(coordinator, 17, :updated)
+		complete_cycle(region, :updated)
 		assert_receive {:sent, 800}
 
-		complete_cycle(coordinator, 18, :updated)
+		complete_cycle(region, :updated)
 		assert_receive {:sent, 800}
 		assert Process.alive?(broadcaster)
 	end
 
-	defp start_broadcaster(coordinator, channels, market_result, deliver_fun, opts \\ []) do
+	defp start_broadcaster(regions, channels, market_result, deliver_fun, opts \\ []) do
+		Enum.each(regions, &start_cycle_manager/1)
+
 		name = :"broadcaster_#{System.unique_integer([:positive])}"
 		deliver_opts = if deliver_fun, do: [deliver_fun: deliver_fun], else: []
 
@@ -161,7 +184,7 @@ defmodule Discord.BroadcasterTest do
 				{Discord.Broadcaster,
 				 [
 					 name: name,
-					 coordinator: coordinator,
+					 regions: regions,
 					 async: Keyword.get(opts, :async, false),
 					 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 					 channels_fun: fn -> channels end,
@@ -172,9 +195,31 @@ defmodule Discord.BroadcasterTest do
 		pid
 	end
 
-	defp complete_cycle(coordinator, region, status) do
-		Market.UpdateCoordinator.page_started(region, 1, coordinator)
-		Market.UpdateCoordinator.page_result(region, 1, status, %{pages: 1}, coordinator)
+	defp start_cycle_manager(region) do
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region, cycle_timeout: 1_000)
+
+		on_exit(fn ->
+			for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, region, 1}) do
+				try do
+					GenServer.stop(pid, :normal)
+				catch
+					:exit, _ -> :ok
+				end
+			end
+
+			try do
+				GenServer.stop(manager, :normal)
+			catch
+				:exit, _ -> :ok
+			end
+		end)
+
+		manager
+	end
+
+	defp complete_cycle(region, status) do
+		Marketmailer.RegionManager.page_started(region, 1)
+		Marketmailer.RegionManager.page_result(region, 1, status, %{pages: 1})
 	end
 
 	defp market_list do
@@ -189,5 +234,12 @@ defmodule Discord.BroadcasterTest do
 				type_id: 1_001
 			}
 		]
+	end
+
+	defp ensure_ets(name) do
+		case :ets.whereis(name) do
+			:undefined -> :ets.new(name, [:named_table, :set, :public])
+			_tid -> :ok
+		end
 	end
 end

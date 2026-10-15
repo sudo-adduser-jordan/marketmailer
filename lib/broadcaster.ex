@@ -1,7 +1,7 @@
 defmodule Discord.Broadcaster do
 	@moduledoc """
 	Listens for completed market refreshes and broadcasts the undercut list
-	to registered channels. Failed refreshes are log-only (the coordinator
+	to registered channels. Failed refreshes are log-only (each RegionManager
 	already emits a `region_refresh_failed` warning to `logs/errors.jsonl`);
 	nothing is sent to Discord for them so one flaky page cannot spam every
 	channel.
@@ -11,7 +11,7 @@ defmodule Discord.Broadcaster do
 
 	alias Discord.Database, as: DiscordDatabase
 	alias Discord.Messages
-	alias Market.UpdateCoordinator
+	alias Marketmailer.RegionManager
 	alias Nostrum.Api
 	alias Nostrum.Bot
 
@@ -24,8 +24,8 @@ defmodule Discord.Broadcaster do
 
 	@impl true
 	def init(opts) do
-		coordinator = Keyword.get(opts, :coordinator, UpdateCoordinator)
-		:ok = UpdateCoordinator.subscribe(self(), coordinator)
+		regions = Keyword.get(opts, :regions, Marketmailer.RegionManagerSupervisor.region_ids())
+		Enum.each(regions, &subscribe_region/1)
 
 		{:ok,
 		 %{
@@ -44,8 +44,7 @@ defmodule Discord.Broadcaster do
 	def handle_info({:region_refresh_complete, summary}, state) do
 		start_refresh(summary, state)
 	end
-
-	# Failures are intentionally log-only: UpdateCoordinator already logs
+	# Failures are intentionally log-only: each RegionManager already logs
 	# `region_refresh_failed`. Sending an embed per failed cycle spammed
 	# every registered channel on transient 429/503/timeouts and on every
 	# 10-minute cycle_timeout.
@@ -61,6 +60,17 @@ defmodule Discord.Broadcaster do
 
 	@impl true
 	def handle_cast(message, state), do: handle_info(message, state)
+
+	# RegionManagers boot before the broadcaster in prod, but a restarted
+	# manager or broadcaster must still find each other: managers auto-attach
+	# the default broadcaster on init, and missing regions here are simply
+	# skipped (their manager attaches us when it boots).
+	defp subscribe_region(region) do
+		RegionManager.subscribe(region, self())
+		:ok
+	catch
+		:exit, _ -> :ok
+	end
 
 	defp start_refresh(summary, state) do
 		key = {Map.get(summary, :region), Map.get(summary, :cycle_id)}

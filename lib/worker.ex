@@ -14,7 +14,7 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	@impl true
-	def init({manager, id, page}) do
+	def init({_manager, id, page}) do
 		# Crash resume: delay first fetch until the persisted Expires passes.
 		# Unexpected entries (missing/expired/corrupt) fetch immediately with a
 		# tiny stagger so a cold boot does not fire every page in the same ms.
@@ -25,7 +25,7 @@ defmodule Marketmailer.PageWorker do
 			end
 
 		Process.send_after(self(), :work, delay)
-		{:ok, %{manager: manager, id: id, page: page, errors: 0}}
+		{:ok, %{id: id, page: page, errors: 0}}
 	end
 
 	@impl true
@@ -47,9 +47,9 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	defp perform_fetch(state) do
-		%{manager: manager, id: id, page: page, errors: errs} = state
+		%{id: id, page: page, errors: errs} = state
 		ESI.wait_for_error_window()
-		Market.UpdateCoordinator.page_started(id, page)
+		Marketmailer.RegionManager.page_started(id, page)
 
 		case ESI.fetch(id, page) do
 			{:ok, data, ctx} ->
@@ -68,13 +68,13 @@ defmodule Marketmailer.PageWorker do
 
 				case persist_orders(data, ctx) do
 					:ok ->
-						Market.UpdateCoordinator.page_result(id, page, :updated, %{pages: ctx.pages})
+						Marketmailer.RegionManager.page_result(id, page, :updated, %{pages: ctx.pages})
 
 					{:error, reason} ->
-						Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: reason})
+						Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: reason})
 				end
 
-				new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
+				new_state = notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})
 				{:noreply, new_state}
 
 			{:not_modified, ctx} ->
@@ -92,12 +92,12 @@ defmodule Marketmailer.PageWorker do
 
 				case safe_upsert_etag(ctx) do
 					:ok ->
-						Market.UpdateCoordinator.page_result(id, page, :not_modified, %{pages: ctx.pages})
-						new_state = notify_and_reschedule(manager, ctx.pages, ctx.ttl, %{state | errors: 0})
+						Marketmailer.RegionManager.page_result(id, page, :not_modified, %{pages: ctx.pages})
+						new_state = notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})
 						{:noreply, new_state}
 
 					{:error, reason} ->
-						Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: reason})
+						Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: reason})
 						schedule_next(backoff_ms(state.errors, {id, page}))
 						{:noreply, %{state | errors: state.errors + 1}}
 				end
@@ -114,7 +114,7 @@ defmodule Marketmailer.PageWorker do
 					"503 #{id}     \t #{ctx.url}"
 				)
 
-				Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: :service_unavailable})
+				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :service_unavailable})
 				schedule_next(@ping_interval)
 				{:noreply, state}
 
@@ -133,7 +133,7 @@ defmodule Marketmailer.PageWorker do
 					"429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}"
 				)
 
-				Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: :rate_limited})
+				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :rate_limited})
 				schedule_next(max(ctx.retry_after_ms, 1_000))
 				{:noreply, %{state | errors: 0}}
 
@@ -152,7 +152,7 @@ defmodule Marketmailer.PageWorker do
 					"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
 				)
 
-				Market.UpdateCoordinator.page_result(id, page, :failed, %{reason: failure_reason(reason)})
+				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: failure_reason(reason)})
 				{:noreply, %{state | errors: errs + 1}}
 		end
 	end
@@ -196,7 +196,7 @@ defmodule Marketmailer.PageWorker do
 
 	# 304 path must not crash the GenServer when the pool is saturated:
 	# a DBConnection queue_timeout here used to terminate the worker without
-	# ever reporting to the UpdateCoordinator, stalling the region cycle.
+	# ever reporting to the RegionManager, stalling the region cycle.
 	defp safe_upsert_etag(%{etag: nil}), do: :ok
 
 	defp safe_upsert_etag(%{etag: false}), do: :ok
@@ -232,7 +232,7 @@ defmodule Marketmailer.PageWorker do
 
 	# Transport-level failures (DNS, TCP reset, TLS close, timeouts, no
 	# route to host) mean the pipe is down, not that ESI rejected us. Report
-	# a stable :offline reason so coordinator logs stay greppable instead of
+	# a stable :offline reason so cycle logs stay greppable instead of
 	# a different struct dump per HTTP client, and keep counting against the
 	# exponential backoff so a dead link backs off to 5m instead of hammering
 	# it once a minute from every page worker.
@@ -284,8 +284,8 @@ defmodule Marketmailer.PageWorker do
 		end
 	end
 
-	defp notify_and_reschedule(manager, count, ttl, state) do
-		send(manager, {:update_page_count, count})
+	defp notify_and_reschedule(id, count, ttl, state) do
+		Marketmailer.RegionManager.page_count(id, count)
 		schedule_next(ttl)
 		state
 	end

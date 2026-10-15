@@ -2,36 +2,286 @@ defmodule Marketmailer.RegionManager do
 	@moduledoc false
 	use GenServer, restart: :permanent
 
-	def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
+	@default_cycle_timeout 10 * 60_000
+
+	def start_link(id, opts \\ []) when is_integer(id) and is_list(opts) do
+		GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
+	end
+
 	defp via(id), do: {:via, Registry, {Marketmailer.Registry, {:region, id}}}
 
+	def subscribe(region, pid \\ self()) when is_integer(region) do
+		GenServer.call(via(region), {:subscribe, pid})
+	end
+
+	def page_started(region, page) when is_integer(region) and is_integer(page) do
+		GenServer.cast(via(region), {:page_started, page})
+	end
+
+	def page_count(region, count) when is_integer(region) and is_integer(count) do
+		GenServer.cast(via(region), {:update_page_count, count})
+	end
+
+	def page_result(region, page, status, context \\ %{})
+			when is_integer(region) and is_integer(page) and is_atom(status) do
+		GenServer.cast(via(region), {:page_result, page, status, context})
+	end
+
 	@impl true
-	def init(id) do
+	def init({id, opts}) do
+		timeout = Keyword.get(opts, :cycle_timeout, @default_cycle_timeout)
 		# Crash resume: pre-start workers for every page with a known etag row
 		# so each resumes its own persisted TTL timer. Page 1 always starts so
 		# the page count is rediscovered even with a cold etags table.
 		pages = [1 | Etag.Database.pages_for_region(id)] |> Enum.uniq()
 		Enum.each(pages, &start_page(id, &1))
-		{:ok, %{id: id, page_count: Enum.max(pages)}}
+
+		listeners =
+			case Process.whereis(Discord.Broadcaster) do
+				nil -> MapSet.new()
+				pid -> MapSet.new([pid])
+			end
+
+		{:ok,
+		 %{
+			 id: id,
+			 page_count: Enum.max(pages),
+			 cycle_id: nil,
+			 started: MapSet.new(),
+			 results: %{},
+			 expected_pages: nil,
+			 timer: nil,
+			 listeners: listeners,
+			 cycle_timeout: timeout
+		 }}
 	end
 
 	@impl true
-	def handle_info({:update_page_count, count}, %{id: id, page_count: old} = state) do
-		count = max(count, 1)
-		Market.UpdateCoordinator.page_count(id, count)
+	def handle_call({:subscribe, pid}, _from, state) do
+		{:reply, :ok, %{state | listeners: MapSet.put(state.listeners, pid)}}
+	end
 
-		if count == old do
+	@impl true
+	def handle_cast({:page_started, page}, state) do
+		state =
+			if is_nil(state.cycle_id) do
+				%{state | cycle_id: System.unique_integer([:positive, :monotonic])}
+			else
+				state
+			end
+
+		state = %{state | started: MapSet.put(state.started, page)}
+
+		state =
+			if Map.has_key?(state.results, page) do
+				%{state | results: Map.delete(state.results, page)}
+			else
+				state
+			end
+
+		{:noreply, refresh_timer(state)}
+	end
+
+	@impl true
+	def handle_cast({:update_page_count, count}, state) do
+		count = max(count, 1)
+		handle_page_count(count, state)
+	end
+
+	@impl true
+	def handle_cast({:page_result, page, status, context}, state) do
+		if MapSet.member?(state.started, page) do
+			expected_pages = expected_pages(context, state.expected_pages)
+			result = %{status: status, reason: Map.get(context, :reason)}
+			state = %{state | expected_pages: expected_pages, results: Map.put(state.results, page, result)}
+			{event, state} = maybe_complete(state)
+
+			{:noreply, emit(state, event)}
+		else
+			{:noreply, state}
+		end
+	end
+
+	# Legacy direct sends from workers (`send(manager, {:update_page_count, n})`).
+	@impl true
+	def handle_info({:update_page_count, count}, state) do
+		count = max(count, 1)
+		handle_page_count(count, state)
+	end
+
+	@impl true
+	def handle_info({:cycle_timeout, timer_token}, state) do
+		case state.timer do
+			{^timer_token, _timer_handle} ->
+				failures = pending_failures(state)
+
+				failure = %{
+					region: state.id,
+					cycle_id: state.cycle_id,
+					pages: state.expected_pages,
+					failures: failures
+				}
+
+				log_failure(state.id, failure)
+				{:noreply, state |> new_cycle() |> emit({:region_refresh_failed, failure})}
+
+			_ ->
+				{:noreply, state}
+		end
+	end
+
+	def handle_info(_message, state), do: {:noreply, state}
+
+	# Shared fan-out + cycle-expectation update for both cast and info paths.
+	defp handle_page_count(count, state) do
+		state = set_expected_pages(state, count)
+		{event, state} = maybe_complete(state)
+		state = emit(state, event)
+
+		if count == state.page_count do
 			{:noreply, state}
 		else
 			Marketmailer.Log.info(
 				"page_count_changed",
-				%{region: id, old: old, new: count},
-				"Region #{id}: pages #{old} -> #{count}"
+				%{region: state.id, old: state.page_count, new: count},
+				"Region #{state.id}: pages #{state.page_count} -> #{count}"
 			)
 
-			adjust_workers(id, old, count)
+			adjust_workers(state.id, state.page_count, count)
 			{:noreply, %{state | page_count: count}}
 		end
+	end
+
+	defp new_cycle(state) do
+		%{state | cycle_id: nil, started: MapSet.new(), results: %{}, timer: nil}
+	end
+
+	defp set_expected_pages(%{expected_pages: previous} = state, count)
+			 when is_integer(previous) and previous > count do
+		started = MapSet.filter(state.started, &(&1 <= count))
+		results = Map.filter(state.results, fn {page, _result} -> page <= count end)
+		%{state | expected_pages: count, started: started, results: results}
+	end
+
+	defp set_expected_pages(state, count), do: %{state | expected_pages: count}
+
+	defp expected_pages(%{pages: pages}, _current) when is_integer(pages) and pages > 0, do: pages
+	defp expected_pages(_context, current), do: current
+
+	defp maybe_complete(%{expected_pages: nil} = state), do: {nil, state}
+
+	defp maybe_complete(state) do
+		expected_pages = state.expected_pages
+
+		if complete?(expected_pages, state.results) do
+			cancel_timer(state)
+			statuses = Enum.map(state.results, fn {_page, result} -> result.status end)
+			failures = failures(state.results)
+
+			event =
+				cond do
+					failures != [] ->
+						failure = %{
+							region: state.id,
+							cycle_id: state.cycle_id,
+							pages: expected_pages,
+							failures: failures
+						}
+
+						log_failure(state.id, failure)
+						{:region_refresh_failed, failure}
+
+					:updated in statuses ->
+						summary = %{
+							region: state.id,
+							cycle_id: state.cycle_id,
+							pages: expected_pages,
+							updated_pages: updated_pages(state.results)
+						}
+
+						Marketmailer.Log.info(
+							"region_refresh_complete",
+							summary,
+							"Region #{state.id} refresh complete"
+						)
+
+						{:region_refresh_complete, summary}
+
+					true ->
+						nil
+				end
+
+			{event, new_cycle(%{state | expected_pages: expected_pages})}
+		else
+			{nil, refresh_timer(state)}
+		end
+	end
+
+	defp complete?(expected_pages, results) when is_integer(expected_pages) and expected_pages > 0 do
+		Enum.all?(1..expected_pages, &Map.has_key?(results, &1))
+	end
+
+	defp complete?(_expected_pages, _results), do: false
+
+	defp failures(results) do
+		for {page, %{status: :failed, reason: reason}} <- results,
+				do: %{page: page, reason: reason}
+	end
+
+	defp updated_pages(results) do
+		pages = for {page, %{status: :updated}} <- results, do: page
+		Enum.sort(pages)
+	end
+
+	# Sliding deadline: every activity pushes the timeout out so a slow but
+	# progressing sequential sweep doesn't trip a fixed-from-start timer.
+	defp refresh_timer(%{timer: nil} = state), do: schedule_timer(state)
+
+	defp refresh_timer(state) do
+		cancel_timer(state)
+		schedule_timer(%{state | timer: nil})
+	end
+
+	defp schedule_timer(state) do
+		timer_token = make_ref()
+		timer_handle = Process.send_after(self(), {:cycle_timeout, timer_token}, state.cycle_timeout)
+		%{state | timer: {timer_token, timer_handle}}
+	end
+
+	# Timeout payload names the pages that never reported, so the Discord
+	# embed shows "Page 3: cycle_timeout" instead of "Page ?".
+	defp pending_failures(%{expected_pages: nil}), do: [%{page: nil, reason: :cycle_timeout}]
+
+	defp pending_failures(%{expected_pages: expected, results: results})
+			 when is_integer(expected) and expected > 0 do
+		pending = for page <- 1..expected//1, not Map.has_key?(results, page), do: page
+
+		case pending do
+			[] -> [%{page: nil, reason: :cycle_timeout}]
+			pages -> Enum.map(pages, &%{page: &1, reason: :cycle_timeout})
+		end
+	end
+
+	defp cancel_timer(%{timer: nil}), do: :ok
+
+	defp cancel_timer(%{timer: {_timer_token, timer_handle}}) do
+		Process.cancel_timer(timer_handle)
+		:ok
+	end
+
+	defp emit(state, nil), do: state
+
+	defp emit(state, {event, payload}) do
+		Enum.each(state.listeners, &send(&1, {event, payload}))
+		state
+	end
+
+	defp log_failure(region, %{pages: pages, failures: failures}) do
+		Marketmailer.Log.warning(
+			"region_refresh_failed",
+			%{region: region, pages: pages, failures: failures},
+			"Region #{region} refresh failed"
+		)
 	end
 
 	defp adjust_workers(id, old, new) do

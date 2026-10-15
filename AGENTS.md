@@ -187,12 +187,12 @@ then pipe to jq:
   (types, systems, composed NPC station names)
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
 - `lib/manager.ex`, `lib/supervisor.ex`, `lib/worker.ex` - per-region fan-out
-  (one `RegionManager` per region, one `PageWorker` per page; page 1 reports
-  `X-Pages` and the manager starts/stops workers; each page polls on its own
-  ESI TTL/ETag so unchanged pages stay cheap `304`s; persist failures report
-  `:failed` instead of crashing)
-- `lib/update_coordinator.ex` - region cycle tracker (sliding deadline per
-  activity; timeout failures name the pending pages, not `page: nil`)
+  and refresh cycles (one `RegionManager` per region, one `PageWorker` per
+  page; page 1 reports `X-Pages` and the manager starts/stops workers; each
+  page polls on its own ESI TTL/ETag so unchanged pages stay cheap `304`s;
+  persist failures report `:failed` instead of crashing; the manager tracks
+  each cycle with a sliding deadline per activity and timeout failures name
+  the pending pages, not `page: nil`)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
 - `lib/discord.ex` - nostrum consumer, slash commands, embed builders
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)

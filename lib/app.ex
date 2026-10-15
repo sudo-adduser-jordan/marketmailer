@@ -22,11 +22,8 @@ defmodule Marketmailer.Application do
 				Database.Writer,
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
-				{Task.Supervisor, name: Marketmailer.TaskSup},
-				Market.UpdateCoordinator,
-				Discord.Broadcaster,
-				Janice.Supervisor
-			] ++ dashboard_children() ++ poller_children()
+				{Task.Supervisor, name: Marketmailer.TaskSup}
+			] ++ poller_core_children() ++ [Discord.Broadcaster, Janice.Supervisor] ++ dashboard_children() ++ bot_children()
 
 		opts = [
 			strategy: :one_for_one,
@@ -40,13 +37,23 @@ defmodule Marketmailer.Application do
 
 	# Test env (`config/test.exs`: `start_pollers: false`) boots only the
 	# database/cache leaves so `mix test` never hits live ESI or Discord.
-	defp poller_children do
+	# Poller core (page supervision + per-region managers) boots before the
+	# broadcaster so it can subscribe to every manager on init; managers also
+	# attach the broadcaster on init, so restarts find each other either way.
+	defp poller_core_children do
 		if pollers_enabled?() do
 			[
 				{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
-				Marketmailer.RegionManagerSupervisor,
-				{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}
+				Marketmailer.RegionManagerSupervisor
 			]
+		else
+			[]
+		end
+	end
+
+	defp bot_children do
+		if pollers_enabled?() do
+			[{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}]
 		else
 			[]
 		end

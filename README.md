@@ -69,7 +69,7 @@ Solid arrows are supervision (`lib/app.ex` children of
 `Marketmailer.Supervisor`, `:one_for_one`); dashed arrows are runtime links
 outside supervision — `RegionManager` start/stop of `PageWorker`s via
 `Marketmailer.PageSup`, `Broadcaster` subscription and `PageWorker` reports
-to `UpdateCoordinator` (`GenServer.cast`), all keyed through
+to per-region `RegionManager`s (`GenServer.cast`), all keyed through
 `Marketmailer.Registry` (`via` tuples). Poller children (`PageSup`,
 `RegionManagerSupervisor`, `BotSupervisor`) only boot when `start_pollers`
 is true; dashboard children (`PubSub`, `Telemetry`, `Endpoint`) only when
@@ -102,7 +102,7 @@ open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 
 Flow: per-page `PageWorker`s poll ESI with their own ETag/Expires TTL
 (unchanged pages stay cheap `304`s), upsert into SQLite + ETS, report to
-`UpdateCoordinator`;
+their `RegionManager`;
 and SQL queries `LEFT JOIN` the SDE-seeded `names`/`systems` caches (no
 per-request fetching); results go to Discord
 embeds/broadcasts. See `AGENTS.md` for architecture, database, and logging
