@@ -280,7 +280,7 @@ defmodule Discord.Messages do
 		system = list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
 		security = format_security(list_field(item, :security_status, "security_status")) |> to_string()
 
-		"#{i}. #{sec_emoji(list_field(item, :security_status, "security_status"))} **#{name}** — #{margin} • #{system} (#{security})"
+		"#{i}. **#{name}** — #{margin} • #{system} (#{security})"
 	end
 
 	defp list_truncate(nil, _max), do: "?"
@@ -348,30 +348,8 @@ defmodule Discord.Messages do
 
 	defp format_isk(_), do: "?"
 
-	# Mobile-friendly security signal: plain emoji, no ANSI code blocks.
-	# Highsec green, lowsec yellow, nullsec red, unknown white.
-	defp sec_emoji(nil), do: "⚪"
-	defp sec_emoji(""), do: "⚪"
-
-	defp sec_emoji(security) when is_binary(security) do
-		case Float.parse(String.trim(security)) do
-			{number, _} -> sec_emoji(number)
-			:error -> "⚪"
-		end
-	end
-
-	defp sec_emoji(security) when is_number(security) do
-		cond do
-			security >= 0.5 -> "🟢"
-			security >= 0.0 -> "🟡"
-			true -> "🔴"
-		end
-	end
-
-	defp sec_emoji(_), do: "⚪"
-
 	defp location_value(item) do
-		"#{sec_emoji(item.security_status)} #{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
+		"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
 	end
 
 	defp price_value(nil), do: "? ISK"
@@ -428,16 +406,15 @@ defmodule Discord.Messages do
 	defp embed_color(profit) when is_number(profit) and profit > 0, do: @color_success
 	defp embed_color(_profit), do: @color_error
 
-	# Plain margin text with an emoji signal (no code block).
-	defp margin_value(nil), do: "⚪ ? ISK"
+	# Plain margin text (no emoji, no code block).
+	defp margin_value(nil), do: "? ISK"
 
 	defp margin_value(profit) when is_number(profit) do
 		sign = if profit >= 0, do: "+", else: "-"
-		emoji = if profit >= 0, do: "🟢", else: "🔴"
-		"#{emoji} #{sign}#{format_isk(abs(profit))} ISK"
+		"#{sign}#{format_isk(abs(profit))} ISK"
 	end
 
-	defp margin_value(_), do: "⚪ ? ISK"
+	defp margin_value(_), do: "? ISK"
 
 	defp or_unknown(nil), do: "?"
 	defp or_unknown(""), do: "?"

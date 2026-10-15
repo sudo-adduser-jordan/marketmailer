@@ -29,10 +29,10 @@ defmodule Discord.MessagesTest do
 
 		assert %Embed{title: "Tritanium"} = embed
 		assert embed.author == nil
-		assert fields["Location"] == "🟢 Jita IV - Moon 4 - Jita - The Forge (0.9)"
+		assert fields["Location"] == "Jita IV - Moon 4 - Jita - The Forge (0.9)"
 		assert fields["Sell"] == "10.00 ISK"
 		assert fields["Buy"] == "110.00 ISK"
-		assert fields["Margin"] == "🟢 +1000.00 ISK"
+		assert fields["Margin"] == "+1000.00 ISK"
 		assert embed.description =~ "janice.e-351.com/i/1001/market/2"
 		assert embed.description =~ "[Janice](https://janice.e-351.com/i/1001/market/2)"
 		assert embed.description =~ "[Eve Ref](https://everef.net/types/1001)"
@@ -64,7 +64,7 @@ defmodule Discord.MessagesTest do
 		loss_embed = Discord.Messages.market_embed(loss)
 		loss_fields = Map.new(loss_embed.fields, &{&1.name, &1.value})
 
-		assert loss_fields["Margin"] == "🔴 -100.00 ISK"
+		assert loss_fields["Margin"] == "-100.00 ISK"
 		assert loss_embed.color == 0xF04747
 
 		unknown = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0}
@@ -73,8 +73,8 @@ defmodule Discord.MessagesTest do
 		unknown_fields = Map.new(unknown_embed.fields, &{&1.name, &1.value})
 
 		assert unknown_fields["Buy"] == "? ISK"
-		assert unknown_fields["Margin"] == "⚪ ? ISK"
-		assert unknown_fields["Location"] == "⚪ ? - ? - ? (?)"
+		assert unknown_fields["Margin"] == "? ISK"
+		assert unknown_fields["Location"] == "? - ? - ? (?)"
 		assert unknown_embed.color == 0x7289DA
 	end
 
@@ -145,9 +145,9 @@ defmodule Discord.MessagesTest do
 		assert length(rows) == 2
 		assert hd(rows) =~ "Tritanium"
 		assert hd(rows) =~ "+1.3k"
-		assert hd(rows) =~ "🟢"
+		assert hd(rows) =~ "(0.9)"
 		assert List.last(rows) =~ "?"
-		assert List.last(rows) =~ "⚪"
+		assert List.last(rows) =~ "(?)"
 	end
 
 	test "disambiguation embed lists candidates with a re-run hint" do
@@ -171,7 +171,7 @@ defmodule Discord.MessagesTest do
 		assert embed.description =~ "No cached market order was found for **zzz**."
 	end
 
-	test "signals location security with emoji and keeps station-system-region order" do
+	test "keeps station-system-region order with the security value" do
 		base = %MarketView{
 			type_id: 1_001,
 			item_name: "Tritanium",
@@ -188,13 +188,13 @@ defmodule Discord.MessagesTest do
 		fields = fn embed -> Map.new(embed.fields, &{&1.name, &1.value}) end
 
 		assert fields.(high)["Location"] ==
-						 "🟢 Jita IV - Moon 4 - Jita - The Forge (0.9)"
+						 "Jita IV - Moon 4 - Jita - The Forge (0.9)"
 
 		assert fields.(low)["Location"] ==
-						 "🟡 Jita IV - Moon 4 - Jita - The Forge (0.3)"
+						 "Jita IV - Moon 4 - Jita - The Forge (0.3)"
 
 		assert fields.(null)["Location"] ==
-						 "🔴 Jita IV - Moon 4 - Jita - The Forge (-0.5)"
+						 "Jita IV - Moon 4 - Jita - The Forge (-0.5)"
 	end
 
 	test "all embeds carry a SemVer version badge in the footer" do
