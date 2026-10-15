@@ -175,7 +175,7 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	defp persist_failure_reason(e, ctx, order_count) do
-		if Market.DbWriter.disk_full?(e) do
+		if Database.Writer.disk_full?(e) do
 			Marketmailer.Log.error(
 				"disk_full",
 				%{region: ctx |> Map.get(:url), reason: first_line(e), orders: order_count},
@@ -206,7 +206,7 @@ defmodule Marketmailer.PageWorker do
 		:ok
 	rescue
 		e ->
-			if Market.DbWriter.disk_full?(e) do
+			if Database.Writer.disk_full?(e) do
 				Marketmailer.Log.error(
 					"disk_full",
 					%{region: ctx |> Map.get(:url), reason: first_line(e)},

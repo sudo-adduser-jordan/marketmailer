@@ -93,8 +93,8 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   prod uses the same in-project file via `MARKETMAILER_DB` in `.env`, and
   `task docker:run` bind-mounts `./priv/data` for containers. WAL journal mode.
 - **Fetch -> write -> read.** ESI pollers write only to the single DB file.
-  Broadcasts render from the same file via `Market.Read` (`lib/database.ex`),
-  which never touches the network. All writes funnel through `Market.DbWriter`.
+  Broadcasts render from the same file via `Market.Database` (`lib/database.ex`),
+  which never touches the network. All writes funnel through `Database.Writer`.
 - **Standard Ecto migrations** live in `priv/repo/migrations` and apply to the
   single DB. `Marketmailer.
   Application.start/2` runs pending migrations on every boot before the
@@ -173,9 +173,8 @@ then pipe to jq:
 
 - `lib/app.ex` - supervision tree + boot-time migration run (see policy above)
 - `priv/repo/migrations` - schema migrations
-- `lib/database.ex` - `Database` repo + `Market.DbWriter` (serialized writes);
-  `Etag.Database`, `Discord.Database`, `Market.Database` (writes),
-  `Market.Read` (user-facing reads, never touches the network)
+- `lib/database.ex` - `Database` repo + `Database.Writer` (serialized writes);
+  `Etag.Database`, `Discord.Database`, `Market.Database` (reads + writes)
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
 - `lib/names.ex` - `ESI.Names`, `ESI.SystemInfo`, `Universe.Database` (ticker fills)
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling

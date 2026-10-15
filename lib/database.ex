@@ -5,6 +5,104 @@ defmodule Database do
 		adapter: Ecto.Adapters.SQLite3
 end
 
+defmodule Database.Writer do
+	# Single serialized writer for SQLite's single write lock.
+	#
+	# Hundreds of PageWorkers share a connection pool, but every pooled
+	# connection still contends on the one database write lock: concurrent
+	# upserts wait out busy_timeout and die with "Database busy". Funneling
+	# every write through this process means the lock is never contended —
+	# writes queue in the mailbox instead of failing. Reads keep flowing
+	# through the Database pool via WAL.
+	#
+	# Falls back to direct execution (with the same busy retry) when the
+	# writer is absent — e.g. a hot upgrade that does not start new
+	# supervision children yet — so callers never crash on :noproc.
+	use GenServer
+
+	@call_timeout 30_000
+	# Wait between contention retries inside one write (~7s total budget).
+	@retry_delays [10, 25, 50, 100, 200, 400, 800, 1_600, 3_200]
+
+	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
+
+	# Runs fun against the repo with no concurrent writers. Returns fun's
+	# value; re-raises the last error when the retry budget is spent so
+	# callers keep their existing rescue contracts.
+	def write(fun) when is_function(fun, 0) do
+		case GenServer.whereis(__MODULE__) do
+			nil -> run(fun, @retry_delays)
+			_pid -> call(fun)
+		end
+	end
+
+	defp call(fun) do
+		case GenServer.call(__MODULE__, {:write, fun}, @call_timeout) do
+			{:ok, result} -> result
+			{:error, error} -> raise error
+		end
+	catch
+		:exit, {:noproc, _} -> run(fun, @retry_delays)
+		:exit, {:timeout, _} -> raise "db writer queue timeout"
+	end
+
+	@impl true
+	def init([]), do: {:ok, []}
+
+	# Never crashes the writer itself: every error is returned to the
+	# caller, retried only when it signals lock/queue contention.
+	@impl true
+	def handle_call({:write, fun}, _from, state) do
+		{:reply, run(fun, @retry_delays), state}
+	end
+
+	defp run(fun, delays) do
+		{:ok, fun.()}
+	rescue
+		e ->
+			if disk_full?(e) do
+				Marketmailer.Log.error(
+					"disk_full",
+					%{reason: Exception.message(e)},
+					"Database or disk is full; skipping write"
+				)
+
+				{:error, e}
+			else
+				if retryable?(e) and delays != [] do
+					[wait | rest] = delays
+					Process.sleep(wait + :rand.uniform(10))
+					run(fun, rest)
+				else
+					{:error, e}
+				end
+			end
+	end
+
+	# SQLite reports ENOSPC/readonly as "database or disk is full". Writes
+	# must stop there: retrying only burns the queue while the disk stays full.
+	def disk_full?(%Exqlite.Error{} = e), do: String.contains?(Exception.message(e), "database or disk is full")
+
+	def disk_full?(%DBConnection.ConnectionError{} = e),
+		do: String.contains?(Exception.message(e), "database or disk is full")
+
+	def disk_full?(e) when is_binary(e), do: String.contains?(e, "database or disk is full")
+	def disk_full?(e) when is_atom(e), do: e == :disk_full
+
+	def disk_full?(e) do
+		e |> Exception.message() |> String.contains?("database or disk is full")
+	rescue
+		_ -> false
+	catch
+		_, _ -> false
+	end
+
+	defp retryable?(%Exqlite.Error{} = e), do: String.starts_with?(Exception.message(e), "Database busy")
+
+	defp retryable?(%DBConnection.ConnectionError{}), do: true
+	defp retryable?(_), do: false
+end
+
 defmodule Etag.Database do
 	import Ecto.Query
 
@@ -127,7 +225,7 @@ defmodule Etag.Database do
 	def upsert_etag(url, etag, expires_at \\ nil) do
 		now = NaiveDateTime.utc_now(:second)
 
-		case Market.DbWriter.write(fn ->
+		case Database.Writer.write(fn ->
 					 Database.insert_all(
 						 "etags",
 						 [%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
@@ -153,7 +251,7 @@ defmodule Discord.Database do
 	end
 
 	def delete_by_channel(channel_id) do
-		Market.DbWriter.write(fn ->
+		Database.Writer.write(fn ->
 			Database.delete_all(from channel in Discord, where: channel.channel_id == ^channel_id)
 		end)
 	end
@@ -161,7 +259,7 @@ defmodule Discord.Database do
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Market.DbWriter.write(fn ->
+		Database.Writer.write(fn ->
 			Database.insert_all(
 				@table,
 				[
@@ -181,7 +279,7 @@ defmodule Discord.Database do
 	def delete(guild_id) do
 		case get(guild_id) do
 			nil -> :ok
-			record -> Market.DbWriter.write(fn -> Database.delete(record) end)
+			record -> Database.Writer.write(fn -> Database.delete(record) end)
 		end
 	end
 end
@@ -212,7 +310,7 @@ defmodule Market.Database do
 				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
 			end)
 
-		Market.DbWriter.write(fn ->
+		Database.Writer.write(fn ->
 			rows
 			|> Enum.chunk_every(@upsert_chunk_size)
 			|> Enum.reduce(0, fn chunk, total ->
@@ -230,9 +328,7 @@ defmodule Market.Database do
 	def upsert_chunk_size, do: @upsert_chunk_size
 
 	def get_list_less_than_jita_buy, do: []
-end
 
-defmodule Market.Read do
 	# Every user-facing market query, served from the single database.
 	# Pure reads: no ESI, no backfill — gaps render as "?" and fill via the
 	# SDE import and the background ticker.

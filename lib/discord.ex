@@ -637,7 +637,7 @@ defmodule Discord.Consumer do
 		partial = focused_option_value(interaction, "item")
 
 		choices =
-			for %{item_name: name} <- Market.Read.suggest_items(partial || ""),
+			for %{item_name: name} <- Market.Database.suggest_items(partial || ""),
 					do: %{name: name, value: name}
 
 		Api.Interaction.create_response(interaction, %{
@@ -760,7 +760,7 @@ defmodule Discord.Consumer do
 	defp focused_option_value(_interaction, _name), do: nil
 
 	defp safe_get_market_item(item_name) do
-		Market.Read.get_market_item(item_name)
+		Market.Database.get_market_item(item_name)
 	rescue
 		error ->
 			Marketmailer.Log.warning(
@@ -782,7 +782,7 @@ defmodule Discord.Consumer do
 	end
 
 	defp safe_suggest_items(item_name, limit) when is_binary(item_name) and is_integer(limit) do
-		case Market.Read.suggest_items(item_name, limit) do
+		case Market.Database.suggest_items(item_name, limit) do
 			items when is_list(items) -> items
 			_ -> []
 		end
@@ -965,7 +965,7 @@ defmodule Discord.Consumer do
 	# Never let a DB/ESI failure crash the interaction handler with no
 	# response: log once and fall back to the empty list embed.
 	defp safe_get_items do
-		case Market.Read.get_items_less_than_jita_buy() do
+		case Market.Database.get_items_less_than_jita_buy() do
 			items when is_list(items) -> items
 			_ -> []
 		end

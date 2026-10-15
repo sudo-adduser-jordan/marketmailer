@@ -5,7 +5,6 @@ defmodule Market.DatabaseTest do
 
 	alias Database
 	alias Market.Database, as: MarketDatabase
-	alias Market.Read, as: MarketRead
 
 	setup_all do
 		path =
@@ -59,7 +58,7 @@ defmodule Market.DatabaseTest do
 
 	test "finds the cheapest cached sell order by case-insensitive item name" do
 		insert_fixture()
-		item = MarketRead.get_market_item("  tRiTaNiUm  ")
+		item = MarketDatabase.get_market_item("  tRiTaNiUm  ")
 
 		assert %MarketView{} = item
 		assert item.type_id == 1_001
@@ -72,7 +71,7 @@ defmodule Market.DatabaseTest do
 
 	test "returns nil when the name is not present in the market" do
 		insert_fixture()
-		assert MarketRead.get_market_item("Rifter") == nil
+		assert MarketDatabase.get_market_item("Rifter") == nil
 	end
 
 	test "finds PLEX by case-insensitive name from cached rows" do
@@ -129,7 +128,7 @@ defmodule Market.DatabaseTest do
 		])
 
 		for query <- ["plex", "PLEX", "  Plex  ", "pLeX"] do
-			item = MarketRead.get_market_item(query)
+			item = MarketDatabase.get_market_item(query)
 
 			assert %MarketView{} = item
 			assert item.type_id == 44_992
@@ -194,7 +193,7 @@ defmodule Market.DatabaseTest do
 		])
 
 		for query <- ["squall", "SQUALL", "  Squall  "] do
-			item = MarketRead.get_market_item(query)
+			item = MarketDatabase.get_market_item(query)
 
 			assert %MarketView{} = item
 			assert item.type_id == 81_008
@@ -207,9 +206,9 @@ defmodule Market.DatabaseTest do
 
 	test "returns nil for a known type with no market order" do
 		Database.insert_all("names", [%{id: 2_001, name: "Empty Item"}])
-		assert MarketRead.get_market_item("Empty Item") == nil
-		assert MarketRead.get_market_item("") == nil
-		assert MarketRead.get_market_item(nil) == nil
+		assert MarketDatabase.get_market_item("Empty Item") == nil
+		assert MarketDatabase.get_market_item("") == nil
+		assert MarketDatabase.get_market_item(nil) == nil
 	end
 
 	test "suggests only items with a cached Jita 4-4 sell order" do
@@ -272,10 +271,10 @@ defmodule Market.DatabaseTest do
 			}
 		])
 
-		assert [%{item_name: "Squall"}] = MarketRead.suggest_items("squ")
-		assert [%{item_name: "Squall"}] = MarketRead.suggest_items("  SQUA  ")
-		assert MarketRead.suggest_items("") == []
-		assert MarketRead.suggest_items(nil) == []
+		assert [%{item_name: "Squall"}] = MarketDatabase.suggest_items("squ")
+		assert [%{item_name: "Squall"}] = MarketDatabase.suggest_items("  SQUA  ")
+		assert MarketDatabase.suggest_items("") == []
+		assert MarketDatabase.suggest_items(nil) == []
 	end
 
 	test "type-name seeding is a no-op offline when nothing is missing" do
@@ -376,7 +375,7 @@ defmodule Market.DatabaseTest do
 		insert_fixture()
 		assert Database.aggregate("market", :count) == 3
 
-		items = MarketRead.get_items_less_than_jita_buy()
+		items = MarketDatabase.get_items_less_than_jita_buy()
 		assert length(items) == 2
 		assert Enum.at(items, 0).system_name == "Rens"
 		assert Enum.at(items, 0).security_status == 0.7
@@ -392,7 +391,7 @@ defmodule Market.DatabaseTest do
 
 	test "reads ordered undercutting rows from the market list view" do
 		insert_fixture()
-		items = MarketRead.get_items_less_than_jita_buy()
+		items = MarketDatabase.get_items_less_than_jita_buy()
 
 		assert length(items) == 2
 		assert Enum.at(items, 0).item == "Tritanium"

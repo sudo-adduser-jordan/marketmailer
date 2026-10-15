@@ -330,13 +330,13 @@ defmodule Universe.Database do
 
 	def upsert_names(entries),
 		do:
-			Market.DbWriter.write(fn ->
+			Database.Writer.write(fn ->
 				Database.insert_all("names", entries, on_conflict: {:replace, [:name]}, conflict_target: :id)
 			end)
 
 	def upsert_system(entry),
 		do:
-			Market.DbWriter.write(fn ->
+			Database.Writer.write(fn ->
 				Database.insert_all("systems", [entry],
 					on_conflict: {:replace, [:name, :security_status, :region_name]},
 					conflict_target: :system_id

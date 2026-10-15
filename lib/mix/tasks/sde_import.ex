@@ -234,7 +234,7 @@ defmodule Mix.Tasks.Sde.Import do
 	defp lock_contention?(_), do: false
 
 	# Direct repo writes with task-owned retry. Universe.Database wraps
-	# everything in DbWriter, which converts a spent lock budget into an
+	# everything in Database.Writer, which converts a spent lock budget into an
 	# {:error, ...} return — invisible to a bulk importer counting chunks.
 	# Same conflict semantics, same chunk discipline, but failures are loud.
 	defp insert_names(chunk) do
@@ -341,7 +341,7 @@ defmodule Mix.Tasks.Sde.Import do
 	end
 
 	defp record_build(build) do
-		Market.DbWriter.write(fn ->
+		Database.Writer.write(fn ->
 			Database.query!("CREATE TABLE IF NOT EXISTS sde_imports (build TEXT PRIMARY KEY, imported_at TEXT NOT NULL)", [])
 
 			Database.query!(

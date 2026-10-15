@@ -32,7 +32,7 @@ defmodule Discord.Broadcaster do
 			 async: Keyword.get(opts, :async, true),
 			 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 			 channels_fun: Keyword.get(opts, :channels_fun, &DiscordDatabase.registered_channels/0),
-			 market_fun: Keyword.get(opts, :market_fun, &Market.Read.get_items_less_than_jita_buy/0),
+			 market_fun: Keyword.get(opts, :market_fun, &Market.Database.get_items_less_than_jita_buy/0),
 			 deliver_fun: Keyword.get(opts, :deliver_fun, &deliver/2),
 			 prune_fun: Keyword.get(opts, :prune_fun, &DiscordDatabase.delete_by_channel/1),
 			 pending: MapSet.new(),
