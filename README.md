@@ -48,7 +48,7 @@ Pending migrations run automatically on every boot, so containers and
 
 - **Region pollers** (`Marketmailer.RegionManagerSupervisor`) — poll ESI
   market orders per region with dynamic page scaling and exponential backoff.
-- **Discord bot** (`Marketmailer.BotSupervisor`) — slash commands, embeds,
+- **Discord bot** (`Discord.BotSupervisor`) — slash commands, embeds,
   and market-update broadcasts.
 - **Name resolution** — type/system/station names bulk-seeded from the
   official JSONL SDE (`mix sde.import`) into local cache tables, with an ESI

@@ -38,7 +38,7 @@ config :marketmailer, MarketmailerWeb.Endpoint,
 config :marketmailer, :bot_options, %{
 	consumer: Discord.Consumer,
 	intents: [:guild_messages],
-	wrapped_token: &Marketmailer.BotSupervisor.token!/0
+	wrapped_token: &Discord.BotSupervisor.token!/0
 }
 
 # Set to false to skip PubSub + Telemetry + Endpoint (test does this).

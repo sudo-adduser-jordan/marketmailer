@@ -53,7 +53,7 @@ defmodule Marketmailer.Application do
 
 	defp bot_children do
 		if pollers_enabled?() do
-			[{Marketmailer.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}]
+			[{Discord.BotSupervisor, Application.fetch_env!(:marketmailer, :bot_options)}]
 		else
 			[]
 		end

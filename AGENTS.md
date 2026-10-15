@@ -147,7 +147,7 @@ Both formerly-disabled features are now uncommented in `lib/app.ex`:
 | Feature | Child in `lib/app.ex` | Needs |
 | --- | --- | --- |
 | Region pollers | `Marketmailer.RegionManagerSupervisor` | nothing |
-| Discord bot | `{Marketmailer.BotSupervisor, ...}` (owns `Nostrum.Bot`) | `DISCORD_TOKEN` — if missing/invalid the bot is skipped with a warning, the rest of the app keeps running |
+| Discord bot | `{Discord.BotSupervisor, ...}` (owns `Nostrum.Bot`) | `DISCORD_TOKEN` — if missing/invalid the bot is skipped with a warning, the rest of the app keeps running |
 
 `.example.env` documents the env vars.
 
@@ -194,7 +194,8 @@ then pipe to jq:
   each cycle with a sliding deadline per activity and timeout failures name
   the pending pages, not `page: nil`)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
-- `lib/discord.ex` - nostrum consumer, slash commands, embed builders
+- `lib/discord.ex` - nostrum consumer, slash commands, embed builders,
+  `Discord.Broadcaster`, `Discord.BotSupervisor`
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
 - `lib/mix/tasks/` - `test.safe` (runs the suite in `MIX_ENV=test`;
   allows a live poller when the test DB is isolated, refuses only on DB

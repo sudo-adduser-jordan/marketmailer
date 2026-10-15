@@ -38,7 +38,7 @@ if config_env() == :prod do
 
 	config :marketmailer, :dashboard_enabled, dashboard_enabled
 
-	# The bot reads DISCORD_TOKEN lazily (&Marketmailer.BotSupervisor.token!/0),
+	# The bot reads DISCORD_TOKEN lazily (&Discord.BotSupervisor.token!/0),
 	# so a missing token only skips the bot with a warning instead of
 	# crashing boot.
 	config :marketmailer, :start_pollers, true
