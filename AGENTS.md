@@ -106,28 +106,36 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   data is derived cache and intentionally discarded.
 - SDE snapshots: `mix sde.import [BUILD]` downloads the official JSONL SDE
   into `priv/data/sde/<build>/` (gitignored), extracts only
-  `types`/`mapSolarSystems`/`mapConstellations`/`mapRegions`/`npcStations`,
-  and streams them into the `names`/`systems` caches.
+  `types`/`mapSolarSystems`/`mapConstellations`/`mapRegions`/`npcStations`/
+  `stationOperations`/`npcCorporations`/`mapPlanets`/`mapMoons`/`mapStars`,
+  and streams them into the `names`/`systems` tables (station names are
+  composed, see EVE name resolution).
 - Gotcha: `insert_all/3` with a bare table name skips ecto type casting.
   Booleans must be coerced to `1`/`0` (see `Market.Database.upsert_orders`),
   and `on_conflict: :replace_all` is unavailable - list fields explicitly.
 
 ## EVE name resolution
 
-Names resolve from ESI into two cache tables (`lib/names.ex`), bulk-seeded
-from the official JSONL SDE (`mix sde.import`) instead of warming purely over
-the network:
+Names come only from the official JSONL SDE (`mix sde.import`) into two
+tables — no ESI name fetching exists anywhere:
 
-- `names(id, name)` - bulk `POST /v2/universe/names` for types/systems/stations
+- `names(id, name)` - published type names from `types.jsonl` plus NPC
+  station names composed as `{system} {planet-roman} [- Moon {n}] -
+  {owner} [{operation}]` from `npcStations` + `stationOperations` +
+  `npcCorporations` + `mapPlanets`/`mapMoons`/`mapStars` (star-orbiting:
+  system only; `useOperationName=false`: owner alone). ~0.5% of stations
+  orbit named celestials whose proper names are not in the SDE; those
+  render in the generic form, which is still unique and unambiguous.
 - `systems(system_id, name, security_status, region_name)` -
   system -> constellation -> region chain
 
-Query SQL (`lib/getBestOrder.sql`, `lib/getItemsLessThan.sql`) LEFT JOINs these
-tables. There is no per-request backfill: gaps render as `?` and fill via the
-SDE import and the background ticker (each cache drains on its own backlog — a
-finished cache never gates the others). Any new
+Query SQL (`lib/getBestOrder.sql`, `lib/getItemsLessThan.sql`, the
+`marketListView` migration) LEFT JOINs these tables. There is no
+per-request backfill: unmatched 64-bit location ids (>= 10^12, player
+structures — dynamic, never in the SDE) render as `Player Station` and
+anything else unmatched renders as `?` (an SDE import gap). Any new
 query must still SELECT the raw id columns (`system_id`, `location_id`,
-`type_id`) so gaps stay visible as `?` instead of silently wrong.
+`type_id`) so gaps stay visible instead of silently wrong.
 
 Raw SQL files live in `lib/*.sql` and are loaded relative to `__DIR__`
 (CWD-safe).
@@ -176,7 +184,7 @@ then pipe to jq:
 - `lib/database.ex` - `Database` repo + `Database.Writer` (serialized writes);
   `Etag.Database`, `Discord.Database`, `Market.Database` (reads + writes)
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
-- `lib/names.ex` - `ESI.Names`, `ESI.SystemInfo`, `Universe.Database` (ticker fills)
+  (types, systems, composed NPC station names)
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
 - `lib/manager.ex`, `lib/supervisor.ex`, `lib/worker.ex` - per-region fan-out
   (one `RegionManager` per region, one `PageWorker` per page; page 1 reports

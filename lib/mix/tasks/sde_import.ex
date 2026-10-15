@@ -1,30 +1,40 @@
 defmodule Mix.Tasks.Sde.Import do
-	@shortdoc "Import EVE names/systems from the official JSONL SDE"
+	@shortdoc "Import EVE names/systems/stations from the official JSONL SDE"
 
-	# Bulk-seeds the EVE name/system caches from the official JSONL SDE.
+	# Bulk-seeds the EVE name/system tables from the official JSONL SDE.
 	#
 	# Usage: mix sde.import [BUILD]
 	#
 	# Downloads eve-online-static-data-<build>-jsonl.zip (resolving "latest"
 	# via tranquility/latest.jsonl when no build is given), extracts only the
-	# datasets backing our caches, and streams each JSONL file line-by-line
-	# into the database caches through the single-writer path. No per-request
-	# ESI backfill is needed for SDE-covered
-	# ids; the ticker stays as the fallback for the rest.
+	# datasets backing our tables, and streams each JSONL file line-by-line
+	# into the database. The SDE is the sole source for these tables: no
+	# ESI name fetching exists anywhere in the app.
+	#
+	# NPC station names are not stored as strings anywhere in the SDE; each
+	# row is composed here as
+	# "{system} {planet-roman} [- Moon {n}] - {owner} [{operation}]" from
+	# mapSolarSystems + mapPlanets/mapMoons + npcCorporations +
+	# stationOperations. Player-owned structures are dynamic and never in
+	# the SDE; those location ids stay out of `names` and render as
+	# "Player Station" in queries.
 	use Mix.Task
 
 	@latest_url "https://developers.eveonline.com/static-data/tranquility/latest.jsonl"
 	@zip_url_template "https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-BUILD-jsonl.zip"
 
-	# Zip entry basenames backing our caches. npcStations.jsonl is
-	# intentionally absent: official station entries carry no name field
-	# (names compose from operations + celestials), so station names keep
-	# warming through the fast bulk ESI ticker instead.
+	# Zip entry basenames backing our tables.
 	@needed_files [
 		"types.jsonl",
 		"mapSolarSystems.jsonl",
 		"mapConstellations.jsonl",
-		"mapRegions.jsonl"
+		"mapRegions.jsonl",
+		"npcStations.jsonl",
+		"stationOperations.jsonl",
+		"npcCorporations.jsonl",
+		"mapPlanets.jsonl",
+		"mapMoons.jsonl",
+		"mapStars.jsonl"
 	]
 
 	@impl true
@@ -65,7 +75,7 @@ defmodule Mix.Tasks.Sde.Import do
 
 		import_types(paths["types.jsonl"])
 		import_systems(paths["mapSolarSystems.jsonl"], constellations)
-		Mix.shell().info("station names: skipped (no names in official npcStations.jsonl; ESI ticker covers them)")
+		import_stations(paths)
 		record_build(build)
 
 		Mix.shell().info("SDE import done (build #{build})")
@@ -233,10 +243,10 @@ defmodule Mix.Tasks.Sde.Import do
 	defp lock_contention?(%DBConnection.ConnectionError{}), do: true
 	defp lock_contention?(_), do: false
 
-	# Direct repo writes with task-owned retry. Universe.Database wraps
-	# everything in Database.Writer, which converts a spent lock budget into an
-	# {:error, ...} return — invisible to a bulk importer counting chunks.
-	# Same conflict semantics, same chunk discipline, but failures are loud.
+	# Direct repo writes with task-owned retry. Database.Writer converts
+	# a spent lock budget into an {:error, ...} return — invisible to a
+	# bulk importer counting chunks — so this path retries loudly instead.
+	# Same conflict semantics, same chunk discipline, but failures raise.
 	defp insert_names(chunk) do
 		with_write_retry(fn ->
 			Database.insert_all("names", chunk, on_conflict: {:replace, [:name]}, conflict_target: :id)
@@ -301,6 +311,155 @@ defmodule Mix.Tasks.Sde.Import do
 		verify_present!("systems", "system_id", ids)
 		Mix.shell().info("imported #{count} systems (verified #{length(ids)} present)")
 	end
+
+	defp import_stations(paths) do
+		stations = paths["npcStations.jsonl"] |> stream_entries() |> Enum.to_list()
+		orbit_ids = stations |> Enum.map(& &1["orbitID"]) |> Enum.uniq()
+
+		# mapMoons.jsonl is ~224MB: stream it once, keeping only the moons
+		# stations actually orbit (projected to the fields we need).
+		moons =
+			load_celestials(paths["mapMoons.jsonl"], orbit_ids, &%{planet_id: &1["orbitID"], index: &1["orbitIndex"]})
+
+		planet_ids =
+			((orbit_ids -- Map.keys(moons)) ++ Enum.map(moons, fn {_id, moon} -> moon.planet_id end))
+			|> Enum.uniq()
+
+		planets = load_celestials(paths["mapPlanets.jsonl"], planet_ids, &%{index: &1["celestialIndex"]})
+
+		star_ids =
+			paths["mapStars.jsonl"]
+			|> stream_entries()
+			|> Stream.map(& &1["_key"])
+			|> Stream.filter(&is_integer/1)
+			|> MapSet.new()
+
+		lookups = %{
+			systems: load_keyed_map(paths["mapSolarSystems.jsonl"], ["name"]),
+			corps: load_keyed_map(paths["npcCorporations.jsonl"], ["name"]),
+			ops: load_keyed_map(paths["stationOperations.jsonl"], ["operationName"]),
+			planets: planets,
+			moons: moons,
+			stars: star_ids
+		}
+
+		{composed, failed} =
+			stations
+			|> Enum.map(&compose_station_name(&1, lookups))
+			|> Enum.split_with(&match?(%{id: _, name: _}, &1))
+
+		if failed != [] do
+			ids = failed |> Enum.map(fn %{id: id} -> id end) |> Enum.take(5)
+			Mix.raise("SDE station compose failed for #{length(failed)} stations (e.g. #{inspect(ids)})")
+		end
+
+		{count, ids} =
+			composed
+			|> Enum.chunk_every(500)
+			|> Enum.reduce({0, []}, fn chunk, {acc, ids} ->
+				insert_names(chunk)
+				{acc + length(chunk), [Enum.map(chunk, & &1.id) | ids]}
+			end)
+
+		ids = List.flatten(ids)
+		verify_present!("names", "id", ids)
+		Mix.shell().info("imported #{count} NPC station names (verified #{length(ids)} present)")
+	end
+
+	# Composes one NPC station display name from the SDE reference maps:
+	# "{system} {planet-roman} [- Moon {n}] - {owner} [{operation}]".
+	# Stations orbiting their star directly (Zarzakh) skip the celestial
+	# segment; stations with useOperationName=false carry the owner name
+	# alone (e.g. "Maurasi VIII - Moon 14 - Caldari Business Tribunal").
+	# Returns nil when any link is missing. Public for tests.
+	def compose_station_name(%{"_key" => id} = station, lookups) when is_integer(id) do
+		with system_name when is_binary(system_name) <- Map.get(lookups.systems, station["solarSystemID"]),
+				 {:ok, celestial} <- celestial_label(station, lookups),
+				 owner when is_binary(owner) <- Map.get(lookups.corps, station["ownerID"]),
+				 suffix when is_binary(suffix) <- station_suffix(station, owner, lookups.ops) do
+			%{id: id, name: "#{celestial} - #{suffix}"}
+		else
+			_ -> nil
+		end
+	end
+
+	def compose_station_name(_station, _lookups), do: nil
+
+	# "Jita IV - Moon 4" for moon-orbiting stations, "Jita IV" for
+	# planet-orbiting ones, "Zarzakh" for star-orbiting ones.
+	defp celestial_label(%{"orbitID" => orbit_id, "solarSystemID" => system_id}, lookups) do
+		system_name = Map.get(lookups.systems, system_id)
+
+		cond do
+			not is_binary(system_name) ->
+				:error
+
+			(match = Map.get(lookups.moons, orbit_id)) != nil ->
+				with %{planet_id: planet_id, index: index} when is_integer(index) <- match,
+						 %{index: planet_index} when is_integer(planet_index) <- Map.get(lookups.planets, planet_id) do
+					{:ok, "#{system_name} #{roman(planet_index)} - Moon #{index}"}
+				else
+					_ -> :error
+				end
+
+			(match = Map.get(lookups.planets, orbit_id)) != nil ->
+				case match do
+					%{index: index} when is_integer(index) -> {:ok, "#{system_name} #{roman(index)}"}
+					_ -> :error
+				end
+
+			MapSet.member?(lookups.stars, orbit_id) ->
+				{:ok, system_name}
+
+			true ->
+				:error
+		end
+	end
+
+	defp station_suffix(%{"useOperationName" => true, "operationID" => op_id}, owner, ops) do
+		case Map.get(ops, op_id) do
+			nil -> nil
+			operation -> "#{owner} #{operation}"
+		end
+	end
+
+	defp station_suffix(_station, owner, _ops), do: owner
+
+	# Streams a large celestial file, keeping only wanted ids projected to
+	# small maps via project/1.
+	defp load_celestials(path, wanted, project) do
+		wanted = MapSet.new(wanted)
+
+		path
+		|> stream_entries()
+		|> Stream.filter(fn
+			%{"_key" => id} when is_integer(id) -> MapSet.member?(wanted, id)
+			_ -> false
+		end)
+		|> Enum.reduce(%{}, fn entry, acc -> Map.put(acc, entry["_key"], project.(entry)) end)
+	end
+
+	@roman_pairs [
+		{1000, "M"},
+		{900, "CM"},
+		{500, "D"},
+		{400, "CD"},
+		{100, "C"},
+		{90, "XC"},
+		{50, "L"},
+		{40, "XL"},
+		{10, "X"},
+		{9, "IX"},
+		{5, "V"},
+		{4, "IV"},
+		{1, "I"}
+	]
+
+	defp roman(n) when is_integer(n) and n > 0, do: roman(n, @roman_pairs)
+
+	defp roman(0, _), do: ""
+	defp roman(n, [{value, numeral} | _] = pairs) when n >= value, do: numeral <> roman(n - value, pairs)
+	defp roman(n, [_ | rest]), do: roman(n, rest)
 
 	# Reads back every imported id in chunks; raises unless all are present.
 	# Closes the silent-partial-write hole for good.

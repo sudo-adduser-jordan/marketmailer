@@ -330,8 +330,10 @@ defmodule Market.Database do
 	def get_list_less_than_jita_buy, do: []
 
 	# Every user-facing market query, served from the single database.
-	# Pure reads: no ESI, no backfill — gaps render as "?" and fill via the
-	# SDE import and the background ticker.
+	# Pure reads, fully SDE-sourced: types, systems and NPC station names
+	# come from `mix sde.import`. Player-owned structures are dynamic and
+	# never in the SDE, so unmatched 64-bit location ids (>= 10^12) render
+	# as "Player Station" and anything else unmatched renders as "?".
 	def get_best_order do
 		load_rows("getBestOrder.sql")
 	rescue

@@ -35,59 +35,7 @@ defmodule Marketmailer.Application do
 
 		{:ok, pid} = Supervisor.start_link(children, opts)
 
-		# Fire-and-forget: bulk universe/names calls caching every polled
-		# region id plus every traded type id, so single-item lookups stay
-		# pure DB queries. Skipped when pollers are disabled (e.g. `config/test.exs`).
-		# The type fill ticks forever in small batches: at boot every page
-		# worker stampedes ESI at once, so one big fill would starve behind
-		# the swarm; steady 500-id ticks drain the ~18k backlog within the
-		# hour and then idle on a cheap empty query.
-		if pollers_enabled?() do
-			# Independent tasks: region seeding can stall behind the boot
-			# ESI stampede and must never head-of-line-block the type fill.
-			Task.start(fn ->
-				Universe.Database.seed_region_names(Marketmailer.RegionManagerSupervisor.region_ids())
-			end)
-
-			Task.start(fn -> seed_type_names_forever() end)
-		end
-
 		{:ok, pid}
-	end
-
-	# Steady background fill of the lazy caches: one small bounded batch
-	# per minute per cache, forever. Each cache drains on its own backlog
-	# so a finished cache never gates the others; once all backlogs drain
-	# the tick is three indexed no-op queries.
-	defp seed_type_names_forever do
-		types = Universe.Database.missing_type_name_count()
-		locations = Universe.Database.missing_location_name_count()
-		systems = Universe.Database.missing_system_count()
-		started = System.monotonic_time(:millisecond)
-
-		Marketmailer.Log.info(
-			"type_names_tick",
-			%{missing_types: types, missing_locations: locations, missing_systems: systems},
-			"cache fill tick: #{types} types, #{locations} locations, #{systems} systems missing"
-		)
-
-		if types != 0, do: Universe.Database.seed_missing_type_names(500)
-		if locations != 0, do: Universe.Database.seed_missing_location_names(500)
-		if systems != 0, do: Universe.Database.seed_missing_systems(20)
-
-		Marketmailer.Log.info(
-			"type_names_tick_done",
-			%{
-				missing_types: types,
-				missing_locations: locations,
-				missing_systems: systems,
-				elapsed_ms: System.monotonic_time(:millisecond) - started
-			},
-			"type-name fill tick done"
-		)
-
-		Process.sleep(60_000)
-		seed_type_names_forever()
 	end
 
 	# Test env (`config/test.exs`: `start_pollers: false`) boots only the

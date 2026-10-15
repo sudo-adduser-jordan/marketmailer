@@ -277,80 +277,25 @@ defmodule Market.DatabaseTest do
 		assert MarketDatabase.suggest_items(nil) == []
 	end
 
-	test "type-name seeding is a no-op offline when nothing is missing" do
+	test "labels player-owned structures without a names row" do
 		now = NaiveDateTime.utc_now(:second)
 
 		Database.insert_all("names", [%{id: 1_001, name: "Tritanium"}])
 
+		Database.insert_all("systems", [
+			%{system_id: 30_000_142, name: "Jita", security_status: 0.9, region_name: "The Forge"},
+			%{system_id: 30_000_143, name: "Rens", security_status: 0.7, region_name: "Heimatar"}
+		])
+
+		# 1021681819954 is a 64-bit player structure id: never in the SDE,
+		# so no names row can ever exist for it.
 		Database.insert_all("market", [
 			%{
 				order_id: 501,
 				duration: 1,
 				is_buy_order: 0,
 				issued: "2026-09-24T00:00:00Z",
-				location_id: 60_003_760,
-				min_volume: 1,
-				price: 10.0,
-				range: "station",
-				system_id: 30_000_142,
-				type_id: 1_001,
-				volume_remain: 10,
-				volume_total: 10,
-				inserted_at: now,
-				updated_at: now
-			}
-		])
-
-		assert Universe.Database.seed_missing_type_names(500) == :ok
-	end
-
-	test "location and system seeding are no-ops offline when nothing is missing" do
-		now = NaiveDateTime.utc_now(:second)
-
-		Database.insert_all("names", [
-			%{id: 1_001, name: "Tritanium"},
-			%{id: 60_003_760, name: "Jita IV - Moon 4"}
-		])
-
-		Database.insert_all("systems", [
-			%{system_id: 30_000_142, name: "Jita", security_status: 0.9, region_name: "The Forge"}
-		])
-
-		Database.insert_all("market", [
-			%{
-				order_id: 502,
-				duration: 1,
-				is_buy_order: 0,
-				issued: "2026-09-24T00:00:00Z",
-				location_id: 60_003_760,
-				min_volume: 1,
-				price: 10.0,
-				range: "station",
-				system_id: 30_000_142,
-				type_id: 1_001,
-				volume_remain: 10,
-				volume_total: 10,
-				inserted_at: now,
-				updated_at: now
-			}
-		])
-
-		assert Universe.Database.seed_missing_location_names(500) == :ok
-		assert Universe.Database.seed_missing_systems(20) == :ok
-	end
-
-	test "missing cache counts track each backlog independently" do
-		now = NaiveDateTime.utc_now(:second)
-
-		Database.insert_all("names", [%{id: 1_001, name: "Tritanium"}])
-
-		Database.insert_all("market", [
-			%{
-				order_id: 503,
-				duration: 1,
-				is_buy_order: 0,
-				issued: "2026-09-24T00:00:00Z",
-				location_id: 60_003_760,
+				location_id: 1_021_681_819_954,
 				min_volume: 1,
 				price: 10.0,
 				range: "station",
@@ -360,15 +305,167 @@ defmodule Market.DatabaseTest do
 				volume_total: 10,
 				inserted_at: now,
 				updated_at: now
+			},
+			%{
+				order_id: 502,
+				duration: 1,
+				is_buy_order: 1,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 60_003_760,
+				min_volume: 1,
+				price: 110.0,
+				range: "station",
+				system_id: 30_000_142,
+				type_id: 1_001,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
 			}
 		])
 
-		# Type names are warm but the location and system backlogs are not:
-		# each counter must report its own cache so a drained cache never
-		# gates the others.
-		assert Universe.Database.missing_type_name_count() == 0
-		assert Universe.Database.missing_location_name_count() == 1
-		assert Universe.Database.missing_system_count() == 1
+		assert [%{location_name: "Player Station"}] = MarketDatabase.get_items_less_than_jita_buy()
+		assert [%{location_name: "Player Station"}] = MarketDatabase.get_best_order()
+	end
+
+	test "renders ? for unmatched NPC-range locations" do
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("names", [%{id: 1_001, name: "Tritanium"}])
+
+		Database.insert_all("systems", [
+			%{system_id: 30_000_142, name: "Jita", security_status: 0.9, region_name: "The Forge"},
+			%{system_id: 30_000_143, name: "Rens", security_status: 0.7, region_name: "Heimatar"}
+		])
+
+		# NPC-range id with no names row: an SDE import gap, not a player
+		# structure, so it stays "?" to signal missing data.
+		Database.insert_all("market", [
+			%{
+				order_id: 503,
+				duration: 1,
+				is_buy_order: 0,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 60_003_397,
+				min_volume: 1,
+				price: 10.0,
+				range: "station",
+				system_id: 30_000_143,
+				type_id: 1_001,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			},
+			%{
+				order_id: 504,
+				duration: 1,
+				is_buy_order: 1,
+				issued: "2026-09-24T00:00:00Z",
+				location_id: 60_003_760,
+				min_volume: 1,
+				price: 110.0,
+				range: "station",
+				system_id: 30_000_142,
+				type_id: 1_001,
+				volume_remain: 10,
+				volume_total: 10,
+				inserted_at: now,
+				updated_at: now
+			}
+		])
+
+		assert [%{location_name: "?"}] = MarketDatabase.get_items_less_than_jita_buy()
+		assert [%{location_name: "?"}] = MarketDatabase.get_best_order()
+	end
+
+	test "composes NPC station names from SDE reference maps" do
+		alias Mix.Tasks.Sde.Import, as: SdeImport
+
+		lookups = %{
+			systems: %{30_000_142 => "Jita", 30_000_140 => "Maurasi", 30_100_000 => "Zarzakh"},
+			corps: %{
+				1_000_035 => "Caldari Navy",
+				1_000_033 => "Caldari Business Tribunal",
+				1_000_438 => "Deathless Custodians"
+			},
+			ops: %{14 => "Assembly Plant", 121 => "- The Fulcrum"},
+			planets: %{40_009_082 => %{index: 4}, 40_008_900 => %{index: 8}, 40_009_100 => %{index: 9}},
+			moons: %{40_009_087 => %{planet_id: 40_009_082, index: 4}, 40_008_952 => %{planet_id: 40_008_900, index: 14}},
+			stars: MapSet.new([40_488_503])
+		}
+
+		# Moon-orbiting, operation name (Jita 4-4).
+		assert %{id: 60_003_760, name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant"} =
+						 SdeImport.compose_station_name(
+							 %{
+								 "_key" => 60_003_760,
+								 "solarSystemID" => 30_000_142,
+								 "orbitID" => 40_009_087,
+								 "ownerID" => 1_000_035,
+								 "operationID" => 14,
+								 "useOperationName" => true
+							 },
+							 lookups
+						 )
+
+		# Moon-orbiting, owner name alone (useOperationName=false).
+		assert %{id: 60_003_454, name: "Maurasi VIII - Moon 14 - Caldari Business Tribunal"} =
+						 SdeImport.compose_station_name(
+							 %{
+								 "_key" => 60_003_454,
+								 "solarSystemID" => 30_000_140,
+								 "orbitID" => 40_008_952,
+								 "ownerID" => 1_000_033,
+								 "operationID" => 40,
+								 "useOperationName" => false
+							 },
+							 lookups
+						 )
+
+		# Planet-orbiting, no moon segment (also covers the IX numeral).
+		assert %{id: 60_003_455, name: "Jita IX - Caldari Navy Assembly Plant"} =
+						 SdeImport.compose_station_name(
+							 %{
+								 "_key" => 60_003_455,
+								 "solarSystemID" => 30_000_142,
+								 "orbitID" => 40_009_100,
+								 "ownerID" => 1_000_035,
+								 "operationID" => 14,
+								 "useOperationName" => true
+							 },
+							 lookups
+						 )
+
+		# Star-orbiting, no celestial segment (Zarzakh).
+		assert %{id: 60_015_187, name: "Zarzakh - Deathless Custodians - The Fulcrum"} =
+						 SdeImport.compose_station_name(
+							 %{
+								 "_key" => 60_015_187,
+								 "solarSystemID" => 30_100_000,
+								 "orbitID" => 40_488_503,
+								 "ownerID" => 1_000_438,
+								 "operationID" => 121,
+								 "useOperationName" => true
+							 },
+							 lookups
+						 )
+
+		# Missing links resolve to nil, never to a half-composed name.
+		base = %{
+			"_key" => 60_003_760,
+			"solarSystemID" => 30_000_142,
+			"orbitID" => 40_009_087,
+			"ownerID" => 1_000_035,
+			"operationID" => 14,
+			"useOperationName" => true
+		}
+
+		assert SdeImport.compose_station_name(%{base | "solarSystemID" => 9_999_999}, lookups) == nil
+		assert SdeImport.compose_station_name(%{base | "orbitID" => 9_999_999}, lookups) == nil
+		assert SdeImport.compose_station_name(%{base | "ownerID" => 9_999_999}, lookups) == nil
+		assert SdeImport.compose_station_name(%{base | "operationID" => 9_999_999}, lookups) == nil
+		assert SdeImport.compose_station_name(%{"_key" => "bogus"}, lookups) == nil
 	end
 
 	test "reads persist idempotently in the single database" do
