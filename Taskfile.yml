@@ -110,7 +110,7 @@ tasks:
         rm -f priv/data/marketmailer.pid
 
   live:update:
-    desc: Hot-upgrade the running prod when code changed; refuses when nothing runs or the tree is dirty, and never leaves the daemon down
+    desc: Hot-upgrade the running prod in two phases (prepare writes bump+appup, you commit, re-run applies on a clean tree); refuses when nothing runs or the tree is dirty, and never leaves the daemon down
     cmds:
       - |
         VSN=$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\(.*\)".*/\1/p' mix.exs | head -n 1)
@@ -118,6 +118,8 @@ tasks:
         BIN={{.BIN}}
         CASTLE={{.CASTLE}}
         ALL_TARS=$(ls releases/marketmailer-*.tar.gz 2>/dev/null | sort -V || true)
+        T0=$SECONDS
+        stamp() { echo "live:update: [$((SECONDS - T0))s] $1"; }
         DIRTY=$(git status --porcelain || true)
         if ! { [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; }; then
           echo "live:update: no living prod process to update — run task start"
@@ -163,7 +165,9 @@ tasks:
           # Force-recompile so build-time macros (e.g. the git commit baked
           # into logs) are always fresh: `mix release` alone reuses stale beams.
           MIX_ENV=prod mix compile --force
+          stamp "prod recompile done"
           MIX_ENV=prod mix release --overwrite
+          stamp "prod release assembled"
           mkdir -p releases
           cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
           echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
@@ -195,20 +199,20 @@ tasks:
         fi
         FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
         mix compile >/dev/null 2>&1 || (echo "live:update: compile failed" && exit 1)
+        stamp "dev compile ok"
         if mix castle.appup --from "tar:$FROM_TAR" >/dev/null 2>&1; then
+          stamp "appup coverage holds for $FROM_VER -> $VSN"
           if [ ! -f "releases/marketmailer-$VSN.tar.gz" ]; then
             echo "live:update: version $VSN not built yet — building (no version change needed)"
-            echo "live:update: building prod release $VSN"
             stage_release
           else
-            if [ -n "$DIRTY" ]; then
-              echo "live:update: non-code changes only — no hot-upgrade needed"
-              echo "(release config applies at boot: task stop + task start; docs need nothing)"
-            else
+            RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
+            if [ "$RUN_VSN" = "$VSN" ]; then
               echo "live:update: no changes (version $VSN matches $FROM_TAR) — nothing to do"
+              ensure_up || exit 1
+              exit 0
             fi
-            ensure_up || exit 1
-            exit 0
+            echo "live:update: $VSN staged but daemon runs ${RUN_VSN:-unknown} — resuming upgrade"
           fi
         else
           echo "live:update: code differs from $FROM_TAR"
@@ -230,14 +234,22 @@ tasks:
             sed -i "s/^  ~c\"$TOP_TAG\",$/  ~c\"$VSN\",/" appup.exs
           fi
           mix castle.appup.gen --from "tar:$FROM_TAR" || (echo "live:update: appup gen failed for $FROM_TAR" && exit 1)
+          stamp "appup edge drafted"
           if ! mix castle.appup --from "tar:$FROM_TAR" >/dev/null 2>&1; then
             echo "live:update: appup coverage check failed for $FROM_TAR"
             mix castle.appup --from "tar:$FROM_TAR" || true
             echo "change needs manual review (migration, state-shape change, or restart_emulator?)"
-            echo "commit mix.exs + appup.exs and restart instead: task stop + task start"
+            echo "hot upgrade impossible: revert the bump with 'git checkout -- mix.exs appup.exs',"
+            echo "commit the code, and restart instead: task stop + task start"
             exit 1
           fi
-          echo "live:update: building prod release $VSN"
+          stamp "appup coverage verified"
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "live:update: prepared $VSN (tree now holds the bump + edge) — commit mix.exs + appup.exs,"
+            echo "then re-run task live:update; the upgrade itself runs only on a clean tree"
+            exit 0
+          fi
+          echo "live:update: bump + edge already committed — building prod release $VSN"
           stage_release
         fi
         RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
@@ -252,8 +264,9 @@ tasks:
           echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start)"
           exit 1
         )
+        stamp "hot-upgrade installed"
         ensure_up || exit 1
-        echo "live:update: now on $VSN — remember to commit mix.exs + appup.exs"
+        echo "live:update: now on $VSN (tree clean; nothing left to commit)"
 
   dev:
     desc: Interactive shell with the app started (isolated DB/port; coexists with prod)

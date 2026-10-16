@@ -13,30 +13,35 @@ mix setup            # deps.get + ecto.create + ecto.migrate
 task start           # kill every marketmailer process, rebuild the latest tree, and start it detached (never modifies the repo)
 task stop            # kill every marketmailer process on this host (prod daemon + orphaned dev nodes)
 task dev             # interactive shell with the app started (dev, shell-only; isolated priv/data/dev.db + :4001, coexists with prod)
-task live:update     # hot-upgrade the running prod when code changed (patch-bump + appup + release + unpack/install/commit); refuses when nothing runs or the tree is dirty (commit everything first); never leaves the daemon down
+task live:update     # hot-upgrade the running prod in two phases (prepare writes bump+appup, you commit, re-run applies on a clean tree); refuses when nothing runs or the tree is dirty; never leaves the daemon down
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
 mix compile          # compile; use --warnings-as-errors for strict mode
 mix ecto.migrate     # manual migration run (also happens on every boot)
 ```
 
 Hot upgrades use Castle OTP releases (`{:castle, "~> 1.0"}`, release
-`marketmailer`, `appup.exs` + `:appup` compiler). `task live:update` automates
-the whole flow: no-op when the tree matches the newest shipped baseline
-(`releases/*.tar.gz`, gitignored local staging); otherwise it patch-bumps
-`mix.exs` (a shipped version is frozen — same-version upgrades can never
-install), drafts the appup edge from that baseline (`mix castle.appup.gen`),
-verifies coverage, builds (`mix release --overwrite`), stages the tarball,
-then `bin/castle unpack/install/commit` against the live prod daemon (it
-refuses with "run `task start`" when nothing is running, and never leaves
-the daemon down — if the VM drops it is restarted on the version just made
-permanent and the running version is asserted). `mix.exs`
+`marketmailer`, `appup.exs` + `:appup` compiler). `task live:update` runs in
+two phases and never upgrades on a dirty tree: prepare patch-bumps `mix.exs`
+(a shipped version is frozen — same-version upgrades can never install) and
+drafts the appup edge from the newest shipped baseline (`releases/*.tar.gz`,
+gitignored local staging) via `mix castle.appup.gen`, verifies coverage, and
+stops — commit `mix.exs` + `appup.exs`, then re-run to apply (build
+`mix release --overwrite`, stage the tarball, `bin/castle
+unpack/install/commit` against the live prod daemon, verify). The bump + edge
+are always written before the commit that ships them; the upgrade itself never
+dirties the tree, so a finished run ends clean. A tree with bump + edge already
+committed upgrades in a single run. The task refuses with "run `task start`"
+when nothing is running, and never leaves the daemon down — if the VM drops it
+is restarted on the version just made permanent and the running version is
+asserted. `mix.exs`
 `upgrade_from` always excludes the version being built (self-relups are
 rejected). Clean tree before `task live:update`: commit all feature work
-first, so the only dirt it may create is its own `mix.exs` bump + `appup.exs`
-edge. If a run is interrupted, never re-run blindly — first inspect the
-daemon version, the staged tarball, and `mix.exs`/`appup.exs` dirt, finish or
-revert the in-flight upgrade, and commit the bump + edge only once the daemon
-is verified on the new version. SemVer — patch = hot-loadable logic, minor =
+first. If a run is interrupted, never re-run blindly — first inspect the
+daemon version, the staged tarball, and tree state (a staged tarball with the
+daemon still on the old version resumes the upgrade on re-run); finish or
+revert the in-flight upgrade, and commit the bump + edge only for a version
+verified on the daemon. The task prints per-stage elapsed times. SemVer —
+patch = hot-loadable logic, minor =
 feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape.
 Non-code dirt alone never bumps (docs need nothing; release config applies
 at boot, so config-only changes need `task start`).
