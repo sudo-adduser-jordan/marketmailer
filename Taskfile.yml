@@ -175,9 +175,16 @@ tasks:
         # the version just made permanent, then assert the running version.
         # `task stop` first clears any orphan still holding the pipe.
         ensure_up() {
+          # Liveness = node answering AND the app's supervisor running: the
+          # node answers `pid` several seconds before migrations finish, so a
+          # bare pid check can pass while boot is still going to fail.
+          up() {
+            "$BIN" pid >/dev/null 2>&1 || return 1
+            "$BIN" rpc 'IO.puts(Process.whereis(Marketmailer.Supervisor) != nil)' 2>/dev/null | grep -q '^true$'
+          }
           live=0
           for _ in $(seq 1 30); do
-            if "$BIN" pid >/dev/null 2>&1; then live=1; break; fi
+            if up; then live=1; break; fi
             sleep 1
           done
           if [ "$live" != "1" ]; then
@@ -186,7 +193,7 @@ tasks:
             "$BIN" daemon || { echo "live:update: could not restart the daemon — run task start"; return 1; }
             live=0
             for _ in $(seq 1 30); do
-              if "$BIN" pid >/dev/null 2>&1; then live=1; break; fi
+              if up; then live=1; break; fi
               sleep 1
             done
           fi
