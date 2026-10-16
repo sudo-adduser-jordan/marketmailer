@@ -188,7 +188,9 @@
        # anything.
        {:load_module, Marketmailer.Log.Format},
        # Discord.Embeds: added by this transition (extracted from Discord).
-       {:add_module, Discord.Embeds}
+       {:add_module, Discord.Embeds},
+       # Discord.Messages: removed by this transition.
+       {:delete_module, Discord.Messages}
      ]},
     {~c"0.1.24",
      [
