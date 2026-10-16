@@ -31,7 +31,12 @@ refuses with "run `task start`" when nothing is running, and never leaves
 the daemon down — if the VM drops it is restarted on the version just made
 permanent and the running version is asserted). `mix.exs`
 `upgrade_from` always excludes the version being built (self-relups are
-rejected). SemVer — patch = hot-loadable logic, minor =
+rejected). Clean tree before `task live:update`: commit all feature work
+first, so the only dirt it may create is its own `mix.exs` bump + `appup.exs`
+edge. If a run is interrupted, never re-run blindly — first inspect the
+daemon version, the staged tarball, and `mix.exs`/`appup.exs` dirt, finish or
+revert the in-flight upgrade, and commit the bump + edge only once the daemon
+is verified on the new version. SemVer — patch = hot-loadable logic, minor =
 feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape.
 Non-code dirt alone never bumps (docs need nothing; release config applies
 at boot, so config-only changes need `task start`).
