@@ -928,17 +928,31 @@ defmodule Discord.Consumer do
 	end
 
 	defp respond(intr, %Nostrum.Struct.Embed{} = embed) do
-		Api.Interaction.create_response(intr, %{
-			type: 4,
-			data: %{embeds: [embed]}
-		})
+		respond(intr, %{embeds: [embed]})
 	end
 
-	defp respond(intr, %{embeds: embeds, components: components}) do
-		Api.Interaction.create_response(intr, %{
-			type: 4,
-			data: %{embeds: embeds, components: components}
-		})
+	defp respond(intr, %{embeds: embeds} = payload) do
+		data =
+			case Map.fetch(payload, :components) do
+				{:ok, components} -> %{embeds: embeds, components: components}
+				:error -> %{embeds: embeds}
+			end
+
+		# A silent failure here is what makes a command look like it "did not
+		# respond": Discord drops the reply and edit_response later 404s with
+		# "Unknown Webhook" because no original response exists. Log the real
+		# reason so a broken reply is never swallowed.
+		Api.Interaction.create_response(intr, %{type: 4, data: data})
+		|> case do
+			:ok -> :ok
+			{:ok, _message} -> :ok
+			{:error, reason} -> log_discord_warning("discord_respond_failed", reason, intr)
+			other -> log_discord_warning("discord_respond_failed", other, intr)
+		end
+	rescue
+		error -> log_discord_warning("discord_respond_failed", Exception.message(error), intr)
+	catch
+		_, reason -> log_discord_warning("discord_respond_failed", reason, intr)
 	end
 end
 
