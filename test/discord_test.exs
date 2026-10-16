@@ -295,8 +295,8 @@ defmodule Discord.BroadcasterTest do
 		refute Map.has_key?(state, :pending)
 	end
 
-	test "code_change migrates legacy state to the barrier shape", %{task_supervisor: task_supervisor} do
-		legacy = %{
+	test "code_change migrates old state to the barrier shape", %{task_supervisor: task_supervisor} do
+		old_state = %{
 			async: false,
 			task_supervisor: task_supervisor,
 			channels_fun: fn -> [1300] end,
@@ -307,7 +307,7 @@ defmodule Discord.BroadcasterTest do
 			seen: MapSet.new()
 		}
 
-		assert {:ok, migrated} = Discord.Broadcaster.code_change("0.1.18", legacy, [])
+		assert {:ok, migrated} = Discord.Broadcaster.code_change("0.1.18", old_state, [])
 
 		for key <- [:channels_fun, :market_fun, :deliver_fun, :prune_fun] do
 			assert Map.get(migrated, key) == :default

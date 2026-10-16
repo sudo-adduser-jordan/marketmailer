@@ -11,7 +11,7 @@ of the app keeps running).
 ```sh
 mix setup            # deps.get + ecto.create + ecto.migrate
 task start           # kill every marketmailer process, rebuild the latest tree, and start it detached (never modifies the repo)
-task stop            # kill every marketmailer process on this host (prod daemon + orphaned/legacy dev nodes)
+task stop            # kill every marketmailer process on this host (prod daemon + orphaned dev nodes)
 task dev             # interactive shell with the app started (dev, shell-only; isolated priv/data/dev.db + :4001, coexists with prod)
 task live:update     # hot-upgrade the running prod when code changed (patch-bump + appup + release + unpack/install/commit); refuses when nothing runs or the tree is dirty (commit everything first); never leaves the daemon down
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
@@ -61,7 +61,7 @@ happens in `task dev` (interactive shell) or the test suite.
   (`mix release --overwrite`), seeds a fresh prod DB from the in-project DB
   when the paths differ, and starts (restart delivery needs no version
   bump). `task stop` is the kill-all switch — it gracefully stops the prod
-  daemon then sweeps orphaned release processes and a legacy detached-dev
+  daemon then sweeps orphaned release processes and a detached-dev
   node (no pid archaeology needed); the host-wide `epmd` and unrelated
   Erlang nodes (editor language servers) are left alone, as is a test suite
   under `_build/test`.

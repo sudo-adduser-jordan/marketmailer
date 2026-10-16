@@ -74,7 +74,7 @@ defmodule Etag.ExpiryTest do
 
 	test "NULL expiry from pre-migration rows fetches now" do
 		url = ESI.page_url(98_000_004, 1)
-		Etag.Database.upsert_etag(url, "legacy", nil)
+		Etag.Database.upsert_etag(url, "stale", nil)
 		assert Etag.Database.resume_delay_ms(url) == 0
 	end
 

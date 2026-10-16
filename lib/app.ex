@@ -1,7 +1,7 @@
 defmodule Marketmailer.Application do
 	use Application
 
-	@legacy_tables ["systems", "names", "discord", "etags", "market"]
+	@unmigrated_tables ["systems", "names", "discord", "etags", "market"]
 	@log_dir "logs"
 	@log_file "logs/errors.jsonl"
 	@log_handler :marketmailer_errors
@@ -80,7 +80,7 @@ defmodule Marketmailer.Application do
 		path = Path.join(:code.priv_dir(:marketmailer), "repo/migrations")
 
 		fun = fn repo ->
-			drop_legacy(repo)
+			drop_unmigrated(repo)
 			Ecto.Migrator.run(repo, path, :up, all: true)
 		end
 
@@ -90,7 +90,7 @@ defmodule Marketmailer.Application do
 		end
 	end
 
-	defp drop_legacy(repo) do
+	defp drop_unmigrated(repo) do
 		%{rows: rows} =
 			repo.query!("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
 
@@ -98,12 +98,12 @@ defmodule Marketmailer.Application do
 
 		if MapSet.size(names) > 0 and not MapSet.member?(names, "schema_migrations") do
 			Marketmailer.Log.warning(
-				"legacy_db_dropped",
-				%{tables: @legacy_tables},
-				"pre-migration database detected; dropping #{Enum.join(@legacy_tables, ", ")}"
+				"unmigrated_db_dropped",
+				%{tables: @unmigrated_tables},
+				"pre-migration database detected; dropping #{Enum.join(@unmigrated_tables, ", ")}"
 			)
 
-			Enum.each(@legacy_tables, fn table ->
+			Enum.each(@unmigrated_tables, fn table ->
 				repo.query!("DROP TABLE IF EXISTS #{table}")
 			end)
 
