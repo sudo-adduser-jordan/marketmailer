@@ -94,6 +94,10 @@ defmodule ESI do
 				activate_maintenance()
 				{:error, :service_unavailable, meta(response, url)}
 
+			{:ok, %{status: 404} = response} ->
+				release(response.headers, url)
+				{:error, :not_found, meta(response, url)}
+
 			{:ok, response} ->
 				release(response.headers, url)
 				_ = meta(response, url)

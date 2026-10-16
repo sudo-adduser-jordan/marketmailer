@@ -2,6 +2,7 @@ defmodule Marketmailer.PageWorker do
 	use GenServer, restart: :transient
 
 	@ping_interval 10_000
+	@gate_recheck_ms 5_000
 
 	def start_link({manager, id, page}) do
 		GenServer.start_link(__MODULE__, {manager, id, page},
@@ -20,16 +21,40 @@ defmodule Marketmailer.PageWorker do
 	def handle_info(:work, state) do
 		ensure_error_log()
 
-		if ESI.maintenance_active?() do
-			if try_claim_ping() do
-				perform_fetch(state)
-			else
-				schedule_next(@ping_interval)
+		case fetch_gate(state.id, state.page) do
+			:wait ->
+				schedule_next(@gate_recheck_ms)
 				{:noreply, state}
-			end
-		else
-			perform_fetch(state)
+
+			:gone ->
+				Marketmailer.RegionManager.page_result(state.id, state.page, :gone, %{reason: :not_found})
+
+				Marketmailer.Log.info(
+					"page_gone",
+					%{region: state.id, page: state.page},
+					"Region #{state.id} page #{state.page} no longer exists; stopping worker"
+				)
+
+				{:stop, :normal, state}
+
+			:ok ->
+				if ESI.maintenance_active?() do
+					if try_claim_ping() do
+						perform_fetch(state)
+					else
+						schedule_next(@ping_interval)
+						{:noreply, state}
+					end
+				else
+					perform_fetch(state)
+				end
 		end
+	end
+
+	defp fetch_gate(id, page) do
+		Marketmailer.RegionManager.fetch_gate(id, page)
+	catch
+		:exit, _ -> :ok
 	end
 
 	defp perform_fetch(state) do
@@ -113,6 +138,12 @@ defmodule Marketmailer.PageWorker do
 				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :rate_limited})
 				schedule_next(max(ctx.retry_after_ms, 1_000))
 				{:noreply, %{state | errors: 0}}
+
+			{:error, :not_found, _ctx} ->
+				stop_gone(state)
+
+			{:error, 404} ->
+				stop_gone(state)
 
 			{:error, reason} ->
 				delay = backoff_ms(errs)
@@ -243,6 +274,19 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
+
+	defp stop_gone(state) do
+		%{id: id, page: page} = state
+		Marketmailer.RegionManager.page_result(id, page, :gone, %{reason: :not_found})
+
+		Marketmailer.Log.warning(
+			"page_fetch_not_found",
+			%{region: id, page: page, reason: "404"},
+			"Fetch 404 for region #{id} page #{page}: gate bypassed, stopping worker"
+		)
+
+		{:stop, :normal, state}
+	end
 
 	defp backoff_ms(errors) do
 		(60_000 * :math.pow(2, errors)) |> round() |> min(300_000)

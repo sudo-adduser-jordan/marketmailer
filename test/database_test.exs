@@ -86,6 +86,19 @@ defmodule Etag.ExpiryTest do
 
 		assert Enum.sort(Etag.Database.pages_for_region(region)) == [1, 2]
 	end
+
+	test "prune_region drops pages above max from SQLite and ETS" do
+		region = 98_000_007
+		now = System.system_time(:millisecond) + 60_000
+		Etag.Database.upsert_etag(ESI.page_url(region, 1), "e1", now)
+		Etag.Database.upsert_etag(ESI.page_url(region, 2), "e2", now)
+		Etag.Database.upsert_etag(ESI.page_url(region, 3), "e3", now)
+
+		assert :ok = Etag.Database.prune_region(region, 2)
+		assert Enum.sort(Etag.Database.pages_for_region(region)) == [1, 2]
+		assert :ets.lookup(:market_cache, ESI.page_url(region, 3)) == []
+		assert :ets.lookup(:market_cache, ESI.page_url(region, 2)) != []
+	end
 end
 
 defmodule Market.DatabaseTest do

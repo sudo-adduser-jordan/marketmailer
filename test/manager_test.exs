@@ -161,6 +161,71 @@ defmodule Marketmailer.RegionManagerTest do
 		assert summary.region == region
 	end
 
+	test "fetch_gate allows page 1 before any count and parks higher pages" do
+		region = 99_000_011
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+
+		assert Marketmailer.RegionManager.fetch_gate(region, 1) == :ok
+		assert Marketmailer.RegionManager.fetch_gate(region, 2) == :wait
+		GenServer.stop(manager, :normal)
+	end
+
+	test "fetch_gate denies pages above the known count" do
+		region = 99_000_012
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+
+		Marketmailer.RegionManager.page_count(region, 2)
+		assert_all_pages(region, [1, 2])
+
+		assert Marketmailer.RegionManager.fetch_gate(region, 2) == :ok
+		assert Marketmailer.RegionManager.fetch_gate(region, 3) == :gone
+		GenServer.stop(manager, :normal)
+	end
+
+	test "a gone report shrinks the region and stops the dead workers" do
+		region = 99_000_013
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+
+		Marketmailer.RegionManager.page_count(region, 3)
+		assert_all_pages(region, [1, 2, 3])
+
+		Marketmailer.RegionManager.page_result(region, 3, :gone, %{reason: :not_found})
+		assert_no_pages(region, [3])
+		assert_all_pages(region, [1, 2])
+
+		assert %{page_count: 2} = :sys.get_state(manager)
+		assert Marketmailer.RegionManager.fetch_gate(region, 3) == :gone
+		GenServer.stop(manager, :normal)
+	end
+
+	test "a not_found failure shrinks like a gone report" do
+		region = 99_000_014
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+
+		Marketmailer.RegionManager.page_count(region, 2)
+		assert_all_pages(region, [1, 2])
+
+		Marketmailer.RegionManager.page_result(region, 2, :failed, %{reason: :not_found})
+		assert_no_pages(region, [2])
+		assert_all_pages(region, [1])
+
+		assert %{page_count: 1} = :sys.get_state(manager)
+		GenServer.stop(manager, :normal)
+	end
+
+	test "a gone report at or below the known count changes nothing" do
+		region = 99_000_015
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+
+		Marketmailer.RegionManager.page_count(region, 3)
+		assert_all_pages(region, [1, 2, 3])
+
+		Marketmailer.RegionManager.page_result(region, 5, :gone, %{reason: :not_found})
+		assert_all_pages(region, [1, 2, 3])
+		assert %{page_count: 3} = :sys.get_state(manager)
+		GenServer.stop(manager, :normal)
+	end
+
 	defp start_cycle_manager(region, timeout \\ 100) do
 		{:ok, manager} = Marketmailer.RegionManager.start_link(region, cycle_timeout: timeout)
 		:ok = Marketmailer.RegionManager.subscribe(region, self())

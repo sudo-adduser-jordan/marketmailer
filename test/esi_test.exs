@@ -52,4 +52,26 @@ defmodule ESI.ClientTest do
 				assert ctx.expires_at - before >= ctx.ttl - 1_000
 				assert ctx.expires_at - before <= ctx.ttl + 5_000
 		end
+
+		test "404 maps to :not_found with meta" do
+				http_fun = fn _url, _opts ->
+						{:ok,
+							%{
+									status: 404,
+									headers: %{"x-pages" => ["5"]},
+									body: ""
+							}}
+				end
+
+				assert {:error, :not_found, ctx} = ESI.fetch(98_001_002, 9, http_fun: http_fun)
+				assert ctx.pages == 5
+		end
+
+		test "other 4xx stay as integer errors" do
+				http_fun = fn _url, _opts ->
+						{:ok, %{status: 400, headers: %{}, body: ""}}
+				end
+
+				assert {:error, 400} = ESI.fetch(98_001_003, 1, http_fun: http_fun)
+		end
 end

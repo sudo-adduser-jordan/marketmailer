@@ -144,6 +144,30 @@ defmodule Etag.Database do
 		end
 	end
 
+	def prune_region(region, max_page) when is_integer(region) and is_integer(max_page) do
+		prefix = "https://esi.evetech.net/v1/markets/#{region}/orders/"
+
+		dead =
+			from(tag in "etags", where: like(tag.url, ^"#{prefix}%"), select: tag.url)
+			|> Database.all()
+			|> Enum.filter(fn url -> (page_from_url(url) || 0) > max_page end)
+			|> Enum.uniq()
+
+		if dead != [] do
+			if :ets.whereis(:market_cache) != :undefined do
+				Enum.each(dead, &:ets.delete(:market_cache, &1))
+			end
+
+			Database.Writer.write(fn ->
+				Database.delete_all(from(tag in "etags", where: tag.url in ^dead))
+			end)
+		end
+
+		:ok
+	rescue
+		_ -> :ok
+	end
+
 	defp fetch_etag(url) do
 		query = from(tag in "etags", where: tag.url == ^url, select: {tag.etag, tag.expires_at})
 

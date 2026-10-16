@@ -25,6 +25,10 @@ defmodule Marketmailer.RegionManager do
 		GenServer.cast(via(region), {:page_result, page, status, context})
 	end
 
+	def fetch_gate(region, page) when is_integer(region) and is_integer(page) do
+		GenServer.call(via(region), {:fetch_gate, page})
+	end
+
 	@impl true
 	def init({id, _opts}) do
 		pages = [1 | Etag.Database.pages_for_region(id)] |> Enum.uniq()
@@ -51,6 +55,18 @@ defmodule Marketmailer.RegionManager do
 	@impl true
 	def handle_call({:subscribe, pid}, _from, state) do
 		{:reply, :ok, %{state | listeners: MapSet.put(state.listeners, pid)}}
+	end
+
+	@impl true
+	def handle_call({:fetch_gate, page}, _from, state) do
+		reply =
+			cond do
+				is_nil(state.expected_pages) -> if page == 1, do: :ok, else: :wait
+				page <= state.expected_pages -> :ok
+				true -> :gone
+			end
+
+		{:reply, reply, state}
 	end
 
 	@impl true
@@ -81,6 +97,30 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	@impl true
+	def handle_cast({:page_result, page, :failed, %{reason: :not_found} = context}, state)
+			when is_integer(page) and page >= 2 do
+		handle_cast({:page_result, page, :gone, context}, state)
+	end
+
+	@impl true
+	def handle_cast({:page_result, page, :gone, context}, state) do
+		cond do
+			!is_integer(page) ->
+				{:noreply, state}
+
+			page < 2 ->
+				reason = Map.get(context, :reason, :not_found)
+				handle_cast({:page_result, page, :failed, %{reason: reason}}, state)
+
+			!is_nil(state.expected_pages) and page - 1 >= state.expected_pages ->
+				{:noreply, state}
+
+			true ->
+				{:noreply, apply_count(page - 1, state)}
+		end
+	end
+
+	@impl true
 	def handle_cast({:page_result, page, status, context}, state) do
 		if MapSet.member?(state.started, page) do
 			expected_pages = expected_pages(context, state.expected_pages)
@@ -100,6 +140,10 @@ defmodule Marketmailer.RegionManager do
 	def handle_info(_message, state), do: {:noreply, state}
 
 	defp handle_page_count(count, state) do
+		{:noreply, apply_count(count, state)}
+	end
+
+	defp apply_count(count, state) do
 		state = set_expected_pages(state, count)
 
 		state =
@@ -109,16 +153,19 @@ defmodule Marketmailer.RegionManager do
 			end
 
 		if count == state.page_count do
-			{:noreply, state}
+			state
 		else
+			old = state.page_count
+			if count < old, do: Etag.Database.prune_region(state.id, count)
+
 			Marketmailer.Log.info(
 				"page_count_changed",
-				%{region: state.id, old: state.page_count, new: count},
-				"Region #{state.id}: pages #{state.page_count} -> #{count}"
+				%{region: state.id, old: old, new: count},
+				"Region #{state.id}: pages #{old} -> #{count}"
 			)
 
-			adjust_workers(state.id, state.page_count, count)
-			{:noreply, %{state | page_count: count}}
+			adjust_workers(state.id, old, count)
+			%{state | page_count: count}
 		end
 	end
 
