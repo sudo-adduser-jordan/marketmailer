@@ -34,11 +34,6 @@ defmodule Marketmailer.Application do
 		{:ok, pid}
 	end
 
-	# Test env (`config/test.exs`: `start_pollers: false`) boots only the
-	# database/cache leaves so `mix test` never hits live ESI or Discord.
-	# Poller core (page supervision + per-region managers) boots before the
-	# broadcaster so it can subscribe to every manager on init; managers also
-	# attach the broadcaster on init, so restarts find each other either way.
 	defp poller_core_children do
 		if pollers_enabled?() do
 			[
@@ -60,9 +55,6 @@ defmodule Marketmailer.Application do
 
 	defp pollers_enabled?, do: Application.get_env(:marketmailer, :start_pollers, true)
 
-	# Phoenix LiveDashboard (`/dashboard`): PubSub + telemetry poller +
-	# HTTP endpoint. Disabled in test (`config/test.exs`) and when
-	# `DASHBOARD_ENABLED=false` in prod (`config/runtime.exs`).
 	defp dashboard_children do
 		if dashboard_enabled?() do
 			[
@@ -84,10 +76,6 @@ defmodule Marketmailer.Application do
 		end
 	end
 
-	# Runs pending priv/repo/migrations on every boot so `mix run`/containers
-	# never need a separate migrate step. Databases created before migrations
-	# existed have the tables but no schema_migrations bookkeeping; those are
-	# dropped once (data is derived cache) and rebuilt.
 	defp migrate do
 		path = Path.join(:code.priv_dir(:marketmailer), "repo/migrations")
 
@@ -123,35 +111,17 @@ defmodule Marketmailer.Application do
 		end
 	end
 
-	# Every warning/error-level event is appended as pretty JSON to ./logs/errors.jsonl.
-	# logs/ is removed and recreated on every boot so each run starts clean.
-	# Rotation keeps the five most recent 10 MB archives, compressed on rotate.
-	# A failed handler never stops the app - it only warns (logger_std_h
-	# requires a charlist).
-	# While running, :logger_std_h holds the log file descriptor open: deleting
-	# logs/errors.jsonl (or logs/) orphans the descriptor and no new file
-	# appears. ensure_file_logger/0 is idempotent and non-destructive —
-	# PageWorker calls it on every fetch so a deleted log is recreated within
-	# one cycle.
 	defp configure_file_logger do
 		File.rm_rf!(@log_dir)
 		ensure_file_logger()
 	end
 
-	@doc """
-	Recreates the file log (dir + `:logger_std_h` handler) when it was deleted
-	while running. Cheap no-op when healthy: one `stat` plus a handler lookup.
-	Public so supervised workers and `remote` shells can call it. The optional
-	args exist for tests so they never touch the real `logs/errors.jsonl`.
-	"""
 	def ensure_file_logger(path \\ @log_file, handler \\ @log_handler) do
 		File.mkdir_p!(Path.dirname(path))
 
 		if handler_healthy?(handler, path) do
 			:ok
 		else
-			# Drop the orphan-fd handler (if any) so the re-added one opens the
-			# fresh path.
 			:logger.remove_handler(handler)
 			add_file_handler(handler, path)
 		end
@@ -164,8 +134,6 @@ defmodule Marketmailer.Application do
 	end
 
 	defp add_file_handler(handler, path) do
-		# Formatter config is a map: OTP types it as `#{atom() => term()}`
-		# and a keyword list breaks the `:logger.add_handler/3` contract.
 		config = %{
 			config: %{
 				type: :file,

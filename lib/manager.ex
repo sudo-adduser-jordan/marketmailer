@@ -30,9 +30,6 @@ defmodule Marketmailer.RegionManager do
 	@impl true
 	def init({id, opts}) do
 		timeout = Keyword.get(opts, :cycle_timeout, @default_cycle_timeout)
-		# Crash resume: pre-start workers for every page with a known etag row
-		# so each resumes its own persisted TTL timer. Page 1 always starts so
-		# the page count is rediscovered even with a cold etags table.
 		pages = [1 | Etag.Database.pages_for_region(id)] |> Enum.uniq()
 		Enum.each(pages, &start_page(id, &1))
 
@@ -127,7 +124,6 @@ defmodule Marketmailer.RegionManager do
 
 	def handle_info(_message, state), do: {:noreply, state}
 
-	# Shared fan-out + cycle-expectation update for both cast and info paths.
 	defp handle_page_count(count, state) do
 		state = set_expected_pages(state, count)
 
@@ -244,8 +240,6 @@ defmodule Marketmailer.RegionManager do
 		Enum.sort(pages)
 	end
 
-	# Sliding deadline: every activity pushes the timeout out so a slow but
-	# progressing sequential sweep doesn't trip a fixed-from-start timer.
 	defp refresh_timer(%{timer: nil} = state), do: schedule_timer(state)
 
 	defp refresh_timer(state) do
@@ -259,8 +253,6 @@ defmodule Marketmailer.RegionManager do
 		%{state | timer: {timer_token, timer_handle}}
 	end
 
-	# Timeout payload names the pages that never reported, so the Discord
-	# embed shows "Page 3: cycle_timeout" instead of "Page ?".
 	defp pending_failures(%{expected_pages: nil}), do: [%{page: nil, reason: :cycle_timeout}]
 
 	defp pending_failures(%{expected_pages: expected, results: results}) when is_integer(expected) and expected > 0 do

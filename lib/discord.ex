@@ -1,30 +1,18 @@
 defmodule Discord.Messages do
 	alias Nostrum.Struct.Embed
 	alias Nostrum.Struct.Interaction
-	# alias Nostrum.Struct.Guild
-	# alias Nostrum.Cache.GuildCache
-
-	# use playwright to snap canvas images, it wont be that many
 
 	@color_success 0x43B581
 	@color_error 0xF04747
 	@color_info 0x7289DA
 
-	# @icon_ "https://images.evetech.net/types/52996/relic?size=64"
-	# @icon_corporation "https://images.evetech.net/corporations/98666181/logo?size=64"
-
 	@icon_ "https://images.evetech.net/types/81008/icon?size=64"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
 	@icon_database "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/database.png"
 
-	# @icon_info "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
 
-	# Footer carries both date and version — date left, version right,
-	# joined with a middle dot so Discord renders a single footer line.
-	# Every embed sets `timestamp` just before piping here, so it is always
-	# present (no nil fallback).
 	defp with_version(%Embed{timestamp: ts} = embed) do
 		%{embed | footer: %Embed.Footer{text: "#{ts} • v#{app_version()}"}, timestamp: nil}
 	end
@@ -57,7 +45,6 @@ defmodule Discord.Messages do
 		%Embed{
 			title: "Error",
 			description: "Error",
-			# url: "https://discord.com",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: %Embed.Author{
@@ -134,7 +121,6 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	# Accepts maps or string-keyed maps; shared with Discord.Consumer.
 	def candidate_name(%{item_name: name}) when is_binary(name), do: name
 	def candidate_name(%{item: name}) when is_binary(name), do: name
 	def candidate_name(%{name: name}) when is_binary(name), do: name
@@ -143,12 +129,8 @@ defmodule Discord.Messages do
 	def candidate_name(%{"name" => name}) when is_binary(name), do: name
 	def candidate_name(_), do: nil
 
-	# Discord-only safety cap on how many undercut rows get rendered.
 	@list_max 100
 
-	# Cap, validate, and clamp once so the rendered page and the page
-	# buttons can never disagree. Shared by market_list_embed/3 and
-	# market_list_payload/3.
 	defp paginate(items, page, per_page) do
 		list = Enum.take(items, @list_max)
 		per_page = if is_integer(per_page) and per_page > 0, do: per_page, else: list_per_page()
@@ -206,8 +188,6 @@ defmodule Discord.Messages do
 
 	def market_list_embed(_items, _page, _per_page), do: market_list_embed([], 1, 10)
 
-	# Paginated payload: page-1 embed plus Prev/Next buttons. Empty lists
-	# carry no components.
 	def market_list_payload(items, page \\ 1, per_page \\ 10) do
 		items = if is_list(items), do: items, else: []
 		{list, page, per_page} = paginate(items, page, per_page)
@@ -219,8 +199,6 @@ defmodule Discord.Messages do
 	def list_per_page, do: 10
 	def list_broadcast_per_page, do: 100
 
-	# Status section of the per-round digest: which regions failed or never
-	# reported. One line per region; dropped lines never overflow the embed.
 	def round_status_embed(failures, pending) do
 		failure_lines =
 			failures
@@ -311,8 +289,6 @@ defmodule Discord.Messages do
 		if atom_val == nil, do: if(is_map(item), do: Map.get(item, string_key)), else: atom_val
 	end
 
-	# Short mobile-width truncation with an ellipsis marker.
-	# Plain (non-monospace) rows: no padding, each row wraps naturally.
 	@list_item_width 18
 	@list_system_width 10
 
@@ -340,7 +316,6 @@ defmodule Discord.Messages do
 
 	defp list_truncate(_, _), do: "?"
 
-	# Compact margin without any pipe divider: +1.2k, +3.4M, +12.50.
 	defp format_list_margin(nil), do: "?"
 
 	defp format_list_margin(margin) when is_binary(margin) do
@@ -363,7 +338,6 @@ defmodule Discord.Messages do
 
 	defp format_list_margin(_), do: "?"
 
-	# Embed descriptions cap at 4096 chars; drop lines that would overflow.
 	defp truncate_lines([], acc), do: acc
 
 	defp truncate_lines([line | rest], acc) do
@@ -376,8 +350,6 @@ defmodule Discord.Messages do
 		end
 	end
 
-	# Callers normalize to float before reaching here (`price_value/1` and
-	# `margin_value/1` handle nil/binary one level up), so only numbers arrive.
 	defp format_isk(number) when is_number(number),
 		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
 
@@ -385,8 +357,6 @@ defmodule Discord.Messages do
 		"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
 	end
 
-	# Compact millions with 2 decimals at/above 1M, shared by Sell/Buy
-	# and Margin so the three fields can't drift.
 	defp millions_compact(abs_value),
 		do: :erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2) <> "M"
 
@@ -402,8 +372,6 @@ defmodule Discord.Messages do
 
 	defp to_number(_), do: nil
 
-	# Per-unit margin: buy wall minus sell price. Nil when either side
-	# is missing so the embed renders "? ISK".
 	defp per_unit_margin(item) do
 		with buy when not is_nil(buy) <- to_number(item.buy_price),
 				 sell when not is_nil(sell) <- to_number(item.price) do
@@ -435,14 +403,11 @@ defmodule Discord.Messages do
 		janice_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
 		eve_ref_url = "https://everef.net/types/#{item.type_id}"
 		eve_tycoon_url = "https://evetycoon.com/market/#{item.type_id}"
-		# Per-item icon from the EVE image server; Discord loads it, so the
-		# lookup stays a single instant DB query with no capture/fetch.
 		type_icon = "https://images.evetech.net/types/#{item.type_id}/icon?size=64"
 
 		%Embed{
 			title: item.item_name || "Market order",
 			description: "[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Tycoon](#{eve_tycoon_url})",
-			# url: "https://discord.com",
 			color: embed_color(per_unit_margin(item)),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
@@ -477,13 +442,10 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	# Green sidebar on profit, red on loss, neutral when unknown.
 	defp embed_color(nil), do: @color_info
 	defp embed_color(profit) when is_number(profit) and profit > 0, do: @color_success
 	defp embed_color(_profit), do: @color_error
 
-	# Plain margin text (no emoji, no code block). Compact to millions
-	# with 2 decimals at/above 1M, full ISK below.
 	defp margin_value(nil), do: "? ISK"
 
 	defp margin_value(profit) when is_number(profit) do
@@ -514,8 +476,6 @@ defmodule Discord.Messages do
 	defp format_security(security) when is_number(security), do: Float.round(security * 1.0, 1)
 	defp format_security(_), do: "?"
 
-	# add/remove/list differ only in description and color, so they share
-	# one embed skeleton.
 	defp channel_embed(description, color) do
 		%Embed{
 			author: %Embed.Author{
@@ -570,8 +530,6 @@ defmodule Discord.Consumer do
 
 	@admin_only "16"
 
-	# integration_types: 0 = guild install (server), 1 = user install (personal)
-	# contexts: 0 = guild, 1 = bot DMs, 2 = private channels
 	@server_install [0]
 	@server_context [0]
 	@both_installs [0, 1]
@@ -625,17 +583,9 @@ defmodule Discord.Consumer do
 			}
 		]
 
-		# Same PUT the `bulk_overwrite_global_commands/2` wrapper performs, but
-		# issued via the generically-typed `Api.request/4`: the wrapper's
-		# `application_command_map` type predates Discord's `integration_types`
-		# / `default_member_permissions` fields (the installed Nostrum knows
-		# only `default_permission`), so passing current API fields through it
-		# breaks its contract while Discord itself accepts them.
 		Api.request(:put, Constants.global_application_commands(Me.get().id), server_commands ++ market_commands)
 	end
 
-	# Autocomplete must come before the command clause below: autocomplete
-	# interactions carry the same command name in data.
 	def handle_event({:INTERACTION_CREATE, %Interaction{type: 4, data: %{name: "check_market"}} = interaction, _}) do
 		partial = focused_option_value(interaction, "item")
 
@@ -691,13 +641,6 @@ defmodule Discord.Consumer do
 				item_name = option_value(interaction, "item")
 				candidates = safe_suggest_items(item_name, 10)
 
-				# Instant DB-only lookup: single SELECT, no ESI/Janice, so the
-				# direct reply stays inside Discord's 3s window. Found and
-				# not-found both answer immediately with no thinking state.
-				# The Janice chart follows as an async edit (with the failure
-				# image as fallback) so a slow capture never blocks the reply.
-				# Free text is always accepted; an inexact multi-match replies
-				# with the candidate list instead of a possibly wrong detail.
 				case safe_get_market_item(item_name) do
 					nil ->
 						reply_for_missing_item(interaction, item_name, candidates)
@@ -712,20 +655,15 @@ defmodule Discord.Consumer do
 
 			"list_market" ->
 				case active_bot_name() do
-					# No bot runtime (tests, dev shell): synchronous immediate reply.
 					nil ->
 						respond(interaction, Messages.market_list_payload(safe_get_items(), 1, Messages.list_per_page()))
 
-					# Deferred ack first: the list query scans the full
-					# undercut view, so it runs in the async task below.
 					bot_name ->
 						response = %{
 							type: InteractionCallbackType.deferred_channel_message_with_source()
 						}
 
 						try do
-							# `create_response/2` is spec'd `:ok | error`, so only
-							# those two outcomes are matched.
 							case Api.Interaction.create_response(interaction, response) do
 								:ok -> start_list_task(bot_name, interaction)
 								{:error, reason} -> list_defer_fallback(interaction, reason)
@@ -742,8 +680,6 @@ defmodule Discord.Consumer do
 
 	def handle_event(_), do: :ok
 
-	# --- Helpers ---
-
 	defp option_value(%{data: %{options: options}}, name) when is_list(options) do
 		Enum.find_value(options, fn
 			%{name: ^name, value: value} -> value
@@ -753,7 +689,6 @@ defmodule Discord.Consumer do
 
 	defp option_value(_interaction, _name), do: nil
 
-	# The partially typed value of the focused autocomplete option.
 	defp focused_option_value(%{data: %{options: options}}, name) when is_list(options) do
 		Enum.find_value(options, fn
 			%{name: ^name, value: value} -> value
@@ -786,8 +721,6 @@ defmodule Discord.Consumer do
 	end
 
 	defp safe_suggest_items(item_name, limit) when is_binary(item_name) and is_integer(limit) do
-		# `suggest_items/2` always returns a list (empty on blank input or
-		# DB error via its own rescue), so it is returned directly.
 		Market.Database.suggest_items(item_name, limit)
 	rescue
 		_ -> []
@@ -806,8 +739,6 @@ defmodule Discord.Consumer do
 		end
 	end
 
-	# No direct row: a single candidate resolves to its detail, several
-	# become the disambiguation list, none stays the not-found embed.
 	defp reply_for_missing_item(interaction, item_name, [single]) do
 		case safe_get_market_item(candidate_name(single)) do
 			nil -> respond(interaction, Messages.market_disambiguation_embed(item_name, [single]))
@@ -823,9 +754,6 @@ defmodule Discord.Consumer do
 		end
 	end
 
-	# Candidate name lookup and normalization live in
-	# `Discord.Messages` / `Market.Database` so the consumer and the
-	# embed layer always agree.
 	defp candidate_name(candidate), do: Messages.candidate_name(candidate)
 
 	defp exact_item_match?(input, item, candidates) do
@@ -838,9 +766,6 @@ defmodule Discord.Consumer do
 
 	defp normalize_item(_), do: ""
 
-	# Janice chart follows the instant reply as an async edit: success
-	# attaches the captured chart, failure attaches the bundled failure
-	# image so the embed always ends with a graph. Never blocks check_market.
 	defp start_chart_task(bot_name, interaction, item) do
 		task =
 			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
@@ -910,9 +835,6 @@ defmodule Discord.Consumer do
 			try_edit_empty_list(bot_name, interaction)
 	end
 
-	# The deferred task must never die silently (Discord would leave the
-	# interaction on "thinking..." then "interaction failed"): any lookup,
-	# render, or edit crash still produces the empty-list embed.
 	defp run_list_task(bot_name, interaction) do
 		payload =
 			try do
@@ -960,10 +882,6 @@ defmodule Discord.Consumer do
 
 	defp list_page_from_custom_id(_), do: 1
 
-	# Never let a DB/ESI failure crash the interaction handler with no
-	# response: log once and fall back to the empty list embed.
-	# `get_items_less_than_jita_buy/0` always returns a list (empty on DB
-	# error via its own rescue), so it is returned directly.
 	defp safe_get_items do
 		Market.Database.get_items_less_than_jita_buy()
 	rescue
@@ -1026,12 +944,6 @@ defmodule Discord.Consumer do
 				:error -> %{embeds: embeds}
 			end
 
-		# A silent failure here is what makes a command look like it "did not
-		# respond": Discord drops the reply and edit_response later 404s with
-		# "Unknown Webhook" because no original response exists. Log the real
-		# reason so a broken reply is never swallowed.
-		# `create_response/2` is spec'd `:ok | error`, so only those two
-		# outcomes are matched.
 		case Api.Interaction.create_response(intr, %{type: 4, data: data}) do
 			:ok -> :ok
 			{:error, reason} -> log_discord_warning("discord_respond_failed", reason, intr)
@@ -1044,25 +956,6 @@ defmodule Discord.Consumer do
 end
 
 defmodule Discord.Broadcaster do
-	@moduledoc """
-	Collects one report per region per round and broadcasts a single digest
-	to every registered channel once all regions have cycled (completed,
-	unchanged, or failed). A round deadline closes the round early so one
-	stalled region cannot hold the digest forever; missing regions are
-	listed as pending in the status section.
-
-	The digest always carries the current undercut list — even when it is
-	empty or identical to the last round — plus a status embed whenever any
-	region failed or never reported.
-
-	Fun overrides (`channels_fun`, `market_fun`, `deliver_fun`, `prune_fun`)
-	are a test seam only: production always uses `:default`, which resolves
-	to a direct call at use time. Storing version-bound fun captures in
-	state breaks every broadcast after a hot upgrade (the old funs die with
-	the purged code version), so `code_change/3` resets any stored fun to
-	`:default`.
-	"""
-
 	use GenServer
 
 	alias Discord.Database, as: DiscordDatabase
@@ -1072,9 +965,6 @@ defmodule Discord.Broadcaster do
 	alias Nostrum.Bot
 
 	@seen_limit 10_000
-	# Safety net behind the expected ~5-minute ESI round, aligned with the
-	# per-region 10-minute cycle_timeout: a region that never reports is
-	# listed as pending instead of stalling the digest.
 	@round_timeout 10 * 60_000
 
 	def start_link(opts \\ []) do
@@ -1105,9 +995,6 @@ defmodule Discord.Broadcaster do
 		{:ok, schedule_round(state)}
 	end
 
-	# Hot-upgrade migration: pre-barrier state held `{region, cycle_id}`
-	# pending keys (removed) and possibly version-bound fun captures
-	# (reset to `:default` so every call resolves against current code).
 	@impl true
 	def code_change(_vsn, state, _extra) when is_map(state) do
 		state =
@@ -1164,10 +1051,6 @@ defmodule Discord.Broadcaster do
 	@impl true
 	def handle_cast(message, state), do: handle_info(message, state)
 
-	# RegionManagers boot before the broadcaster in prod, but a restarted
-	# manager or broadcaster must still find each other: managers auto-attach
-	# the default broadcaster on init, and missing regions here are simply
-	# skipped (their manager attaches us when it boots).
 	defp subscribe_region(region) do
 		RegionManager.subscribe(region, self())
 		:ok
@@ -1175,10 +1058,6 @@ defmodule Discord.Broadcaster do
 		:exit, _ -> :ok
 	end
 
-	# One slot per region per round. A region that cycles faster than the
-	# round simply overwrites its own slot; a duplicate delivery of the
-	# same cycle is dropped via `seen`. Reports from unknown regions are
-	# recorded but can never close the round on their own.
 	defp record_report(summary, outcome, state) do
 		region = Map.get(summary, :region)
 		cycle_id = Map.get(summary, :cycle_id)
@@ -1273,11 +1152,6 @@ defmodule Discord.Broadcaster do
 		:exit, reason -> {:error, inspect(reason)}
 	end
 
-	# Strict order: round closed -> read -> broadcast. The single database
-	# holds exactly what the pollers wrote, so the embed always renders
-	# fresh data with no sync step in between. The list is always sent —
-	# even empty or unchanged — while failed and pending regions are
-	# reported in a status embed instead of staying silent.
 	defp process_digest(snapshot, state) do
 		case fetch_channels(state) do
 			{:ok, []} ->
@@ -1343,9 +1217,6 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
-	# `:default` resolves to a direct call against current code on every
-	# use, so hot upgrades can never leave a stale fun behind. An explicit
-	# fun override (tests) is invoked as-is.
 	defp invoke_resolve(state, key, {mod, fun, args}) do
 		case Map.get(state, key, :default) do
 			:default -> invoke(fn -> apply(mod, fun, args) end)
@@ -1388,8 +1259,6 @@ defmodule Discord.Broadcaster do
 		:exit, reason -> {:error, inspect(reason)}
 	end
 
-	# Public so the `:default` deliver spec can resolve it via `apply/3`
-	# against current code after a hot upgrade.
 	def deliver(channel_id, payload) do
 		case Bot.fetch_all_bots() do
 			[%{name: name}] ->
@@ -1411,8 +1280,6 @@ defmodule Discord.Broadcaster do
 		)
 	end
 
-	# Discord 404/10003 Unknown Channel means the channel was deleted or the
-	# bot lost access: drop the registration so later cycles stop retrying it.
 	defp unknown_channel?(reason) do
 		text = inspect(reason)
 		String.contains?(text, "10003") or String.contains?(text, "Unknown Channel")
@@ -1448,18 +1315,10 @@ defmodule Discord.BotSupervisor do
 
 	def start_link(opts), do: Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
 
-	# Release-safe token reader for Nostrum's `wrapped_token` option.
-	# Releases serialize sys.config and only allow `&Mod.fun/arity`
-	# captures — anonymous closures like `fn -> ... end` are rejected at
-	# `mix release` time. MFA captures survive and still read the env
-	# lazily at boot (missing token → bot :ignore, rest keeps running).
 	def token!, do: System.fetch_env!("DISCORD_TOKEN")
 
 	@impl true
 	def init(opts) do
-		# Building nostrum's child spec fetches and validates the token
-		# (wrapped_token). It raises on a missing or invalid token, so catch it
-		# here and :ignore - the bot gets dropped and the rest of the tree runs.
 		bot = Supervisor.child_spec({Nostrum.Bot, opts}, restart: :temporary)
 		Supervisor.init([bot], strategy: :one_for_one)
 	rescue

@@ -1,12 +1,5 @@
 import Config
 
-# Local shell (`task dev`): isolated by default so it coexists with the prod
-# daemon (`task start`, :4000 + priv/data/marketmailer.db). Dev gets
-# http://localhost:4001/dashboard + priv/data/dev.db and no Discord gateway
-# connection (prod keeps the gateway). Overrides: DASHBOARD_PORT,
-# DASHBOARD_ENABLED=false, START_POLLERS=false (lightweight shell without ESI
-# polling), MARKETMAILER_DEV_DB (explicit path for `mix run` without the task
-# wrapper), DEV_DISCORD_TOKEN (opt into the bot; steals prod's gateway).
 dashboard_enabled =
 	case System.get_env("DASHBOARD_ENABLED") do
 		v when v in ["0", "false", "no"] -> false

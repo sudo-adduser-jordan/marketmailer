@@ -1,25 +1,4 @@
 defmodule HendricksFormatter do
-	@moduledoc """
-	This module is a formatter plugin for Elixir's `mix format` task
-	that converts leading whitespace to tabs.
-	It tries to intelligently determine the tab width based on the most common
-	counts of leading space runs in the file.
-	It allows additional space characters for minor adjustments that are below the tab width.
-	OK, why tabs? Why resurrect this age-old nerd debate again?
-	Very simple: It's an accessibility issue:
-	https://adamtuttle.codes/blog/2021/tabs-vs-spaces-its-an-accessibility-issue/
-	https://alexandersandberg.com/articles/default-to-tabs-instead-of-spaces-for-an-accessible-first-environment/
-	UNFORTUNATELY, at this time, Elixir's formatter `mix format` always assumes spaces.
-	WELL, NOT ANYMORE! This plugin fixes that.
-	Obligatory: https://www.youtube.com/watch?v=SsoOG6ZeyUI
-	Note: To set the default tab width on your terminal (which unfortunately defaults to 8),
-	run: `tabs -2` (or whatever width you want), possibly adding it to your dotfiles.
-	To alter your .gitconfig to show tabs with 2 spaces if you use delta, try this:
-	[core]
-		pager = delta --tabs=2
-	[interactive]
-		difffilter = delta --tabs=2
-	"""
 	@behaviour Mix.Tasks.Format
 
 	def features(_opts) do
@@ -33,8 +12,6 @@ defmodule HendricksFormatter do
 
 	defp determine_tab_size_in_spaces(lines) do
 		linecount = length(lines)
-		# do not accept a tab width that occurs less frequently than
-		# 5% of the line count plus 1
 		minimum_significant_frequency = trunc(linecount / 20) + 1
 
 		lines
@@ -59,7 +36,6 @@ defmodule HendricksFormatter do
 	defp take_top(list, n) when length(list) < n, do: list
 	defp take_top(list, n), do: Enum.take(list, n)
 
-	# we are not dealing with a tab width greater than 8 spaces
 	defp format_result(gcd) do
 		if(gcd > 8, do: 8, else: gcd)
 	end
@@ -71,7 +47,6 @@ defmodule HendricksFormatter do
 
 	defp process_reformat(lines, probable_spaces_per_tab) do
 		pattern = ~r/^(?: {#{probable_spaces_per_tab}}|\t)*/
-		# Replace leading spaces with tabs in each line
 		Enum.map_join(lines, "\n", fn line ->
 			case Regex.run(pattern, line) do
 				nil ->

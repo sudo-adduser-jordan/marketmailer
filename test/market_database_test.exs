@@ -287,8 +287,6 @@ defmodule Market.DatabaseTest do
 			%{system_id: 30_000_143, name: "Rens", security_status: 0.7, region_name: "Heimatar"}
 		])
 
-		# 1021681819954 is a 64-bit player structure id: never in the SDE,
-		# so no names row can ever exist for it.
 		Database.insert_all("market", [
 			%{
 				order_id: 501,
@@ -338,8 +336,6 @@ defmodule Market.DatabaseTest do
 			%{system_id: 30_000_143, name: "Rens", security_status: 0.7, region_name: "Heimatar"}
 		])
 
-		# NPC-range id with no names row: an SDE import gap, not a player
-		# structure, so it stays "?" to signal missing data.
 		Database.insert_all("market", [
 			%{
 				order_id: 503,
@@ -395,7 +391,6 @@ defmodule Market.DatabaseTest do
 			stars: MapSet.new([40_488_503])
 		}
 
-		# Moon-orbiting, operation name (Jita 4-4).
 		assert %{id: 60_003_760, name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant"} =
 						 SdeImport.compose_station_name(
 							 %{
@@ -409,7 +404,6 @@ defmodule Market.DatabaseTest do
 							 lookups
 						 )
 
-		# Moon-orbiting, owner name alone (useOperationName=false).
 		assert %{id: 60_003_454, name: "Maurasi VIII - Moon 14 - Caldari Business Tribunal"} =
 						 SdeImport.compose_station_name(
 							 %{
@@ -423,7 +417,6 @@ defmodule Market.DatabaseTest do
 							 lookups
 						 )
 
-		# Planet-orbiting, no moon segment (also covers the IX numeral).
 		assert %{id: 60_003_455, name: "Jita IX - Caldari Navy Assembly Plant"} =
 						 SdeImport.compose_station_name(
 							 %{
@@ -437,7 +430,6 @@ defmodule Market.DatabaseTest do
 							 lookups
 						 )
 
-		# Star-orbiting, no celestial segment (Zarzakh).
 		assert %{id: 60_015_187, name: "Zarzakh - Deathless Custodians - The Fulcrum"} =
 						 SdeImport.compose_station_name(
 							 %{
@@ -451,7 +443,6 @@ defmodule Market.DatabaseTest do
 							 lookups
 						 )
 
-		# Missing links resolve to nil, never to a half-composed name.
 		base = %{
 			"_key" => 60_003_760,
 			"solarSystemID" => 30_000_142,
@@ -480,8 +471,6 @@ defmodule Market.DatabaseTest do
 
 	test "same-second price updates are visible to reads" do
 		insert_fixture()
-		# Same-second re-upsert (identical updated_at) must still carry the
-		# new price to subsequent reads.
 		MarketDatabase.upsert_orders([order_fixture(101, 99.5)])
 		assert %{price: 99.5} = Database.one(from m in "market", where: m.order_id == 101, select: %{price: m.price})
 	end
@@ -512,7 +501,6 @@ defmodule Market.DatabaseTest do
 		assert MarketDatabase.upsert_orders(orders) == size * 2 + 50
 		assert Database.aggregate("market", :count) == size * 2 + 50
 
-		# Same ids, new prices: conflict path replaces instead of duplicating.
 		orders = for n <- 1..(size * 2 + 50), do: order_fixture(50_000 + n, 99.5)
 		assert MarketDatabase.upsert_orders(orders) == size * 2 + 50
 		assert Database.aggregate("market", :count) == size * 2 + 50

@@ -1,21 +1,10 @@
 defmodule Database do
-	# database connection
 	use Ecto.Repo,
 		otp_app: :marketmailer,
 		adapter: Ecto.Adapters.SQLite3
 end
 
 defmodule Database.Writer do
-	# Direct pool writes. Page-worker concurrency is absorbed by the pool
-	# (WAL + busy_timeout), not by serializing through this module:
-	# a 1,000-row page persists in tens of ms, so even a full cold-boot
-	# burst drains in seconds with no queue to time out of.
-	#
-	# Runs fun against the repo and returns fun's value; raises the last
-	# error when the retry budget is spent so callers keep their existing
-	# rescue contracts.
-
-	# Wait between contention retries inside one write (~7s total budget).
 	@retry_delays [10, 25, 50, 100, 200, 400, 800, 1_600, 3_200]
 
 	def write(fun) when is_function(fun, 0) do
@@ -48,8 +37,6 @@ defmodule Database.Writer do
 			end
 	end
 
-	# SQLite reports ENOSPC/readonly as "database or disk is full". Writes
-	# must stop there: retrying only burns the queue while the disk stays full.
 	def disk_full?(%Exqlite.Error{} = e), do: String.contains?(Exception.message(e), "database or disk is full")
 
 	def disk_full?(%DBConnection.ConnectionError{} = e),
@@ -75,12 +62,8 @@ end
 defmodule Etag.Database do
 	import Ecto.Query
 
-	# Absurd-future cap: an expires_at further out than this is treated as an
-	# unexpected entry (bad Expires header / clock skew) and refetched.
 	@max_ttl_ms 1_800_000
 
-	# Rows are always {url, etag, expires_at}: EtagCache warms the table in
-	# that shape and every upsert writes it back the same way.
 	def get_etag(url) do
 		case :ets.lookup(:market_cache, url) do
 			[{^url, etag, _expires_at}] -> etag
@@ -95,9 +78,6 @@ defmodule Etag.Database do
 		end
 	end
 
-	# Milliseconds until this URL may be refetched. Returns 0 (fetch now) for
-	# every unexpected entry: missing row, NULL, non-integer, expired, absurdly
-	# far future, or an unreachable database. Unexpected entries log once.
 	def resume_delay_ms(url) do
 		now = System.system_time(:millisecond)
 
@@ -133,8 +113,6 @@ defmodule Etag.Database do
 		)
 	end
 
-	# Pages with a known etag row for a region, parsed from the stored URLs.
-	# Unparseable URLs are unexpected entries: ignored for pre-start, logged.
 	def pages_for_region(region) when is_integer(region) do
 		prefix = "https://esi.evetech.net/v1/markets/#{region}/orders/"
 
@@ -255,9 +233,6 @@ defmodule Market.Database do
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
 	@table "market"
 
-	# SQLite has a single writer: one giant per-page transaction holds the
-	# write lock for the whole page and starves every other connection past
-	# busy_timeout ("Database busy"). Small transactions keep each lock hold short.
 	@upsert_chunk_size 200
 
 	def upsert_orders(orders) do
@@ -267,8 +242,6 @@ defmodule Market.Database do
 			Enum.map(orders, fn order ->
 				@fields
 				|> Map.new(fn field -> {field, order[Atom.to_string(field)]} end)
-				# insert_all with a bare table name skips ecto type casting; sqlite
-				# would store true/false as text and break `is_buy_order = 1` filters
 				|> Map.update!(:is_buy_order, fn
 					true -> 1
 					false -> 0
@@ -294,11 +267,6 @@ defmodule Market.Database do
 
 	def upsert_chunk_size, do: @upsert_chunk_size
 
-	# Every user-facing market query, served from the single database.
-	# Pure reads, fully SDE-sourced: types, systems and NPC station names
-	# come from `mix sde.import`. Player-owned structures are dynamic and
-	# never in the SDE, so unmatched 64-bit location ids (>= 10^12) render
-	# as "Player Station" and anything else unmatched renders as "?".
 	def get_best_order do
 		load_rows("getBestOrder.sql")
 	rescue
@@ -335,9 +303,6 @@ defmodule Market.Database do
 
 	def get_market_item(_item_name), do: nil
 
-	# Up to `limit` distinct item names with a cached Jita 4-4 sell order
-	# matching the typed prefix. Pure DB read for autocomplete; blank input
-	# yields no suggestions.
 	def suggest_items(prefix, limit \\ 25)
 
 	def suggest_items(prefix, limit) when is_binary(prefix) and is_integer(limit) do
@@ -370,10 +335,6 @@ defmodule Market.Database do
 			[]
 	end
 
-	# Runs a query file from lib/ against the database and returns one
-	# map/struct per row. Never raises into the Discord interaction handler:
-	# a DB error logs once and yields [], which the caller renders as the
-	# not-found embed.
 	defp load_rows(file, params \\ []) do
 		case Database.query(read_sql(file), params) do
 			{:ok, %{rows: rows, columns: cols}} ->
@@ -413,15 +374,10 @@ defmodule Market.Database do
 
 	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
 
-	# Flatten for matching: trim, collapse all whitespace runs to one space,
-	# downcase. Returns "" for non-matching input. Public so every
-	# name-normalizing caller (suggest, item lookup, the Discord consumer's
-	# exact-match check) shares one definition.
 	def normalize_item_name(name) do
 		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()
 	end
 
-	# Escape LIKE wildcards so user input only ever matches literally.
 	defp escape_like(value) do
 		value |> String.replace("\\", "\\\\") |> String.replace("%", "\\%") |> String.replace("_", "\\_")
 	end

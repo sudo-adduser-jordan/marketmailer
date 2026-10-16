@@ -5,9 +5,6 @@ defmodule Discord.BroadcasterTest do
 		MarketmailerTest.Fixtures.ensure_ets(:esi_error_state)
 		MarketmailerTest.Fixtures.ensure_ets(:market_cache)
 
-		# `mix test` boots the app, which already starts Registry
-		# (pollers stay disabled via `start_pollers: false`).
-		# PageSup is a poller child, so tests provide it when absent.
 		if !Process.whereis(Marketmailer.Registry) do
 			start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
 		end
@@ -16,7 +13,6 @@ defmodule Discord.BroadcasterTest do
 			start_supervised!({DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup})
 		end
 
-		# Park every PageWorker: with maintenance active no worker calls ESI.
 		MarketmailerTest.Fixtures.park_page_workers()
 
 		unique = System.unique_integer([:positive])

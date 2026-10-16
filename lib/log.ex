@@ -1,33 +1,10 @@
 defmodule Marketmailer.Log do
-	@moduledoc """
-	Structured JSON logging facade.
-
-	Every log call emits a single JSON object (see `Marketmailer.Log.Format`)
-	with a stable machine-readable `event` name plus caller-supplied structured
-	fields, e.g.
-
-			Marketmailer.Log.info("page_fetch_ok", %{
-				region: 10000002,
-				page: 7,
-				status: 200,
-				orders: 1_000,
-				ttl_ms: 300_000,
-				url: "https://esi.evetech.net/v1/markets/10000002/orders/?page=7"
-			})
-
-	Fields are flattened onto the JSON object; `event` and `message` are
-	reserved keys. No sensitive credentials should ever be passed in `fields`.
-	"""
-
 	require Logger
 
-	@doc "Log an info-level event."
 	def info(event, fields \\ %{}, message \\ nil), do: emit(:info, event, fields, message)
 
-	@doc "Log a warning-level event."
 	def warning(event, fields \\ %{}, message \\ nil), do: emit(:warning, event, fields, message)
 
-	@doc "Log an error-level event."
 	def error(event, fields \\ %{}, message \\ nil), do: emit(:error, event, fields, message)
 
 	defp emit(level, event, fields, message) do
@@ -49,24 +26,6 @@ defmodule Marketmailer.Log do
 end
 
 defmodule Marketmailer.Log.Format do
-	@moduledoc """
-	Renders lib/logger events as pretty JSON, both sinks (config.exs and
-	lib/app.ex):
-
-		* console - `{Marketmailer.Log.Format, [pretty: true, color: true]}` -
-			keys colored per level, values by type for terminal reading.
-		* file - `{Marketmailer.Log.Format, [pretty: true, color: false]}` -
-			plain records in `logs/errors.jsonl` (warning and above).
-
-	Records are 4-space indented, back-to-back (no blank line between them),
-	with a stable field order: `level`, `commit`, `ts`, `pid`, `event`, domain
-	fields (alphabetical), then `message` last.
-
-	Values are normalized so encoding never crashes (atoms, pids, charlists,
-	tuples, structs all become JSON-safe). Scalar escaping delegates to OTP's
-	`:json.encode/1`, so strings are always correct UTF-8 JSON.
-	"""
-
 	@colors %{
 		debug: 90,
 		info: 32,
@@ -78,8 +37,6 @@ defmodule Marketmailer.Log.Format do
 		emergency: 31
 	}
 
-	# Terminal colors for value tokens, picked by JSON type so they contrast
-	# with the per-level key colors (31/32/33/36/90) on a dark background.
 	@value_colors %{
 		string: 94,
 		number: 35,
@@ -88,18 +45,11 @@ defmodule Marketmailer.Log.Format do
 		container: 96
 	}
 
-	# Git commit baked in at compile time; every event carries it so logs are
-	# tied to the exact source revision that produced them.
 	@commit (case System.cmd("git", ["rev-parse", "--short", "HEAD"], cd: File.cwd!(), stderr_to_stdout: true) do
 						 {out, 0} -> String.trim(out)
 						 _ -> "unknown"
 					 end)
 
-	# OTP calls Formatter:format(Event, FConfig): the second element of the
-	# registered {Module, FConfig} tuple arrives here as `config`. OTP types
-	# formatter config as a map, so handlers register `%{pretty: _, color: _}`
-	# (a list would break the `:logger.add_handler/3` contract); keyword
-	# lists still render for the console handler in config.exs.
 	def format(event, config) when is_map(config), do: render(event, Map.to_list(config))
 	def format(event, config) when is_list(config), do: render(event, config)
 	def format(event, _config), do: render(event, [])
@@ -207,8 +157,6 @@ defmodule Marketmailer.Log.Format do
 	defp normalize(map) when is_map(map), do: normalize_map(map)
 	defp normalize(other), do: inspect(other)
 
-	# Charlists (e.g. a charlist passed as a field value) become strings
-	# instead of number arrays; everything else is a JSON array.
 	defp normalize_list([]), do: []
 
 	defp normalize_list([head | _] = list) do
@@ -256,9 +204,6 @@ defmodule Marketmailer.Log.Format do
 		["{\n", entries, "\n", pad, "}"]
 	end
 
-	# Color for a value token, chosen by JSON type so keys and values never
-	# share a color, and strings read differently from numbers. Returns nil
-	# for plain sinks (color disabled).
 	defp value_color(_value, nil), do: nil
 	defp value_color(value, _color) when is_binary(value), do: @value_colors.string
 	defp value_color(value, _color) when is_number(value), do: @value_colors.number
@@ -267,8 +212,6 @@ defmodule Marketmailer.Log.Format do
 	defp value_color(nil, _color), do: @value_colors.null
 	defp value_color(_value, _color), do: @value_colors.container
 
-	# Keys carry the per-level ANSI color; value tokens their type color.
-	# Braces, commas, colons and indentation stay plain.
 	defp color_token(iodata, color) when is_integer(color) do
 		[IO.ANSI.color(color), iodata, IO.ANSI.reset()]
 	end
@@ -302,8 +245,6 @@ defmodule Marketmailer.Log.Format do
 
 	defp indent_string(indent), do: :binary.copy("    ", indent)
 
-	# `nil` is JSON null; :json.encode/1 would encode the atom as the string
-	# "nil" instead.
 	defp json_string(nil), do: "null"
 
 	defp json_string(value) do

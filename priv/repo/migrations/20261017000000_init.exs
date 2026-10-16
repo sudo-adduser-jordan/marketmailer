@@ -1,12 +1,6 @@
 defmodule Database.Migrations.Schema do
 	use Ecto.Migration
 
-	# Squashed init (replaces 20260822..20261016): the full end-state schema
-	# in one migration. Table creation is guarded by sqlite_master lookups
-	# and indexes/view cleanup use IF NOT EXISTS / DROP IF EXISTS, so it
-	# safely no-ops on databases that already ran the old chain and fully
-	# builds fresh ones. Name data itself comes only from `mix sde.import`,
-	# never from seeds here.
 	def up do
 		if !table_exists?("market") do
 			create table(:market, primary_key: false) do
@@ -25,7 +19,6 @@ defmodule Database.Migrations.Schema do
 				timestamps()
 			end
 
-			# Jita lookup + remote sell scans (30000142 = Jita)
 			create index(:market, [:type_id, :system_id, :is_buy_order])
 			create index(:market, [:price])
 
@@ -58,7 +51,6 @@ defmodule Database.Migrations.Schema do
 				add :name, :string, null: false
 			end
 
-			# Prefix search for check_market autocomplete over a ~17k-row names table.
 			create index(:names, [:name])
 		end
 
@@ -71,16 +63,10 @@ defmodule Database.Migrations.Schema do
 			end
 		end
 
-		# Leftover from the removed write -> read copy layer; drop it where
-		# it exists (single-DB mode has no watermark).
 		execute("DROP TABLE IF EXISTS _sync_watermark")
 
 		execute("DROP VIEW IF EXISTS marketListView")
 
-		# Player-owned structures are dynamic and never in the SDE:
-		# unmatched 64-bit location ids (>= 10^12) render as
-		# "Player Station", anything else unmatched stays "?" to signal an
-		# SDE import gap.
 		execute("""
 		CREATE VIEW marketListView AS
 		WITH JitaBuy AS (

@@ -1,12 +1,4 @@
 defmodule MarketmailerWeb.Telemetry do
-	@moduledoc """
-	Phoenix telemetry + poller for `Phoenix.LiveDashboard`.
-
-	VM/process/ETS pages read the BEAM directly; `metrics/0` feeds the
-	Metrics page (endpoint timings + VM memory/run-queues). Ecto stats
-	come from `Database` telemetry once the repo is listed in the
-	dashboard's `ecto_repos`.
-	"""
 	use Supervisor
 
 	import Telemetry.Metrics

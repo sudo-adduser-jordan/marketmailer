@@ -1,5 +1,3 @@
--- Cheapest cached sell order for a named EVE item, always at Jita 4-4
--- (station 60003760). 30000142 is the Jita solarSystemID.
 WITH JitaBestBuy AS (
     SELECT
         type_id,
@@ -18,9 +16,6 @@ SELECT
     sy.region_name,
     sy.name AS system_name,
     sy.security_status,
-    -- Player-owned structures are dynamic and never in the SDE: ids at or
-    -- above 10^12 (64-bit structure ids; NPC stations are 8-digit 60xxxxxx)
-    -- label statically, anything else missing is an SDE import gap.
     COALESCE(ln.name,
         CASE WHEN m.location_id >= 1000000000000 THEN 'Player Station' ELSE '?' END) AS location_name,
     m.system_id,

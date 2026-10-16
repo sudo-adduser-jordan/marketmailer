@@ -1,8 +1,4 @@
 defmodule Marketmailer.PageWorker do
-	# One worker per page: each page URL has its own ESI ETag/Expires, so an
-	# unchanged page stays a cheap 304 on its own TTL while a changed page
-	# refreshes promptly — a sequential 1..N sweep would re-pay every page
-	# each cycle and head-of-line block the changed one.
 	use GenServer, restart: :transient
 
 	@ping_interval 10_000
@@ -15,9 +11,6 @@ defmodule Marketmailer.PageWorker do
 
 	@impl true
 	def init({_manager, id, page}) do
-		# Crash resume: delay first fetch until the persisted Expires passes.
-		# Unexpected entries (missing/expired/corrupt) fetch immediately with a
-		# tiny stagger so a cold boot does not fire every page in the same ms.
 		delay =
 			case Etag.Database.resume_delay_ms(ESI.page_url(id, page)) do
 				0 -> :erlang.phash2({id, page}, 500)
@@ -33,11 +26,9 @@ defmodule Marketmailer.PageWorker do
 		ensure_error_log()
 
 		if ESI.maintenance_active?() do
-			# Global maintenance is on. Try to extend the timer to "claim" the next 10s slot.
 			if try_claim_ping() do
 				perform_fetch(state)
 			else
-				# Another worker is already the designated pinger or waiting
 				schedule_next(@ping_interval)
 				{:noreply, state}
 			end
@@ -119,8 +110,6 @@ defmodule Marketmailer.PageWorker do
 				{:noreply, state}
 
 			{:error, :rate_limited, ctx} ->
-				# 429: the server says when enough tokens are back; reschedule on
-				# that instead of counting against the exponential backoff.
 				Marketmailer.Log.warning(
 					"page_fetch_rate_limited",
 					%{
@@ -157,9 +146,6 @@ defmodule Marketmailer.PageWorker do
 		end
 	end
 
-	# A DB crash must report :failed so the region cycle completes instead of
-	# hanging on a page that started but never reports. Disk-full is an error
-	# (not a warning) and skips the etag write so no further DB writes run.
 	defp persist_orders(data, ctx) do
 		case Market.Database.upsert_orders(data) do
 			{:error, e} ->
@@ -194,9 +180,6 @@ defmodule Marketmailer.PageWorker do
 		end
 	end
 
-	# 304 path must not crash the GenServer when the pool is saturated:
-	# a DBConnection queue_timeout here used to terminate the worker without
-	# ever reporting to the RegionManager, stalling the region cycle.
 	defp safe_upsert_etag(%{etag: nil}), do: :ok
 
 	defp safe_upsert_etag(%{etag: false}), do: :ok
@@ -225,17 +208,8 @@ defmodule Marketmailer.PageWorker do
 			end
 	end
 
-	# Exqlite embeds the full SQL statement in the exception message (a
-	# 1000-row upsert is ~90KB) — keep only the first line ("Database busy")
-	# so one failure cannot fill the error-log rotation with placeholders.
 	defp first_line(e), do: e |> Exception.message() |> String.split("\n") |> List.first()
 
-	# Transport-level failures (DNS, TCP reset, TLS close, timeouts, no
-	# route to host) mean the pipe is down, not that ESI rejected us. Report
-	# a stable :offline reason so cycle logs stay greppable instead of
-	# a different struct dump per HTTP client, and keep counting against the
-	# exponential backoff so a dead link backs off to 5m instead of hammering
-	# it once a minute from every page worker.
 	defp failure_reason(%{reason: inner}) when is_atom(inner) do
 		if inner in [:nxdomain, :econnrefused, :econnreset, :etimedout, :timeout, :closed, :ehostunreach, :enetunreach] do
 			:offline
@@ -271,7 +245,6 @@ defmodule Marketmailer.PageWorker do
 	defp failure_reason(_reason), do: :unknown
 
 	defp try_claim_ping do
-		# only one process 'wins' the right to ping during this 10s window.
 		now = System.system_time(:millisecond)
 
 		case :ets.lookup(:esi_error_state, :maintenance_mode) do
@@ -290,11 +263,6 @@ defmodule Marketmailer.PageWorker do
 		state
 	end
 
-	# :logger_std_h holds the error-log fd open, so `rm logs/errors.jsonl`
-	# while running orphans the descriptor and no new file appears. Re-ensure
-	# the handler on every fetch (a no-op stat when healthy) so a deleted log
-	# is recreated within one cycle. Skipped when pollers are off so the suite
-	# never touches the live log file.
 	defp ensure_error_log do
 		if Application.get_env(:marketmailer, :start_pollers, true) do
 			Marketmailer.Application.ensure_file_logger()
@@ -307,9 +275,6 @@ defmodule Marketmailer.PageWorker do
 
 	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
 
-	# Exponential backoff (1m, 2m, 4m, capped at 5m) plus per-page jitter so
-	# every worker does not reconnect in the same millisecond when the link
-	# or ESI comes back.
 	defp backoff_ms(errors, jitter_key) do
 		base = (60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
 		base + :erlang.phash2(jitter_key, 30_000)

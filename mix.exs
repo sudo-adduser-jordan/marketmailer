@@ -28,7 +28,6 @@ defmodule Marketmailer.MixProject do
 			{:req, "~> 0.5.0"},
 			{:ecto_sql, "~> 3.0"},
 			{:ecto_sqlite3, "~> 0.18"},
-			# {:nostrum, "~> 0.10"},
 			{:nostrum, github: "Kraigie/nostrum"},
 			{:playwright_ex, "~> 0.12.1"},
 			{:castle, "~> 1.0"},
@@ -44,21 +43,9 @@ defmodule Marketmailer.MixProject do
 		]
 	end
 
-	# Define which paths to include based on the environment.
-	# "." adds the root directory
-	#
-	# test/support is compiled only for the suite (see test/support/fixtures.ex).
 	defp elixirc_paths(:test), do: elixirc_paths(:dev) ++ ["test/support"]
 	defp elixirc_paths(_env), do: ["lib", "hendricks_formatter.ex"]
 
-	# OTP release with Castle hot-upgrade support. The function wrapper
-	# delays evaluation until Castle is compiled. `upgrade_from` lists the
-	# baselines this version can hot-upgrade from; it is omitted entirely
-	# until the first shipped tarball lands under releases/ (Castle
-	# rejects an empty baseline list — a relup with no transitions is not
-	# an upgrade plan). SemVer: bump mix.exs version for every
-	# hot-upgradeable change, keep the shipped tarballs under releases/
-	# for `tar:` specs.
 	defp releases do
 		[
 			marketmailer: fn ->
@@ -72,11 +59,6 @@ defmodule Marketmailer.MixProject do
 		]
 	end
 
-	# Newest shipped tarball older than the version being built (linear
-	# deploys upgrade from the previous release; a relup from a version
-	# to itself can never be installed, so the version being built is
-	# always excluded). Missing files are skipped so a fresh checkout
-	# still assembles; empty means a plain build with no upgrade path.
 	defp upgrade_baselines do
 		vsn = Mix.Project.config()[:version]
 

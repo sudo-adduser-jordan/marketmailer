@@ -1,15 +1,10 @@
 defmodule Marketmailer.RegionManagerTest do
-	# Per-page fan-out with no HTTP and no DB writes: ESI maintenance mode is
-	# forced active so PageWorkers park on their 10s timer instead of fetching.
 	use ExUnit.Case, async: false
 
 	setup do
 		MarketmailerTest.Fixtures.ensure_ets(:esi_error_state)
 		MarketmailerTest.Fixtures.ensure_ets(:market_cache)
 
-		# `mix test` boots the app, which already starts Registry
-		# (pollers stay disabled via `start_pollers: false`).
-		# PageSup is a poller child, so tests provide it when absent.
 		if !Process.whereis(Marketmailer.Registry) do
 			start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
 		end
@@ -18,7 +13,6 @@ defmodule Marketmailer.RegionManagerTest do
 			start_supervised!({DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup})
 		end
 
-		# Park every PageWorker: with maintenance active no worker calls ESI.
 		MarketmailerTest.Fixtures.park_page_workers()
 
 		:ok
@@ -28,11 +22,8 @@ defmodule Marketmailer.RegionManagerTest do
 		region = 99_000_001
 		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
 
-		# Page 1 boots on init (parked, no fetch).
 		assert [{_pid, _}] = Registry.lookup(Marketmailer.Registry, {:page, region, 1})
 
-		# PageWorker 1 reports X-Pages -> manager provides workers for the rest.
-		# The cast is fire-and-forget, so keep checking until workers appear.
 		Marketmailer.RegionManager.page_count(region, 3)
 		assert_all_pages(region, [1, 2, 3])
 
@@ -61,7 +52,6 @@ defmodule Marketmailer.RegionManagerTest do
 
 		before = DynamicSupervisor.count_children(Marketmailer.PageSup)
 		Marketmailer.RegionManager.page_count(region, 1)
-		# Asserting nothing happened: give the manager 200ms to misbehave first.
 		Process.sleep(200)
 
 		assert DynamicSupervisor.count_children(Marketmailer.PageSup) == before
@@ -171,9 +161,6 @@ defmodule Marketmailer.RegionManagerTest do
 		assert summary.failures == [%{page: 2, reason: :cycle_timeout}]
 	end
 
-	# Cycle tests drive the manager directly with a short deadline. Cleanup
-	# stops the manager and its parked workers so no lingering worker wakes
-	# up after maintenance mode is lifted.
 	defp start_cycle_manager(region, timeout \\ 100) do
 		{:ok, manager} = Marketmailer.RegionManager.start_link(region, cycle_timeout: timeout)
 		:ok = Marketmailer.RegionManager.subscribe(region, self())
@@ -197,8 +184,6 @@ defmodule Marketmailer.RegionManagerTest do
 		manager
 	end
 
-	# Each lookup races the manager, which handles our `send` asynchronously:
-	# retry until the workers appear (or 2s passes, then fail).
 	defp assert_all_pages(region, pages, timeout \\ 2_000) do
 		deadline = System.monotonic_time(:millisecond) + timeout
 
@@ -222,7 +207,6 @@ defmodule Marketmailer.RegionManagerTest do
 		end
 	end
 
-	# Same race in reverse: retry until the stopped workers disappear.
 	defp assert_no_pages(region, pages, timeout \\ 2_000) do
 		deadline = System.monotonic_time(:millisecond) + timeout
 

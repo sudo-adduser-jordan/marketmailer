@@ -11,7 +11,6 @@ defmodule Janice.PaddingTest do
 		assert {:ok, {w2, h2}} = Janice.Padding.dimensions(padded)
 		assert {w2, h2} == {w + @pad * 2, h + @pad * 2}
 
-		# Our encoder always emits filter 0, so rows decode trivially.
 		rows = filter_zero_rows!(padded, w2, h2, 3)
 		assert length(rows) == h2
 		assert hd(rows) == :binary.copy(<<255, 255, 255>>, w2)
@@ -54,12 +53,10 @@ defmodule Janice.PaddingTest do
 		assert Janice.Padding.pad(nil) == nil
 		assert :error = Janice.Padding.dimensions(<<1, 2, 3>>)
 
-		# 16-bit RGB: unsupported color depth passes through.
 		deep = File.read!("assets/janice-failed.png") |> put_bit_depth(16)
 		assert Janice.Padding.pad(deep) == deep
 	end
 
-	# Our own output only: filter-0 rows of an 8-bit RGB PNG.
 	defp filter_zero_rows!(png, w, h, bpp) do
 		<<_::binary-8, rest::binary>> = png
 		idat = collect_idat!(rest)
@@ -89,7 +86,6 @@ defmodule Janice.PaddingTest do
 		collect_idat!(tail, acc)
 	end
 
-	# Rewrites the IHDR bit depth (re-crcs the chunk).
 	defp put_bit_depth(<<sig::binary-8, rest::binary>>, depth) do
 		<<len::32-big, "IHDR", ihdr::binary-size(len), _crc::32-big, tail::binary>> = rest
 		<<w::32-big, h::32-big, _old::8, color, comp, filter, interlace>> = ihdr

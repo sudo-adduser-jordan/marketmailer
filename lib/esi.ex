@@ -7,9 +7,6 @@ defmodule ESI do
 	@table :esi_error_state
 	@key :blocked_until
 
-	# New floating-window rate limiting (X-Ratelimit-* headers), active on some
-	# routes. The old x-esi-error-limit-* handling stays for the others; the two
-	# header families are mutually exclusive.
 	@token_cost 2
 	@unknown_group :unknown
 	@default_limit 150
@@ -17,7 +14,6 @@ defmodule ESI do
 	@margin_ms 1_500
 	@min_block_ms 1_000
 
-	# Old error-limit handling; still active on routes without the new limiter.
 	def wait_for_error_window do
 		now = System.system_time(:millisecond)
 
@@ -38,22 +34,12 @@ defmodule ESI do
 		end
 	end
 
-	# --- New rate limiting -------------------------------------------------
-	# All unauthenticated calls from this IP share ESI's token buckets (one per
-	# rate limit group + source IP), so state is process-wide in @table.
-
-	# Reserve tokens for one request against the bucket of the group the url
-	# belongs to. The group is learned from a prior response's X-Ratelimit-Group
-	# header (or a shared :unknown bucket before that). Sleeps until tokens are
-	# available so concurrent page workers self-throttle instead of bursting.
 	def acquire(url, cost \\ @token_cost) do
 		group = group_for(url)
 		wait_blocked(group)
 		acquire_bucket(group, cost)
 	end
 
-	# Feed server truth back into the ledger after a response. A 429 parks the
-	# group bucket via Retry-After; other statuses correct X-Ratelimit-Remaining.
 	def release(headers, url) do
 		case rate_meta(headers) do
 			nil ->
@@ -124,7 +110,6 @@ defmodule ESI do
 		end
 	end
 
-	# Set a timestamp 10s in the future
 	defp activate_maintenance, do: :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
 
 	defp clear_maintenance, do: :ets.delete(@table, @maint_key)
@@ -175,8 +160,6 @@ defmodule ESI do
 		end
 	end
 
-	# --- New-rate-limit internals ------------------------------------------
-
 	defp group_for(url) do
 		case :ets.lookup(@table, {:url_group, url}) do
 			[{_, group}] -> group
@@ -210,8 +193,6 @@ defmodule ESI do
 
 		case :ets.lookup(@table, {:bucket, group}) do
 			[] ->
-				# Nothing learned for this group yet: seed a conservative bucket so
-				# the initial sweep self-throttles instead of stampeding into 429s.
 				:ets.insert(@table, {{:bucket, group}, max(@default_limit - cost, 0), now, @default_limit, @default_window_ms})
 				:ok
 
@@ -223,10 +204,6 @@ defmodule ESI do
 					:ets.insert(@table, {{:bucket, group}, available - cost, now, limit, window})
 					:ok
 				else
-					# Bounded wait, then re-check shared state: at boot hundreds
-					# of workers share one conservative bucket and the naive
-					# deficit sleep spans tens of minutes, parking unlucky
-					# waiters (e.g. the names seeder) far past recovery.
 					needed = cost - available
 					sleep = if(refill_rate > 0, do: round(needed / refill_rate), else: @pause_ms) + @margin_ms
 					Process.sleep(min(sleep, 5_000))

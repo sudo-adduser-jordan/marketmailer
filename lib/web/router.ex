@@ -1,12 +1,4 @@
 defmodule MarketmailerWeb.DashboardAuth do
-	@moduledoc """
-	HTTP basic auth for `/dashboard` in prod.
-
-	Inactive unless both `:dashboard_user` and `:dashboard_password` are
-	configured (see `config/runtime.exs`: `DASHBOARD_USER` /
-	`DASHBOARD_PASSWORD`). Dev stays open on localhost; test never boots
-	the endpoint.
-	"""
 	import Plug.Conn
 
 	def init(opts), do: opts

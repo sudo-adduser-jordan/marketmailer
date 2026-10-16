@@ -1,20 +1,9 @@
 defmodule Janice.Padding do
-	@moduledoc """
-	Adds a white border around Janice chart PNGs so the graph no longer
-	touches the Discord embed edge.
-
-	Pure OTP (`:zlib` + binary matching, no extra deps). Only 8-bit
-	non-interlaced grayscale/RGB/RGBA are padded; anything else (palette,
-	16-bit, interlaced, corrupt) is returned unchanged so a capture can
-	never break because of its border.
-	"""
-
 	@signature <<137, 80, 78, 71, 13, 10, 26, 10>>
 	@default_pad 16
 
 	def default_pad, do: @default_pad
 
-	@doc "Returns `png` with `pad` white pixels on every side, or unchanged when unsupported."
 	def pad(png, pad \\ @default_pad)
 
 	def pad(png, pad) when is_binary(png) and is_integer(pad) and pad > 0 do
@@ -29,7 +18,6 @@ defmodule Janice.Padding do
 	def pad(png, _pad) when is_binary(png), do: png
 	def pad(other, _pad), do: other
 
-	@doc "Reads `{:ok, {width, height}}` from a PNG binary."
 	def dimensions(<<@signature, rest::binary>>) do
 		with {:ok, header, _others, _idat} <- parse_chunks(rest, nil, [], []),
 				 {:ok, {w, h, _color}, _bpp} <- pixel_info(header) do
@@ -40,8 +28,6 @@ defmodule Janice.Padding do
 	end
 
 	def dimensions(_), do: :error
-
-	# --- Parse ---
 
 	defp parse(<<@signature, rest::binary>>) do
 		with {:ok, header, others, idat} <- parse_chunks(rest, nil, [], []),
@@ -70,15 +56,12 @@ defmodule Janice.Padding do
 
 	defp parse_chunks(_, _, _, _), do: :error
 
-	# Header: width, height, bit_depth, color_type, compression, filter, interlace.
 	defp pixel_info(<<w::32-big, h::32-big, 8, color, 0, 0, 0>>) when color in [0, 2, 6] and w > 0 and h > 0 do
 		bpp = if color == 0, do: 1, else: if(color == 2, do: 3, else: 4)
 		{:ok, {w, h, color}, bpp}
 	end
 
 	defp pixel_info(_), do: :error
-
-	# --- Render ---
 
 	defp render({header, others, idat, w, h, color, bpp}, pad) do
 		<<_old_w::32-big, _old_h::32-big, depth, _color, comp, filter, interlace>> = header
@@ -131,8 +114,6 @@ defmodule Janice.Padding do
 		end
 	end
 
-	# --- Scanline unfiltering (RFC 2083 §6.5) ---
-
 	defp unfilter_rows(raw, w, h, bpp) do
 		stride = w * bpp
 		unfilter_loop(raw, h, stride, bpp, :binary.copy(<<0>>, stride), [])
@@ -153,9 +134,6 @@ defmodule Janice.Padding do
 
 	defp unfilter_loop(_, _, _, _, _, _), do: :error
 
-	# Left-to-right reconstruction; `acc` holds the newest byte first, so
-	# the byte `bpp` positions behind the current one is at index `bpp - 1`
-	# (`bpp <= 4`, so the lookup stays constant-time).
 	defp recon_row(f, scan, prev, bpp) do
 		s = scan |> :binary.bin_to_list() |> List.to_tuple()
 		p = prev |> :binary.bin_to_list() |> List.to_tuple()
@@ -195,9 +173,6 @@ defmodule Janice.Padding do
 		end
 	end
 
-	# --- Border ---
-
-	# Rows carry no filter byte here; filter 0 is prepended per row.
 	defp border_rows(rows, w, color, pad) do
 		white_px =
 			case color do
@@ -215,10 +190,6 @@ defmodule Janice.Padding do
 end
 
 defmodule Janice.Capture do
-	@moduledoc """
-	Provides an injectable boundary for capturing Janice market charts.
-	"""
-
 	@type result :: {:ok, binary()} | {:error, term()}
 	@callback capture(pos_integer(), keyword()) :: result()
 
@@ -332,7 +303,6 @@ defmodule Janice.Playwright do
 		result
 	end
 
-	# Fresh cached charts need no browser at all.
 	defp cached_png(type_id) do
 		ensure_cache()
 
@@ -393,11 +363,6 @@ end
 
 defmodule Janice.ChartPool do
 	@moduledoc false
-	# One long-lived browser/context/page shared by every capture. Browser
-	# launch (~seconds) used to be repaid per capture; now it happens once
-	# and captures serialize through this process. A failed capture drops
-	# the page (kept browser/context get a fresh page next time); a failed
-	# page build drops everything for a full relaunch.
 	use GenServer
 
 	alias PlaywrightEx.{Browser, BrowserContext, Frame, Page}
@@ -428,8 +393,6 @@ defmodule Janice.ChartPool do
 				{:reply, {:error, reason}, state}
 		end
 	end
-
-	# --- Page lifecycle ---
 
 	defp ensure_page(%{page: page} = state, _timeout) when not is_nil(page), do: {:ok, page, state}
 
@@ -501,8 +464,6 @@ defmodule Janice.ChartPool do
 		:exit, _ -> :ok
 	end
 
-	# --- Capture ---
-
 	defp capture_on_page(page, url, timeout) do
 		frame = page.main_frame
 
@@ -514,9 +475,6 @@ defmodule Janice.ChartPool do
 	end
 
 	defp navigate(frame, url, timeout) do
-		# `Frame.goto/2` is spec'd `{:ok, _} | {:error, _}` (its channel
-		# layer wraps every reply, including null results, into one of those
-		# two tuples), so only those outcomes are matched.
 		case Frame.goto(frame.guid, url: url, wait_until: "domcontentloaded", timeout: timeout) do
 			{:ok, _response} -> :ok
 			{:error, reason} -> {:error, reason}

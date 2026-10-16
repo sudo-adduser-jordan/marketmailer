@@ -1,7 +1,4 @@
 defmodule ESI.ClientTest do
-		# The default Req path must keep retry internals off the warning sink:
-		# attempt warnings carry no region/page context (final failures are
-		# logged by us as esi_http_error/page_fetch_error instead).
 		use ExUnit.Case, async: false
 
 		setup do

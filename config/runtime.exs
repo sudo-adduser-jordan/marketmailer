@@ -1,25 +1,12 @@
 import Config
 
-# Runtime (release) configuration. Evaluated at boot AND, via Castle, in a
-# temporary VM running the target code before `bin/castle install`.
-# Build-time `config/config.exs` holds defaults; this file wins at runtime
-# so release tarballs stay env-agnostic (DB path, Discord token).
 if config_env() == :prod do
-	# An empty MARKETMAILER_DB (e.g. bare `export MARKETMAILER_DB=""` in `.env`)
-	# counts as unset so it falls back to the default instead of pointing
-	# Ecto at an invalid empty path.
 	database =
 		case System.get_env("MARKETMAILER_DB") do
 			path when path in [nil, ""] -> "/data/marketmailer.db"
 			path -> path
 		end
 
-	# LiveDashboard (`/dashboard`). DASHBOARD_ENABLED=false skips the
-	# endpoint; DASHBOARD_PORT defaults to 4000. Set DASHBOARD_USER and
-	# DASHBOARD_PASSWORD to require HTTP basic auth. The cookie signing
-	# secret needs no env var: without SECRET_KEY_BASE the dashboard
-	# boots with an ephemeral per-boot secret (dashboard sessions
-	# invalidate on restart, which is fine for a monitoring page).
 	dashboard_enabled =
 		case System.get_env("DASHBOARD_ENABLED") do
 			v when v in ["0", "false", "no"] -> false
@@ -37,10 +24,6 @@ if config_env() == :prod do
 		log: false
 
 	config :marketmailer, :dashboard_enabled, dashboard_enabled
-
-	# The bot reads DISCORD_TOKEN lazily (&Discord.BotSupervisor.token!/0),
-	# so a missing token only skips the bot with a warning instead of
-	# crashing boot.
 	config :marketmailer, :start_pollers, true
 
 	if dashboard_enabled do

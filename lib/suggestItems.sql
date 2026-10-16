@@ -1,5 +1,3 @@
--- Item-name completions for check_market autocomplete: distinct names with
--- a cached Jita 4-4 (station 60003760) sell order, prefix matches first.
 SELECT DISTINCT
     tn.id AS type_id,
     tn.name AS item_name

@@ -1,29 +1,9 @@
 defmodule Mix.Tasks.Sde.Import do
-	@shortdoc "Import EVE names/systems/stations from the official JSONL SDE"
-
-	# Bulk-seeds the EVE name/system tables from the official JSONL SDE.
-	#
-	# Usage: mix sde.import [BUILD]
-	#
-	# Downloads eve-online-static-data-<build>-jsonl.zip (resolving "latest"
-	# via tranquility/latest.jsonl when no build is given), extracts only the
-	# datasets backing our tables, and streams each JSONL file line-by-line
-	# into the database. The SDE is the sole source for these tables: no
-	# ESI name fetching exists anywhere in the app.
-	#
-	# NPC station names are not stored as strings anywhere in the SDE; each
-	# row is composed here as
-	# "{system} {planet-roman} [- Moon {n}] - {owner} [{operation}]" from
-	# mapSolarSystems + mapPlanets/mapMoons + npcCorporations +
-	# stationOperations. Player-owned structures are dynamic and never in
-	# the SDE; those location ids stay out of `names` and render as
-	# "Player Station" in queries.
 	use Mix.Task
 
 	@latest_url "https://developers.eveonline.com/static-data/tranquility/latest.jsonl"
 	@zip_url_template "https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-BUILD-jsonl.zip"
 
-	# Zip entry basenames backing our tables.
 	@needed_files [
 		"types.jsonl",
 		"mapSolarSystems.jsonl",
@@ -39,11 +19,8 @@ defmodule Mix.Tasks.Sde.Import do
 
 	@impl true
 	def run(args) do
-		# Repos need the Ecto supervision tree (repo registry); the full
-		# application (pollers, bot, dashboard) must NOT boot for an import.
 		{:ok, _} = Application.ensure_all_started(:ecto_sqlite3)
 
-		# Req performs HTTP through a named Finch pool, started on demand.
 		{:ok, _} = Application.ensure_all_started(:req)
 
 		case Finch.start_link(name: Req.Finch) do
@@ -68,8 +45,6 @@ defmodule Mix.Tasks.Sde.Import do
 		download_once(zip_path, build)
 		paths = extract_needed(zip_path, dir)
 
-		# Constellation/region maps join in memory (hundreds of rows) so
-		# systems resolve to region names in one streaming pass.
 		regions = load_keyed_map(paths["mapRegions.jsonl"], ["name"])
 		constellations = load_keyed_map(paths["mapConstellations.jsonl"], ["regionID", "region_id"], regions)
 
@@ -120,7 +95,6 @@ defmodule Mix.Tasks.Sde.Import do
 		end
 	end
 
-	# Extracts only the datasets we consume; returns %{basename => path}.
 	defp extract_needed(zip_path, dir) do
 		entries =
 			case :zip.list_dir(String.to_charlist(zip_path)) do
@@ -149,7 +123,6 @@ defmodule Mix.Tasks.Sde.Import do
 					{:error, reason} -> Mix.raise("could not extract #{base}: #{inspect(reason)}")
 				end
 
-				# Unzip preserves the in-archive path; flatten to dir root.
 				extracted = Path.join(dir, to_string(name))
 				if extracted != out, do: File.rename!(extracted, out)
 			end
@@ -158,10 +131,6 @@ defmodule Mix.Tasks.Sde.Import do
 		end)
 	end
 
-	# Loads a small reference file into %{key => string}, following one id
-	# link through an already-loaded map (constellation -> region name).
-	# Tries each candidate field in order; localized objects resolve via
-	# their English entry.
 	defp load_keyed_map(path, fields, link \\ nil)
 
 	defp load_keyed_map(path, fields, link) when is_list(fields) do
@@ -194,10 +163,6 @@ defmodule Mix.Tasks.Sde.Import do
 	defp as_text(%{"en" => name}) when is_binary(name), do: name
 	defp as_text(_), do: nil
 
-	# Bulk writes against the live poller DB contend on SQLite's single
-	# write lock ("database is locked" fails fast, no busy wait). Retry
-	# with backoff so a background import always drains; raises after the
-	# budget so failures are loud, never silently swallowed.
 	@write_attempts 60
 	@write_delay_ms 500
 
@@ -205,10 +170,6 @@ defmodule Mix.Tasks.Sde.Import do
 	defp with_write_retry(_fun, 0), do: Mix.raise("SDE import write failed: lock budget exhausted")
 
 	defp with_write_retry(fun, attempts) do
-		# `Database.insert_all/3` raises on failure (never returns an
-		# `{:error, _}` tuple), so lock contention surfaces as raised
-		# `Exqlite` / `DBConnection` exceptions retried below; success
-		# returns `:ok`.
 		_fun_result = fun.()
 		:ok
 	rescue
@@ -227,10 +188,6 @@ defmodule Mix.Tasks.Sde.Import do
 	defp lock_contention?(%DBConnection.ConnectionError{}), do: true
 	defp lock_contention?(_), do: false
 
-	# Direct repo writes with task-owned retry. Database.Writer raises on
-	# a spent lock budget — invisible to a bulk importer counting chunks —
-	# so this path retries loudly instead.
-	# Same conflict semantics, same chunk discipline, but failures raise.
 	defp insert_names(chunk) do
 		with_write_retry(fn ->
 			Database.insert_all("names", chunk, on_conflict: {:replace, [:name]}, conflict_target: :id)
@@ -300,8 +257,6 @@ defmodule Mix.Tasks.Sde.Import do
 		stations = paths["npcStations.jsonl"] |> stream_entries() |> Enum.to_list()
 		orbit_ids = stations |> Enum.map(& &1["orbitID"]) |> Enum.uniq()
 
-		# mapMoons.jsonl is ~224MB: stream it once, keeping only the moons
-		# stations actually orbit (projected to the fields we need).
 		moons =
 			load_celestials(paths["mapMoons.jsonl"], orbit_ids, &%{planet_id: &1["orbitID"], index: &1["orbitIndex"]})
 
@@ -350,12 +305,6 @@ defmodule Mix.Tasks.Sde.Import do
 		Mix.shell().info("imported #{count} NPC station names (verified #{length(ids)} present)")
 	end
 
-	# Composes one NPC station display name from the SDE reference maps:
-	# "{system} {planet-roman} [- Moon {n}] - {owner} [{operation}]".
-	# Stations orbiting their star directly (Zarzakh) skip the celestial
-	# segment; stations with useOperationName=false carry the owner name
-	# alone (e.g. "Maurasi VIII - Moon 14 - Caldari Business Tribunal").
-	# Returns nil when any link is missing. Public for tests.
 	def compose_station_name(%{"_key" => id} = station, lookups) when is_integer(id) do
 		with system_name when is_binary(system_name) <- Map.get(lookups.systems, station["solarSystemID"]),
 				 {:ok, celestial} <- celestial_label(station, lookups),
@@ -369,8 +318,6 @@ defmodule Mix.Tasks.Sde.Import do
 
 	def compose_station_name(_station, _lookups), do: nil
 
-	# "Jita IV - Moon 4" for moon-orbiting stations, "Jita IV" for
-	# planet-orbiting ones, "Zarzakh" for star-orbiting ones.
 	defp celestial_label(%{"orbitID" => orbit_id, "solarSystemID" => system_id}, lookups) do
 		system_name = Map.get(lookups.systems, system_id)
 
@@ -409,8 +356,6 @@ defmodule Mix.Tasks.Sde.Import do
 
 	defp station_suffix(_station, owner, _ops), do: owner
 
-	# Streams a large celestial file, keeping only wanted ids projected to
-	# small maps via project/1.
 	defp load_celestials(path, wanted, project) do
 		wanted = MapSet.new(wanted)
 
@@ -445,8 +390,6 @@ defmodule Mix.Tasks.Sde.Import do
 	defp roman(n, [{value, numeral} | _] = pairs) when n >= value, do: numeral <> roman(n - value, pairs)
 	defp roman(n, [_ | rest]), do: roman(n, rest)
 
-	# Reads back every imported id in chunks; raises unless all are present.
-	# Closes the silent-partial-write hole for good.
 	defp verify_present!(table, column, ids) do
 		missing =
 			ids

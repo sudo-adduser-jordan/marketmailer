@@ -1,36 +1,10 @@
 defmodule Mix.Tasks.Test.Safe do
-	@shortdoc "Run tests in MIX_ENV=test, safe alongside a live poller when DB-isolated"
-
-	@moduledoc """
-	Grants the suite safe passage alongside an always-on live poller, then
-	runs tests in `MIX_ENV=test`.
-
-	The suite never touches the live poller: `config/test.exs` disables
-	pollers (`start_pollers: false`), stubs ESI (maintenance ETS + fixtures),
-	and defaults to isolated `priv/data/test.db`
-	(or per-suite tmp files). A live
-	prod daemon (`task start`, i.e. a Castle release, `bin/marketmailer`) or a
-	dev shell (`task dev`) is therefore
-	allowed to keep running as long as the test DB file is isolated from the
-	live `priv/data/marketmailer.db`. Refusal happens only on a DB collision (e.g.
-	`MARKETMAILER_DB=priv/data/marketmailer.db` while a poller holds it).
-
-	Plain `mix test` enforces the same guard via `test/test_helper.exs`, so
-	`task test` and `mix test` are safe by construction; this task is the
-	explicit entrypoint with poller-status messaging.
-
-	A stale `-wal`/`-shm` sidecar alone is only a warning: WAL files can
-	linger after an unclean shutdown without any live holder.
-	"""
-
 	use Mix.Task
 
 	@live_db "priv/data/marketmailer.db"
 
 	@impl true
 	def run(args) do
-		# What the test run will actually use: explicit env wins, otherwise
-		# config/test.exs defaults to priv/data/test.db (never the live default).
 		test_db = System.get_env("MARKETMAILER_DB", "priv/data/test.db")
 
 		cond do
@@ -91,12 +65,6 @@ defmodule Mix.Tasks.Test.Safe do
 
 	defp stale_sidecar?(db), do: File.exists?(db <> "-wal") or File.exists?(db <> "-shm")
 
-	# A live prod daemon (`task start`) or dev shell (`task dev`) for this
-	# project — i.e. a Castle release (`bin/marketmailer ...`) or a
-	# `beam.smp ... marketmailer` node. Best-effort via `pgrep`; excludes this
-	# task's own re-exec chain, its `mix test` child, and any `_build/test`
-	# test VMs (self-match). Shared with `test/test_helper.exs` so plain
-	# `mix test` and `mix test.safe` apply exactly the same guard.
 	def poller_running? do
 		case System.cmd("pgrep", ["-af", "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"],
 					 stderr_to_stdout: true

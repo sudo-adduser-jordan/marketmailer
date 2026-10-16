@@ -1,13 +1,7 @@
 defmodule Etag.ExpiryTest do
-	# Crash-resume TTL persistence: expiry survives in SQLite, unexpected
-	# entries (missing/NULL/expired/absurd) fetch now instead of skipping.
 	use ExUnit.Case, async: false
 
 	setup_all do
-		# Use the app-booted test repo (pollers disabled, isolated priv/data/test.db):
-		# reconfiguring Database here would poison the shared repo for the
-		# rest of the suite. Migration is idempotent. Market.DatabaseTest
-		# stops/restarts the shared repo in its lifecycle, so wait for it.
 		await_repo!(Database, 10_000)
 
 		Ecto.Migrator.run(
@@ -28,8 +22,6 @@ defmodule Etag.ExpiryTest do
 		:ok
 	end
 
-	# The shared test repo is stopped/restarted by other modules' lifecycles;
-	# poll until a trivial query succeeds (or the deadline passes, then fail).
 	defp await_repo!(repo, timeout) do
 		deadline = System.monotonic_time(:millisecond) + timeout
 		await_repo_loop!(repo, deadline)

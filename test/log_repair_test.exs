@@ -1,7 +1,4 @@
 defmodule Marketmailer.LogRepairTest do
-	# The file logger holds its fd open: deleting logs/errors.jsonl while
-	# running orphans the descriptor. ensure_file_logger/0 must recreate it.
-	# Custom path/handler args keep this off the live log file.
 	use ExUnit.Case, async: false
 
 	require Logger

@@ -1,14 +1,4 @@
 defmodule MarketmailerWeb.Endpoint do
-	@moduledoc """
-	Minimal Phoenix endpoint exposing `Phoenix.LiveDashboard` for the ESI
-	poller. No app routes — only `/dashboard` (see `MarketmailerWeb.Router`).
-
-	Started under `Marketmailer.Application` when `:dashboard_enabled` is
-	true (always except `config/test.exs`). Prod port/secret come from
-	`config/runtime.exs` (`DASHBOARD_PORT` default 4000, `SECRET_KEY_BASE`);
-	dev defaults live in `config/dev.exs` (`DASHBOARD_PORT` default 4001,
-	isolated `priv/data/dev.db` via `task dev`).
-	"""
 	use Phoenix.Endpoint, otp_app: :marketmailer
 
 	@session_options [

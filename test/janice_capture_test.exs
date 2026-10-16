@@ -1,10 +1,6 @@
 defmodule Janice.CaptureTest do
 	use ExUnit.Case, async: true
 
-	# ExUnit randomizes order within a module: the "serves fresh cached
-	# charts" test writes type 1001 into the shared :janice_chart_cache, so
-	# every test starts with that key absent or the "adapter reports
-	# unavailable" assertions see a cache hit instead of a miss.
 	setup do
 		ensure_cache_table()
 		:ets.delete(:janice_chart_cache, 1_001)
@@ -95,11 +91,6 @@ defmodule Janice.CaptureTest do
 		assert :ignore = Janice.Supervisor.start_link(executable: "definitely-missing-playwright")
 	end
 
-	# The app boots Janice.Supervisor (and PlaywrightEx.Supervisor, where
-	# Playwright is installed) under `mix test`, so force the "absent"
-	# precondition instead of assuming it. terminate_child is an explicit
-	# request, so one_for_one does not restart it; nothing else in the
-	# suite uses the real adapter.
 	defp ensure_playwright_supervisor_absent do
 		case Process.whereis(PlaywrightEx.Supervisor) do
 			nil ->

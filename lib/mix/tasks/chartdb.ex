@@ -1,20 +1,4 @@
 defmodule Mix.Tasks.Chartdb do
-	@shortdoc "Rebuild assets/schema.svg from migrations (temp DB; live poller untouched)"
-
-	@moduledoc """
-	Regenerates the ChartDB-style schema diagram (`assets/schema.svg`) from
-	the cumulative result of `priv/repo/migrations`, then ensures the
-	`## Database schema` README section exists.
-
-	The source of truth is the migrations, not any database file: a
-	throwaway database is created under `System.tmp_dir!/0`, migrated `:up`
-	with `all: true`, introspected (`sqlite_master` + `PRAGMA table_info`),
-	and deleted. The live `priv/data/marketmailer.db` is never opened — the
-	temporary path always wins over `MARKETMAILER_DB`, and the resolved file
-	is asserted before any query — so this is safe alongside a live poller.
-	The app supervision tree is never started.
-	"""
-
 	use Mix.Task
 
 	@svg "assets/schema.svg"
@@ -25,7 +9,6 @@ defmodule Mix.Tasks.Chartdb do
 	@view_row_h 19
 	@canvas_w 1240
 
-	# Display slots: {x, width, tables}. Boxes stack from @top with @gap.
 	@slots [
 		{40, 280, ["market"]},
 		{350, 260, ["names", "systems", "etags"]},
@@ -33,7 +16,6 @@ defmodule Mix.Tasks.Chartdb do
 		{930, 270, ["schema_migrations", :legend]}
 	]
 
-	# Logical foreign keys (no DB constraints; app-joined in lib/*.sql).
 	@fks [
 		{"market", "type_id", "names"},
 		{"market", "location_id", "names"},
