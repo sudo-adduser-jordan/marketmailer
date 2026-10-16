@@ -407,12 +407,19 @@ defmodule Discord.Messages do
 	defp embed_color(profit) when is_number(profit) and profit > 0, do: @color_success
 	defp embed_color(_profit), do: @color_error
 
-	# Plain margin text (no emoji, no code block).
+	# Plain margin text (no emoji, no code block). Compact to millions
+	# with 2 decimals at/above 1M, full ISK below.
 	defp margin_value(nil), do: "? ISK"
 
 	defp margin_value(profit) when is_number(profit) do
 		sign = if profit >= 0, do: "+", else: "-"
-		"#{sign}#{format_isk(abs(profit))} ISK"
+		abs_value = abs(profit * 1.0)
+
+		if abs_value >= 1_000_000 do
+			"#{sign}#{:erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2)}M ISK"
+		else
+			"#{sign}#{format_isk(abs_value)} ISK"
+		end
 	end
 
 	defp margin_value(_), do: "? ISK"
