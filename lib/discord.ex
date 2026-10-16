@@ -217,6 +217,7 @@ defmodule Discord.Messages do
 	end
 
 	def list_per_page, do: 10
+	def list_broadcast_per_page, do: 100
 
 	def list_components(_page, _total_pages, 0), do: []
 
@@ -1116,8 +1117,8 @@ defmodule Discord.Broadcaster do
 			{:ok, channels} ->
 				case fetch_market_list(state) do
 					{:ok, items} ->
-						embed = Messages.market_list_embed(items)
-						deliver_all(channels, embed, nil, state)
+						payload = Messages.market_list_payload(items, 1, Messages.list_broadcast_per_page())
+						deliver_all(channels, payload, state)
 
 					{:error, reason} ->
 						Marketmailer.Log.warning(
@@ -1151,11 +1152,11 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
-	defp deliver_all(channels, embed, file, state) do
-		payload = message_payload(embed, file)
+	defp deliver_all(channels, payload, state) do
+		message = Map.put(payload, :allowed_mentions, :none)
 
 		Enum.reduce(channels, :ok, fn channel, result ->
-			case invoke(fn -> state.deliver_fun.(channel, payload) end) do
+			case invoke(fn -> state.deliver_fun.(channel, message) end) do
 				{:ok, {:ok, _response}} ->
 					result
 
@@ -1173,10 +1174,6 @@ defmodule Discord.Broadcaster do
 			end
 		end)
 	end
-
-	defp message_payload(embed, nil), do: %{embeds: [embed], allowed_mentions: :none}
-
-	defp message_payload(embed, file), do: %{embeds: [embed], files: [file], allowed_mentions: :none}
 
 	defp invoke(fun) do
 		case fun.() do
