@@ -2,7 +2,7 @@ defmodule Marketmailer.RegionManager do
 	@moduledoc false
 	use GenServer, restart: :permanent
 
-	@default_cycle_timeout 10 * 60_000
+	@default_cycle_timeout 6 * 60_000
 
 	def start_link(id, opts \\ []) when is_integer(id) and is_list(opts) do
 		GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
@@ -111,7 +111,8 @@ defmodule Marketmailer.RegionManager do
 					region: state.id,
 					cycle_id: state.cycle_id,
 					pages: state.expected_pages,
-					failures: failures
+					failures: failures,
+					updated_pages: updated_pages(state.results)
 				}
 
 				log_failure(state.id, failure)
@@ -179,7 +180,8 @@ defmodule Marketmailer.RegionManager do
 							region: state.id,
 							cycle_id: state.cycle_id,
 							pages: expected_pages,
-							failures: failures
+							failures: failures,
+							updated_pages: updated_pages(state.results)
 						}
 
 						log_failure(state.id, failure)

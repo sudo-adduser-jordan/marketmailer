@@ -5,6 +5,7 @@ defmodule Discord.Messages do
 	@color_success 0x43B581
 	@color_error 0xF04747
 	@color_info 0x7289DA
+	@color_warning 0xFAA61A
 
 	@icon_ "https://images.evetech.net/types/81008/icon?size=64"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
@@ -197,6 +198,60 @@ defmodule Discord.Messages do
 	def list_broadcast_per_page, do: 100
 
 	def round_status_embed(failures, pending) do
+		description = truncate_lines(status_lines(failures, pending), "All regions reported.")
+
+		%Embed{
+			title: "Market cycle status",
+			description: description,
+			color: if(failures == %{}, do: @color_info, else: @color_error),
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: if(failures == %{}, do: branded_author(), else: error_author()),
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			}
+		}
+		|> with_version()
+	end
+
+	def esi_down_embed(failures \\ %{}, pending \\ []) do
+		description =
+			truncate_lines(status_lines(failures, pending), "Market data is stale; ESI appears to be down.")
+
+		%Embed{
+			title: "ESI is down",
+			description: description,
+			color: @color_warning,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: branded_author(),
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			}
+		}
+		|> with_version()
+	end
+
+	def no_update_embed(failures \\ %{}) do
+		description =
+			if failures == %{} do
+				"No regions reported updated orders this cycle."
+			else
+				truncate_lines(status_lines(failures, []), "No regions reported updated orders this cycle.")
+			end
+
+		%Embed{
+			title: "No market updates",
+			description: description,
+			color: @color_error,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: branded_author(),
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			}
+		}
+		|> with_version()
+	end
+
+	defp status_lines(failures, pending) do
 		failure_lines =
 			failures
 			|> Enum.sort_by(fn {region, _} -> region end)
@@ -212,19 +267,7 @@ defmodule Discord.Messages do
 			|> Enum.sort()
 			|> Enum.map(fn region -> "Region #{region} — awaiting cycle" end)
 
-		description = truncate_lines(failure_lines ++ pending_lines, "All regions reported.")
-
-		%Embed{
-			title: "Market cycle status",
-			description: description,
-			color: if(failures == %{}, do: @color_info, else: @color_error),
-			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: if(failures == %{}, do: branded_author(), else: error_author()),
-			thumbnail: %Embed.Thumbnail{
-				url: @icon_
-			}
-		}
-		|> with_version()
+		failure_lines ++ pending_lines
 	end
 
 	defp format_failure(%{page: nil, reason: reason}), do: "failed: #{reason}"
@@ -955,7 +998,8 @@ defmodule Discord.Broadcaster do
 	alias Nostrum.Bot
 
 	@seen_limit 10_000
-	@round_timeout 10 * 60_000
+	# ESI market cache is ~5 min; the deadline only detects a probably-down ESI.
+	@round_timeout 6 * 60_000
 
 	def start_link(opts \\ []) do
 		name = Keyword.get(opts, :name, __MODULE__)
@@ -1019,7 +1063,11 @@ defmodule Discord.Broadcaster do
 	end
 
 	def handle_info({:region_refresh_failed, summary}, state) do
-		record_report(summary, {:failed, Map.get(summary, :failures, [])}, state)
+		record_report(
+			summary,
+			{:failed, Map.get(summary, :failures, []), Map.get(summary, :updated_pages, [])},
+			state
+		)
 	end
 
 	def handle_info({:broadcast_done, _key, result}, state) do
@@ -1053,17 +1101,22 @@ defmodule Discord.Broadcaster do
 		cycle_id = Map.get(summary, :cycle_id)
 		key = {region, cycle_id}
 
-		if MapSet.member?(state.seen, key) do
-			{:noreply, state}
-		else
-			state = note_seen(state, key)
-			state = %{state | reports: Map.put(state.reports, region, {cycle_id, outcome})}
-
-			if Enum.all?(state.regions, &Map.has_key?(state.reports, &1)) do
-				close_round(state)
-			else
+		cond do
+			state.regions != [] and region not in state.regions ->
 				{:noreply, state}
-			end
+
+			MapSet.member?(state.seen, key) ->
+				{:noreply, state}
+
+			true ->
+				state = note_seen(state, key)
+				state = %{state | reports: Map.put(state.reports, region, {cycle_id, outcome})}
+
+				if Enum.all?(state.regions, &Map.has_key?(state.reports, &1)) do
+					close_round(state)
+				else
+					{:noreply, state}
+				end
 		end
 	end
 
@@ -1148,31 +1201,120 @@ defmodule Discord.Broadcaster do
 				{:ok, :no_channels}
 
 			{:ok, channels} ->
-				items = fetch_market_list(state)
-				failures = digest_failures(snapshot.reports)
-				payload = digest_payload(items, failures, snapshot.pending)
-				deliver_all(channels, payload, state)
+				cond do
+					esi_down?(snapshot) ->
+						deliver_all(channels, warning_payload(snapshot), state)
+
+					any_updated?(snapshot.reports) ->
+						items = fetch_market_list(state)
+						failures = digest_failures(snapshot.reports)
+						payload = digest_payload(items, failures)
+						deliver_all(channels, payload, state)
+
+					true ->
+						deliver_all(channels, error_payload(snapshot), state)
+				end
 
 			{:error, reason} ->
 				{:error, reason}
 		end
 	end
 
-	defp digest_payload(items, failures, pending) do
+	defp digest_payload(items, failures) do
 		base = Messages.market_list_payload(items, 1, Messages.list_broadcast_per_page())
 
-		if failures == %{} and pending == [] do
+		if failures == %{} do
 			base
 		else
-			%{base | embeds: base.embeds ++ [Messages.round_status_embed(failures, pending)]}
+			%{base | embeds: base.embeds ++ [Messages.round_status_embed(failures, [])]}
 		end
+	end
+
+	defp warning_payload(snapshot) do
+		failures = digest_failures(Map.get(snapshot, :reports, %{}))
+		pending = Map.get(snapshot, :pending, [])
+		%{embeds: [Messages.esi_down_embed(failures, pending)], components: []}
+	end
+
+	defp error_payload(snapshot) do
+		failures = digest_failures(Map.get(snapshot, :reports, %{}))
+
+		embeds =
+			if failures == %{} do
+				[Messages.no_update_embed()]
+			else
+				[Messages.no_update_embed(failures), Messages.round_status_embed(failures, [])]
+			end
+
+		%{embeds: embeds, components: []}
+	end
+
+	@esi_down_reasons [:service_unavailable, :rate_limited, :offline, :cycle_timeout, :timeout]
+
+	defp esi_down?(snapshot) do
+		reports = Map.get(snapshot, :reports, %{})
+		pending = Map.get(snapshot, :pending, [])
+		failures = digest_failures(reports)
+
+		cond do
+			# Timeout means the round never completed: ESI is probably down.
+			pending != [] -> true
+			# The market updated: broadcast the list even if ESI hiccuped elsewhere.
+			any_updated?(reports) -> false
+			# No failures at all means ESI answered (all 304s): no update, not down.
+			failures == %{} -> false
+			maintenance_active?() -> true
+			true -> esi_failures_only?(reports)
+		end
+	end
+
+	defp esi_failures_only?(reports) when map_size(reports) == 0, do: false
+
+	defp esi_failures_only?(reports) do
+		failures = digest_failures(reports)
+
+		if failures == %{} or any_updated?(reports) do
+			false
+		else
+			failures
+			|> Enum.flat_map(fn {_region, reasons} -> List.wrap(reasons) end)
+			|> Enum.map(fn
+				%{reason: reason} -> reason
+				reason -> reason
+			end)
+			|> Enum.all?(&(&1 in @esi_down_reasons))
+		end
+	end
+
+	defp any_updated?(reports) do
+		Enum.any?(reports, fn
+			{_region, {_cycle, :complete}} -> true
+			{_region, {_cycle, {:failed, _, updated}}} when is_list(updated) -> updated != []
+			{_region, {_cycle, {:failed, _}}} -> false
+			_ -> false
+		end)
+	end
+
+	defp maintenance_active? do
+		ESI.maintenance_active?()
+	rescue
+		_ -> false
+	catch
+		_, _ -> false
 	end
 
 	defp digest_failures(reports) do
-		for {region, {_cycle_id, {:failed, reasons}}} <- reports, into: %{} do
+		for {region, {_cycle_id, outcome}} <- reports,
+				reasons = failed_reasons(outcome),
+				not is_nil(reasons),
+				into: %{} do
 			{region, reasons}
 		end
 	end
+
+	defp failed_reasons({:failed, reasons}), do: reasons
+	defp failed_reasons({:failed, reasons, _updated}), do: reasons
+	defp failed_reasons(_), do: nil
 
 	defp fetch_channels(state) do
 		case invoke_resolve(state, :channels_fun, {DiscordDatabase, :registered_channels, []}) do

@@ -4,6 +4,7 @@ defmodule Discord.BroadcasterTest do
 	setup do
 		MarketmailerTest.Fixtures.ensure_ets(:esi_error_state)
 		MarketmailerTest.Fixtures.ensure_ets(:market_cache)
+		:ets.delete(:esi_error_state, :maintenance_mode)
 
 		if !Process.whereis(Marketmailer.Registry) do
 			start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
@@ -44,7 +45,7 @@ defmodule Discord.BroadcasterTest do
 		assert second_payload == first_payload
 	end
 
-	test "broadcasts a digest with a status section when a refresh fails", %{
+	test "broadcasts an ESI-down warning when the refresh fails on ESI errors", %{
 		task_supervisor: _task_supervisor
 	} do
 		test_pid = self()
@@ -60,12 +61,9 @@ defmodule Discord.BroadcasterTest do
 		Marketmailer.RegionManager.page_result(region, 1, :failed, %{pages: 1, reason: :timeout})
 
 		assert_receive {:sent, 300, payload}
-		assert [list_embed, status_embed] = payload.embeds
-		assert list_embed.title == "Items undercutting the Jita buy wall"
-		assert status_embed.title == "Market cycle status"
-		assert status_embed.description =~ "#{region}"
-		assert status_embed.description =~ "page 1"
-		assert status_embed.description =~ "timeout"
+		assert [warning] = payload.embeds
+		assert warning.title == "ESI is down"
+		assert warning.description =~ "#{region}"
 	end
 
 	test "broadcasts the list even when the market query has no items", %{
@@ -254,7 +252,7 @@ defmodule Discord.BroadcasterTest do
 		assert_receive {:sent, 1400, _payload}
 	end
 
-	test "closes the round on deadline with pending regions listed", %{
+	test "broadcasts an ESI-down warning on deadline with pending regions listed", %{
 		task_supervisor: _task_supervisor
 	} do
 		test_pid = self()
@@ -276,11 +274,54 @@ defmodule Discord.BroadcasterTest do
 		complete_cycle(reporter, :updated)
 
 		assert_receive {:sent, 1200, payload}, 1_000
+		assert [warning] = payload.embeds
+		assert warning.title == "ESI is down"
+		assert warning.description =~ "#{stalled}"
+		assert warning.description =~ "awaiting cycle"
+	end
+
+	test "broadcasts list plus status when one region updates and another fails locally", %{
+		task_supervisor: _task_supervisor
+	} do
+		test_pid = self()
+		changed = 97_000_036
+		broken = 97_000_037
+
+		_broadcaster =
+			start_broadcaster([changed, broken], [1500], market_list(), fn channel, payload ->
+				send(test_pid, {:sent, channel, payload})
+				{:ok, :sent}
+			end)
+
+		complete_cycle(changed, :updated)
+		Marketmailer.RegionManager.page_started(broken, 1)
+		Marketmailer.RegionManager.page_result(broken, 1, :failed, %{pages: 1, reason: :persist_failed})
+
+		assert_receive {:sent, 1500, payload}
 		assert [list_embed, status_embed] = payload.embeds
 		assert list_embed.description =~ "Tritanium"
 		assert status_embed.title == "Market cycle status"
-		assert status_embed.description =~ "#{stalled}"
-		assert status_embed.description =~ "awaiting cycle"
+		assert status_embed.description =~ "#{broken}"
+	end
+
+	test "broadcasts error-only when no region updates", %{task_supervisor: _task_supervisor} do
+		test_pid = self()
+		first = 97_000_038
+		second = 97_000_039
+
+		_broadcaster =
+			start_broadcaster([first, second], [1600], market_list(), fn channel, payload ->
+				send(test_pid, {:sent, channel, payload})
+				{:ok, :sent}
+			end)
+
+		complete_cycle(first, :not_modified)
+		complete_cycle(second, :not_modified)
+
+		assert_receive {:sent, 1600, payload}
+		assert [error] = payload.embeds
+		assert error.title == "No market updates"
+		refute error.description =~ "Tritanium"
 	end
 
 	test "production defaults store no funs in state" do
@@ -626,10 +667,12 @@ defmodule Discord.MessagesTest do
 			Discord.Messages.add_channel(%{channel_id: 123}),
 			Discord.Messages.channel_removed(%{channel_id: 123}),
 			Discord.Messages.list_channel(%{channel_id: 123}),
-			Discord.Messages.list_channel(nil)
+			Discord.Messages.list_channel(nil),
+			Discord.Messages.esi_down_embed(%{}, []),
+			Discord.Messages.no_update_embed()
 		]
 
-		assert length(embeds) == 9
+		assert length(embeds) == 11
 
 		for embed <- embeds do
 			assert %Embed{footer: %Embed.Footer{text: text}, timestamp: nil} = embed
