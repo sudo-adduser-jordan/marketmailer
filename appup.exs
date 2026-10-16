@@ -1,6 +1,31 @@
 {
-  ~c"0.1.25",
+  ~c"0.1.26",
   [
+    {~c"0.1.25",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Discord.Embeds: added by this transition.
+       {:add_module, Discord.Embeds},
+       # Discord.Broadcaster: behaviour GenServer. The update suspends the process and
+       # calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Discord.Broadcaster, {:advanced, []}},
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Discord.Messages: removed by this transition. delete_module purges the module
+       # and loads nothing, so never use it for a module the target build still has.
+       {:delete_module, Discord.Messages}
+     ]},
     {~c"0.1.24",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
@@ -160,6 +185,31 @@
      ]},
   ],
   [
+    {~c"0.1.25",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Discord.Messages: added by this transition.
+       {:add_module, Discord.Messages},
+       # Discord.Broadcaster: behaviour GenServer. The update suspends the process and
+       # calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Discord.Broadcaster, {:advanced, []}},
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Discord.Embeds: removed by this transition. delete_module purges the module and
+       # loads nothing, so never use it for a module the target build still has.
+       {:delete_module, Discord.Embeds}
+     ]},
     {~c"0.1.24",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
