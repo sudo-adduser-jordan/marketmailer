@@ -447,14 +447,14 @@ defmodule Discord.BroadcasterTest do
 	end
 end
 
-defmodule Discord.MessagesTest do
+defmodule Discord.EmbedsTest do
 	use ExUnit.Case, async: true
 
 	alias MarketView
 	alias Nostrum.Struct.Embed
 
 	test "renders a market-not-found failure embed" do
-		embed = Discord.Messages.market_not_found_embed("  Rifter  ")
+		embed = Discord.Embeds.market_not_found_embed("  Rifter  ")
 
 		assert %Embed{title: "Item not found"} = embed
 		assert embed.description == "No cached market order was found for **Rifter**."
@@ -472,7 +472,7 @@ defmodule Discord.MessagesTest do
 			buy_price: 110.0
 		}
 
-		embed = Discord.Messages.market_embed(item)
+		embed = Discord.Embeds.market_embed(item)
 		fields = Map.new(embed.fields, &{&1.name, &1.value})
 
 		assert %Embed{title: "Tritanium"} = embed
@@ -509,7 +509,7 @@ defmodule Discord.MessagesTest do
 			buy_price: 110.0
 		}
 
-		loss_embed = Discord.Messages.market_embed(loss)
+		loss_embed = Discord.Embeds.market_embed(loss)
 		loss_fields = Map.new(loss_embed.fields, &{&1.name, &1.value})
 
 		assert loss_fields["Margin"] == "-10.00 ISK"
@@ -517,7 +517,7 @@ defmodule Discord.MessagesTest do
 
 		unknown = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0}
 
-		unknown_embed = Discord.Messages.market_embed(unknown)
+		unknown_embed = Discord.Embeds.market_embed(unknown)
 		unknown_fields = Map.new(unknown_embed.fields, &{&1.name, &1.value})
 
 		assert unknown_fields["Buy"] == "? ISK"
@@ -534,7 +534,7 @@ defmodule Discord.MessagesTest do
 			buy_price: 4_849_000.0
 		}
 
-		embed = Discord.Messages.market_embed(item)
+		embed = Discord.Embeds.market_embed(item)
 		fields = Map.new(embed.fields, &{&1.name, &1.value})
 
 		assert fields["Sell"] == "4.66M ISK"
@@ -542,7 +542,7 @@ defmodule Discord.MessagesTest do
 		assert fields["Margin"] == "+189000.00 ISK"
 
 		big = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0, buy_price: 2_000_010.0}
-		big_fields = big |> Discord.Messages.market_embed() |> Map.get(:fields) |> Map.new(&{&1.name, &1.value})
+		big_fields = big |> Discord.Embeds.market_embed() |> Map.get(:fields) |> Map.new(&{&1.name, &1.value})
 
 		assert big_fields["Margin"] == "+2.00M ISK"
 	end
@@ -557,7 +557,7 @@ defmodule Discord.MessagesTest do
 			price: 10.0
 		}
 
-		embed = Discord.Messages.market_embed(item, nil, "attachment://janice-1001.png")
+		embed = Discord.Embeds.market_embed(item, nil, "attachment://janice-1001.png")
 
 		assert embed.image.url == "attachment://janice-1001.png"
 		assert embed.thumbnail.url == "https://images.evetech.net/types/1001/icon?size=64"
@@ -573,17 +573,17 @@ defmodule Discord.MessagesTest do
 			price: 10.0
 		}
 
-		embed = Discord.Messages.market_embed(item)
+		embed = Discord.Embeds.market_embed(item)
 
 		assert embed.thumbnail.url == "https://images.evetech.net/types/81008/icon?size=64"
 	end
 
 	test "list embed never crashes on nil, non-list, or string-keyed rows" do
-		assert Discord.Messages.market_list_embed(nil).description =~ "No items"
-		assert Discord.Messages.market_list_embed(:boom).description =~ "No items"
+		assert Discord.Embeds.market_list_embed(nil).description =~ "No items"
+		assert Discord.Embeds.market_list_embed(:boom).description =~ "No items"
 
 		embed =
-			Discord.Messages.market_list_embed([
+			Discord.Embeds.market_list_embed([
 				%{
 					"item" => "Tritanium",
 					"sell_price" => "10",
@@ -600,7 +600,7 @@ defmodule Discord.MessagesTest do
 
 	test "list embed renders plain mobile-friendly rows with no code blocks" do
 		embed =
-			Discord.Messages.market_list_embed([
+			Discord.Embeds.market_list_embed([
 				%{item: "Tritanium", margin: 1_250.5, system_name: "Jita", security_status: 0.9},
 				%{item: "Plex", margin: nil, system_name: nil, security_status: nil}
 			])
@@ -621,7 +621,7 @@ defmodule Discord.MessagesTest do
 
 	test "disambiguation embed lists candidates with a re-run hint" do
 		embed =
-			Discord.Messages.market_disambiguation_embed("trit", [
+			Discord.Embeds.market_disambiguation_embed("trit", [
 				%{item_name: "Tritanium"},
 				%{item_name: "Tritanium Blueprint"}
 			])
@@ -634,7 +634,7 @@ defmodule Discord.MessagesTest do
 	end
 
 	test "disambiguation embed falls back when nothing matches" do
-		embed = Discord.Messages.market_disambiguation_embed("zzz", [])
+		embed = Discord.Embeds.market_disambiguation_embed("zzz", [])
 
 		assert embed.title == "Multiple items found"
 		assert embed.description =~ "No cached market order was found for **zzz**."
@@ -650,9 +650,9 @@ defmodule Discord.MessagesTest do
 			price: 10.0
 		}
 
-		high = Discord.Messages.market_embed(%{base | security_status: 0.9})
-		low = Discord.Messages.market_embed(%{base | security_status: 0.3})
-		null = Discord.Messages.market_embed(%{base | security_status: -0.5})
+		high = Discord.Embeds.market_embed(%{base | security_status: 0.9})
+		low = Discord.Embeds.market_embed(%{base | security_status: 0.3})
+		null = Discord.Embeds.market_embed(%{base | security_status: -0.5})
 
 		fields = fn embed -> Map.new(embed.fields, &{&1.name, &1.value}) end
 
@@ -678,17 +678,17 @@ defmodule Discord.MessagesTest do
 		}
 
 		embeds = [
-			Discord.Messages.server_only(%{}),
-			Discord.Messages.error(%{}),
-			Discord.Messages.market_not_found_embed("Rifter"),
-			Discord.Messages.market_list_embed([]),
-			Discord.Messages.market_embed(item),
-			Discord.Messages.add_channel(%{channel_id: 123}),
-			Discord.Messages.channel_removed(%{channel_id: 123}),
-			Discord.Messages.list_channel(%{channel_id: 123}),
-			Discord.Messages.list_channel(nil),
-			Discord.Messages.esi_down_embed(),
-			Discord.Messages.no_update_embed()
+			Discord.Embeds.server_only(%{}),
+			Discord.Embeds.error(%{}),
+			Discord.Embeds.market_not_found_embed("Rifter"),
+			Discord.Embeds.market_list_embed([]),
+			Discord.Embeds.market_embed(item),
+			Discord.Embeds.add_channel(%{channel_id: 123}),
+			Discord.Embeds.channel_removed(%{channel_id: 123}),
+			Discord.Embeds.list_channel(%{channel_id: 123}),
+			Discord.Embeds.list_channel(nil),
+			Discord.Embeds.esi_down_embed(),
+			Discord.Embeds.no_update_embed()
 		]
 
 		assert length(embeds) == 11
@@ -700,9 +700,9 @@ defmodule Discord.MessagesTest do
 	end
 
 	test "channel embeds share the corrected Registration title" do
-		assert Discord.Messages.add_channel(%{channel_id: 123}).title == "Channel Registration"
-		assert Discord.Messages.channel_removed(%{channel_id: 123}).title == "Channel Registration"
-		assert Discord.Messages.list_channel(%{channel_id: 123}).title == "Channel Registration"
+		assert Discord.Embeds.add_channel(%{channel_id: 123}).title == "Channel Registration"
+		assert Discord.Embeds.channel_removed(%{channel_id: 123}).title == "Channel Registration"
+		assert Discord.Embeds.list_channel(%{channel_id: 123}).title == "Channel Registration"
 	end
 
 	test "list payload paginates with clamped pages and nav buttons" do
@@ -711,16 +711,16 @@ defmodule Discord.MessagesTest do
 				%{item: "Item #{i}", margin: 1.0, system_name: "Jita", security_status: 0.9}
 			end
 
-		first = Discord.Messages.market_list_payload(items, 1, 10)
+		first = Discord.Embeds.market_list_payload(items, 1, 10)
 		assert hd(first.embeds).title == "Items undercutting the Jita buy wall (1/3)"
 		assert [%{components: [prev, next]}] = first.components
 		assert prev.label == "Prev" and prev.disabled == true and prev.custom_id == "market_list:page:0"
 		assert next.label == "Next" and next.disabled == false and next.custom_id == "market_list:page:2"
 
-		clamped = Discord.Messages.market_list_payload(items, 99, 10)
+		clamped = Discord.Embeds.market_list_payload(items, 99, 10)
 		assert hd(clamped.embeds).title == "Items undercutting the Jita buy wall (3/3)"
 
-		single = Discord.Messages.market_list_payload(Enum.take(items, 5), 1, 10)
+		single = Discord.Embeds.market_list_payload(Enum.take(items, 5), 1, 10)
 		assert hd(single.embeds).title == "Items undercutting the Jita buy wall"
 		assert single.components == []
 	end
