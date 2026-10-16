@@ -20,9 +20,11 @@
        # Discord.Database: no behaviour. The code is replaced without suspending
        # anything.
        {:load_module, Discord.Database},
-       # Discord.Messages: no behaviour. The code is replaced without suspending
-       # anything.
-       {:load_module, Discord.Messages},
+       # Discord.Messages: removed in this release (embeds extracted into
+       # Discord.Embeds); delete the old module from the running system.
+       {:delete_module, Discord.Messages},
+       # Discord.Embeds: new module extracted from Discord; add it.
+       {:add_module, Discord.Embeds},
        # ESI: no behaviour. The code is replaced without suspending anything.
        {:load_module, ESI},
        # Etag.Database: no behaviour. The code is replaced without suspending anything.

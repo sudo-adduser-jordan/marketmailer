@@ -27,6 +27,7 @@ FROM elixir:1.20
 ENV MIX_ENV=prod \
 	TERM=dumb \
 	MARKETMAILER_DB=/data/marketmailer.db \
+	ERL_CRASH_DUMP=logs/erl_crash.dump \
 	PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
 	PATH=/opt/playwright/node_modules/.bin:/usr/local/bin:${PATH}
 
@@ -58,8 +59,8 @@ RUN mix release
 # drop privileges; MARKETMAILER_DB must point somewhere writable
 RUN useradd --system --create-home app \
 	&& chown -R app:app /app \
-	&& mkdir -p /data \
-	&& chown app:app /data
+	&& mkdir -p /data /app/logs \
+	&& chown app:app /data /app/logs
 USER app
 
 EXPOSE 443 4000

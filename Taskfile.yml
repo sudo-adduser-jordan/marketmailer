@@ -74,7 +74,8 @@ tasks:
         fi
       - |
         rm -f priv/data/marketmailer.pid
-        {{.BIN}} daemon
+        mkdir -p logs
+        ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" {{.BIN}} daemon
         echo "started prod release (daemon)"
 
   stop:
@@ -281,7 +282,8 @@ tasks:
           exit 1
         fi
         mkdir -p "$(dirname "$DEV_DB")"
-        MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" iex -S mix run
+        mkdir -p logs
+        MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" iex -S mix run
     interactive: true
 
   compile:
