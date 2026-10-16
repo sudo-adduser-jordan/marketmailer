@@ -219,6 +219,47 @@ defmodule Discord.Messages do
 	def list_per_page, do: 10
 	def list_broadcast_per_page, do: 100
 
+	# Status section of the per-round digest: which regions failed or never
+	# reported. One line per region; dropped lines never overflow the embed.
+	def round_status_embed(failures, pending) do
+		failure_lines =
+			failures
+			|> Enum.sort_by(fn {region, _} -> region end)
+			|> Enum.flat_map(fn {region, reasons} ->
+				case List.wrap(reasons) do
+					[] -> ["Region #{region} — refresh failed"]
+					list -> Enum.map(list, fn reason -> "Region #{region} — #{format_failure(reason)}" end)
+				end
+			end)
+
+		pending_lines =
+			pending
+			|> Enum.sort()
+			|> Enum.map(fn region -> "Region #{region} — awaiting cycle" end)
+
+		description = truncate_lines(failure_lines ++ pending_lines, "All regions reported.")
+
+		%Embed{
+			title: "Market cycle status",
+			description: description,
+			color: if(failures == %{}, do: @color_info, else: @color_error),
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: %Embed.Author{
+				name: "Marketmailer",
+				url: "https://discord.com",
+				icon_url: @icon_success
+			},
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			}
+		}
+		|> with_version()
+	end
+
+	defp format_failure(%{page: nil, reason: reason}), do: "failed: #{reason}"
+	defp format_failure(%{page: page, reason: reason}), do: "page #{page}: #{reason}"
+	defp format_failure(reason), do: "failed: #{inspect(reason)}"
+
 	def list_components(_page, _total_pages, 0), do: []
 
 	def list_components(_page, total_pages, _count) when total_pages <= 1, do: []
@@ -1009,11 +1050,22 @@ end
 
 defmodule Discord.Broadcaster do
 	@moduledoc """
-	Listens for completed market refreshes and broadcasts the undercut list
-	to registered channels. Failed refreshes are log-only (each RegionManager
-	already emits a `region_refresh_failed` warning to `logs/errors.jsonl`);
-	nothing is sent to Discord for them so one flaky page cannot spam every
-	channel.
+	Collects one report per region per round and broadcasts a single digest
+	to every registered channel once all regions have cycled (completed,
+	unchanged, or failed). A round deadline closes the round early so one
+	stalled region cannot hold the digest forever; missing regions are
+	listed as pending in the status section.
+
+	The digest always carries the current undercut list — even when it is
+	empty or identical to the last round — plus a status embed whenever any
+	region failed or never reported.
+
+	Fun overrides (`channels_fun`, `market_fun`, `deliver_fun`, `prune_fun`)
+	are a test seam only: production always uses `:default`, which resolves
+	to a direct call at use time. Storing version-bound fun captures in
+	state breaks every broadcast after a hot upgrade (the old funs die with
+	the purged code version), so `code_change/3` resets any stored fun to
+	`:default`.
 	"""
 
 	use GenServer
@@ -1025,6 +1077,10 @@ defmodule Discord.Broadcaster do
 	alias Nostrum.Bot
 
 	@seen_limit 10_000
+	# Safety net behind the expected ~5-minute ESI round, aligned with the
+	# per-region 10-minute cycle_timeout: a region that never reports is
+	# listed as pending instead of stalling the digest.
+	@round_timeout 10 * 60_000
 
 	def start_link(opts \\ []) do
 		name = Keyword.get(opts, :name, __MODULE__)
@@ -1036,34 +1092,76 @@ defmodule Discord.Broadcaster do
 		regions = Keyword.get(opts, :regions, Marketmailer.RegionManagerSupervisor.region_ids())
 		Enum.each(regions, &subscribe_region/1)
 
-		{:ok,
-		 %{
-			 async: Keyword.get(opts, :async, true),
-			 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
-			 channels_fun: Keyword.get(opts, :channels_fun, &DiscordDatabase.registered_channels/0),
-			 market_fun: Keyword.get(opts, :market_fun, &Market.Database.get_items_less_than_jita_buy/0),
-			 deliver_fun: Keyword.get(opts, :deliver_fun, &deliver/2),
-			 prune_fun: Keyword.get(opts, :prune_fun, &DiscordDatabase.delete_by_channel/1),
-			 pending: MapSet.new(),
-			 seen: MapSet.new()
-		 }}
+		state = %{
+			async: Keyword.get(opts, :async, true),
+			task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
+			channels_fun: Keyword.get(opts, :channels_fun, :default),
+			market_fun: Keyword.get(opts, :market_fun, :default),
+			deliver_fun: Keyword.get(opts, :deliver_fun, :default),
+			prune_fun: Keyword.get(opts, :prune_fun, :default),
+			regions: regions,
+			round: Keyword.get(opts, :round, 1),
+			round_timeout: Keyword.get(opts, :round_timeout, @round_timeout),
+			reports: %{},
+			seen: MapSet.new(),
+			round_timer: nil
+		}
+
+		{:ok, schedule_round(state)}
+	end
+
+	# Hot-upgrade migration: pre-barrier state held `{region, cycle_id}`
+	# pending keys (removed) and possibly version-bound fun captures
+	# (reset to `:default` so every call resolves against current code).
+	@impl true
+	def code_change(_vsn, state, _extra) when is_map(state) do
+		state =
+			state
+			|> Map.delete(:pending)
+			|> Map.merge(%{
+				regions: Map.get(state, :regions, Marketmailer.RegionManagerSupervisor.region_ids()),
+				round: Map.get(state, :round, 1),
+				round_timeout: Map.get(state, :round_timeout, @round_timeout),
+				reports: %{},
+				seen: Map.get(state, :seen, MapSet.new()),
+				round_timer: nil
+			})
+			|> Map.new(fn
+				{key, fun} when key in [:channels_fun, :market_fun, :deliver_fun, :prune_fun] and is_function(fun) ->
+					{key, :default}
+
+				{k, v} ->
+					{k, v}
+			end)
+
+		{:ok, schedule_round(state)}
 	end
 
 	@impl true
 	def handle_info({:region_refresh_complete, summary}, state) do
-		start_refresh(summary, state)
+		record_report(summary, :complete, state)
 	end
 
-	# Failures are intentionally log-only: each RegionManager already logs
-	# `region_refresh_failed`. Sending an embed per failed cycle spammed
-	# every registered channel on transient 429/503/timeouts and on every
-	# 10-minute cycle_timeout.
-	def handle_info({:region_refresh_failed, _summary}, state) do
+	def handle_info({:region_refresh_unchanged, summary}, state) do
+		record_report(summary, :unchanged, state)
+	end
+
+	def handle_info({:region_refresh_failed, summary}, state) do
+		record_report(summary, {:failed, Map.get(summary, :failures, [])}, state)
+	end
+
+	def handle_info({:broadcast_done, _key, result}, state) do
+		case result do
+			:ok -> :ok
+			{:ok, _value} -> :ok
+			{:error, reason} -> log_broadcast_failure("broadcast_failed", reason)
+		end
+
 		{:noreply, state}
 	end
 
-	def handle_info({:broadcast_done, key, result}, state) do
-		{:noreply, complete_refresh(state, key, result)}
+	def handle_info({:round_timeout, round}, %{round: round} = state) do
+		close_round(state)
 	end
 
 	def handle_info(_message, state), do: {:noreply, state}
@@ -1082,56 +1180,84 @@ defmodule Discord.Broadcaster do
 		:exit, _ -> :ok
 	end
 
-	defp start_refresh(summary, state) do
-		key = {Map.get(summary, :region), Map.get(summary, :cycle_id)}
+	# One slot per region per round. A region that cycles faster than the
+	# round simply overwrites its own slot; a duplicate delivery of the
+	# same cycle is dropped via `seen`. Reports from unknown regions are
+	# recorded but can never close the round on their own.
+	defp record_report(summary, outcome, state) do
+		region = Map.get(summary, :region)
+		cycle_id = Map.get(summary, :cycle_id)
+		key = {region, cycle_id}
 
-		if MapSet.member?(state.pending, key) or MapSet.member?(state.seen, key) do
+		if MapSet.member?(state.seen, key) do
 			{:noreply, state}
 		else
-			state = %{state | pending: MapSet.put(state.pending, key)}
+			state = note_seen(state, key)
+			state = %{state | reports: Map.put(state.reports, region, {cycle_id, outcome})}
 
-			if state.async do
-				start_async_refresh(state, key, summary)
+			if Enum.all?(state.regions, &Map.has_key?(state.reports, &1)) do
+				close_round(state)
 			else
-				result = safely_process_refresh(summary, state)
-				{:noreply, complete_refresh(state, key, result)}
+				{:noreply, state}
 			end
 		end
 	end
 
-	defp start_async_refresh(state, key, summary) do
+	defp close_round(state) do
+		cancel_round_timer(state)
+
+		pending = Enum.reject(state.regions, &Map.has_key?(state.reports, &1))
+		snapshot = %{round: state.round, reports: state.reports, pending: pending}
+		state = %{state | round: state.round + 1, reports: %{}}
+		state = schedule_round(state)
+
+		if state.async do
+			start_async_digest(state, snapshot)
+		else
+			case safely_process_digest(snapshot, state) do
+				:ok -> :ok
+				{:ok, _value} -> :ok
+				{:error, reason} -> log_broadcast_failure("broadcast_failed", reason)
+			end
+
+			{:noreply, state}
+		end
+	end
+
+	defp start_async_digest(state, snapshot) do
 		owner = self()
 
 		case Task.Supervisor.start_child(state.task_supervisor, fn ->
-					 result = safely_process_refresh(summary, state)
-					 send(owner, {:broadcast_done, key, result})
+					 result = safely_process_digest(snapshot, state)
+					 send(owner, {:broadcast_done, snapshot.round, result})
 				 end) do
 			{:ok, _pid} ->
 				{:noreply, state}
 
 			{:error, reason} ->
 				log_broadcast_failure("broadcast_task_failed", reason)
-				{:noreply, remember(state, key)}
+				{:noreply, state}
 		end
 	end
 
-	defp complete_refresh(state, key, result) do
-		state = remember(state, key)
-
-		case result do
-			:ok ->
-				state
-
-			{:ok, _value} ->
-				state
-
-			{:error, reason} ->
-				log_broadcast_failure("broadcast_failed", reason)
-				state
-		end
+	defp schedule_round(%{round_timer: nil} = state) do
+		handle = Process.send_after(self(), {:round_timeout, state.round}, state.round_timeout)
+		%{state | round_timer: handle}
 	end
 
-	defp remember(state, key) do
+	defp schedule_round(state) do
+		cancel_round_timer(state)
+		schedule_round(%{state | round_timer: nil})
+	end
+
+	defp cancel_round_timer(%{round_timer: nil}), do: :ok
+
+	defp cancel_round_timer(%{round_timer: handle}) do
+		Process.cancel_timer(handle)
+		:ok
+	end
+
+	defp note_seen(state, key) do
 		seen = MapSet.put(state.seen, key)
 
 		seen =
@@ -1141,52 +1267,56 @@ defmodule Discord.Broadcaster do
 				seen
 			end
 
-		%{state | pending: MapSet.delete(state.pending, key), seen: seen}
+		%{state | seen: seen}
 	end
 
-	defp safely_process_refresh(summary, state) do
-		process_refresh(summary, state)
+	defp safely_process_digest(snapshot, state) do
+		process_digest(snapshot, state)
 	rescue
 		error -> {:error, Exception.message(error)}
 	catch
 		:exit, reason -> {:error, inspect(reason)}
 	end
 
-	# Discord only announces success. An empty/invalid market result means
-	# "nothing worth posting", not something every channel should be pinged
-	# about — log it and stay silent.
-	#
-	# Strict order: refresh done -> read -> broadcast. The single database
+	# Strict order: round closed -> read -> broadcast. The single database
 	# holds exactly what the pollers wrote, so the embed always renders
-	# fresh data with no sync step in between.
-	defp process_refresh(summary, state) do
+	# fresh data with no sync step in between. The list is always sent —
+	# even empty or unchanged — while failed and pending regions are
+	# reported in a status embed instead of staying silent.
+	defp process_digest(snapshot, state) do
 		case fetch_channels(state) do
 			{:ok, []} ->
 				{:ok, :no_channels}
 
 			{:ok, channels} ->
-				case fetch_market_list(state) do
-					{:ok, items} ->
-						payload = Messages.market_list_payload(items, 1, Messages.list_broadcast_per_page())
-						deliver_all(channels, payload, state)
-
-					{:error, reason} ->
-						Marketmailer.Log.warning(
-							"broadcast_no_market_item",
-							%{region: Map.get(summary, :region), reason: inspect(reason)},
-							"Skipping Discord broadcast: no market items"
-						)
-
-						{:ok, :no_market_item}
-				end
+				items = fetch_market_list(state)
+				failures = digest_failures(snapshot.reports)
+				payload = digest_payload(items, failures, snapshot.pending)
+				deliver_all(channels, payload, state)
 
 			{:error, reason} ->
 				{:error, reason}
 		end
 	end
 
+	defp digest_payload(items, failures, pending) do
+		base = Messages.market_list_payload(items, 1, Messages.list_broadcast_per_page())
+
+		if failures == %{} and pending == [] do
+			base
+		else
+			%{base | embeds: base.embeds ++ [Messages.round_status_embed(failures, pending)]}
+		end
+	end
+
+	defp digest_failures(reports) do
+		for {region, {_cycle_id, {:failed, reasons}}} <- reports, into: %{} do
+			{region, reasons}
+		end
+	end
+
 	defp fetch_channels(state) do
-		case invoke(state.channels_fun) do
+		case invoke_resolve(state, :channels_fun, {DiscordDatabase, :registered_channels, []}) do
 			{:ok, channels} when is_list(channels) -> {:ok, channels}
 			{:ok, _other} -> {:error, :invalid_channels}
 			{:error, reason} -> {:error, reason}
@@ -1194,11 +1324,38 @@ defmodule Discord.Broadcaster do
 	end
 
 	defp fetch_market_list(state) do
-		case invoke(state.market_fun) do
-			{:ok, [_ | _] = items} -> {:ok, items}
-			{:ok, []} -> {:error, :no_market_item}
-			{:ok, _other} -> {:error, :invalid_market_result}
-			{:error, reason} -> {:error, reason}
+		case invoke_resolve(state, :market_fun, {Market.Database, :get_items_less_than_jita_buy, []}) do
+			{:ok, items} when is_list(items) ->
+				items
+
+			{:ok, other} ->
+				Marketmailer.Log.warning(
+					"broadcast_invalid_market_result",
+					%{result: inspect(other)},
+					"Market query returned an unexpected shape; broadcasting an empty list"
+				)
+
+				[]
+
+			{:error, reason} ->
+				Marketmailer.Log.warning(
+					"broadcast_market_lookup_failed",
+					%{reason: inspect(reason)},
+					"Market query failed; broadcasting an empty list"
+				)
+
+				[]
+		end
+	end
+
+	# `:default` resolves to a direct call against current code on every
+	# use, so hot upgrades can never leave a stale fun behind. An explicit
+	# fun override (tests) is invoked as-is.
+	defp invoke_resolve(state, key, {mod, fun, args}) do
+		case Map.get(state, key, :default) do
+			:default -> invoke(fn -> apply(mod, fun, args) end)
+			override when is_function(override) -> invoke(fn -> apply(override, args) end)
+			other -> {:error, {:invalid_override, key, other}}
 		end
 	end
 
@@ -1206,7 +1363,7 @@ defmodule Discord.Broadcaster do
 		message = Map.put(payload, :allowed_mentions, :none)
 
 		Enum.reduce(channels, :ok, fn channel, result ->
-			case invoke(fn -> state.deliver_fun.(channel, message) end) do
+			case invoke_resolve(state, :deliver_fun, {__MODULE__, :deliver, [channel, message]}) do
 				{:ok, {:ok, _response}} ->
 					result
 
@@ -1236,7 +1393,9 @@ defmodule Discord.Broadcaster do
 		:exit, reason -> {:error, inspect(reason)}
 	end
 
-	defp deliver(channel_id, payload) do
+	# Public so the `:default` deliver spec can resolve it via `apply/3`
+	# against current code after a hot upgrade.
+	def deliver(channel_id, payload) do
 		case Bot.fetch_all_bots() do
 			[%{name: name}] ->
 				Bot.with_bot(name, fn -> Api.Message.create(channel_id, payload) end)
@@ -1265,7 +1424,7 @@ defmodule Discord.Broadcaster do
 	end
 
 	defp prune_bad_channel(state, channel, reason) do
-		state.prune_fun.(channel)
+		_ = invoke_resolve(state, :prune_fun, {DiscordDatabase, :delete_by_channel, [channel]})
 
 		Marketmailer.Log.warning(
 			"channel_pruned",

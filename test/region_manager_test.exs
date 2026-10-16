@@ -102,13 +102,18 @@ defmodule Marketmailer.RegionManagerTest do
 		refute_receive {:region_refresh_complete, _summary}, 150
 	end
 
-	test "does not emit for an all-not-modified cycle" do
+	test "emits an unchanged event for an all-not-modified cycle" do
 		region = 98_000_002
 		start_cycle_manager(region)
 
 		Marketmailer.RegionManager.page_started(region, 1)
 		Marketmailer.RegionManager.page_result(region, 1, :not_modified, %{pages: 1})
 
+		assert_receive {:region_refresh_unchanged, summary}
+		assert summary.region == region
+		assert summary.pages == 1
+		assert summary.updated_pages == []
+		assert is_integer(summary.cycle_id)
 		refute_receive {:region_refresh_complete, _summary}, 150
 	end
 

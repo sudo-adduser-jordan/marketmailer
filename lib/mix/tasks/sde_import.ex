@@ -243,9 +243,9 @@ defmodule Mix.Tasks.Sde.Import do
 	defp lock_contention?(%DBConnection.ConnectionError{}), do: true
 	defp lock_contention?(_), do: false
 
-	# Direct repo writes with task-owned retry. Database.Writer converts
-	# a spent lock budget into an {:error, ...} return — invisible to a
-	# bulk importer counting chunks — so this path retries loudly instead.
+	# Direct repo writes with task-owned retry. Database.Writer raises on
+	# a spent lock budget — invisible to a bulk importer counting chunks —
+	# so this path retries loudly instead.
 	# Same conflict semantics, same chunk discipline, but failures raise.
 	defp insert_names(chunk) do
 		with_write_retry(fn ->

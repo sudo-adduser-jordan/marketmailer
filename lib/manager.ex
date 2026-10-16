@@ -96,7 +96,6 @@ defmodule Marketmailer.RegionManager do
 			state = %{state | expected_pages: expected_pages, results: Map.put(state.results, page, result)}
 
 			case check_cycle(state) do
-				{:completed, nil, state} -> {:noreply, state}
 				{:completed, event, state} -> {:noreply, emit(state, event)}
 				{:pending, state} -> {:noreply, state}
 			end
@@ -134,7 +133,6 @@ defmodule Marketmailer.RegionManager do
 
 		state =
 			case check_cycle(state) do
-				{:completed, nil, state} -> state
 				{:completed, event, state} -> emit(state, event)
 				{:pending, state} -> state
 			end
@@ -208,7 +206,20 @@ defmodule Marketmailer.RegionManager do
 						{:region_refresh_complete, summary}
 
 					true ->
-						nil
+						summary = %{
+							region: state.id,
+							cycle_id: state.cycle_id,
+							pages: expected_pages,
+							updated_pages: []
+						}
+
+						Marketmailer.Log.info(
+							"region_refresh_unchanged",
+							summary,
+							"Region #{state.id} refresh unchanged"
+						)
+
+						{:region_refresh_unchanged, summary}
 				end
 
 			{:completed, event, new_cycle(%{state | expected_pages: expected_pages})}

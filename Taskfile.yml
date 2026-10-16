@@ -53,6 +53,9 @@ tasks:
         fi
         echo "start: SDE caches present in $EFF_DB"
       - task: stop
+      # Force-recompile so build-time macros (e.g. the git commit baked into
+      # logs) are always fresh: `mix release` alone reuses stale beams.
+      - MIX_ENV=prod mix compile --force
       - MIX_ENV=prod mix release --overwrite
       - |
         DEV_DB="{{.DEV_DB}}"
@@ -152,6 +155,9 @@ tasks:
           return 0
         }
         stage_release() {
+          # Force-recompile so build-time macros (e.g. the git commit baked
+          # into logs) are always fresh: `mix release` alone reuses stale beams.
+          MIX_ENV=prod mix compile --force
           MIX_ENV=prod mix release --overwrite
           mkdir -p releases
           cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
