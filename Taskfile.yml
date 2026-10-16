@@ -110,7 +110,7 @@ tasks:
         rm -f priv/data/marketmailer.pid
 
   live:update:
-    desc: Hot-upgrade the running prod when code changed; refuses when nothing runs and never leaves the daemon down
+    desc: Hot-upgrade the running prod when code changed; refuses when nothing runs or the tree is dirty, and never leaves the daemon down
     cmds:
       - |
         VSN=$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\(.*\)".*/\1/p' mix.exs | head -n 1)
@@ -121,6 +121,11 @@ tasks:
         DIRTY=$(git status --porcelain || true)
         if ! { [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; }; then
           echo "live:update: no living prod process to update — run task start"
+          exit 1
+        fi
+        if [ -n "$DIRTY" ]; then
+          echo "live:update: uncommitted changes — commit everything first:"
+          echo "$DIRTY" | head -n 20
           exit 1
         fi
         ensure_up() {

@@ -13,7 +13,7 @@ mix setup            # deps.get + ecto.create + ecto.migrate
 task start           # kill every marketmailer process, rebuild the latest tree, and start it detached (never modifies the repo)
 task stop            # kill every marketmailer process on this host (prod daemon + orphaned/legacy dev nodes)
 task dev             # interactive shell with the app started (dev, shell-only; isolated priv/data/dev.db + :4001, coexists with prod)
-task live:update     # hot-upgrade the running prod when code changed (patch-bump + appup + release + unpack/install/commit); refuses when nothing runs; never leaves the daemon down
+task live:update     # hot-upgrade the running prod when code changed (patch-bump + appup + release + unpack/install/commit); refuses when nothing runs or the tree is dirty (commit everything first); never leaves the daemon down
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
 mix compile          # compile; use --warnings-as-errors for strict mode
 mix ecto.migrate     # manual migration run (also happens on every boot)
