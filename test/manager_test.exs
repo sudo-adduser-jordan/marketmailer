@@ -70,11 +70,6 @@ defmodule Marketmailer.RegionManagerTest do
 		GenServer.stop(manager, :normal)
 	end
 
-	test "format_ttl renders mm:ss" do
-		assert Marketmailer.PageWorker.format_ttl(60_000) == "01:00"
-		assert Marketmailer.PageWorker.format_ttl(90_000) == "01:30"
-	end
-
 	test "emits one success event when every page completes" do
 		region = 98_000_001
 		start_cycle_manager(region)

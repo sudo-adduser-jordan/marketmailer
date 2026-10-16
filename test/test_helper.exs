@@ -9,7 +9,27 @@ test_db =
 
 live_db = "priv/data/marketmailer.db"
 
-if Mix.Tasks.Test.Safe.poller_running?() and Path.expand(test_db) == Path.expand(live_db) do
+poller_running =
+	try do
+		case System.cmd("pgrep", ["-af", "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"],
+					 stderr_to_stdout: true
+				 ) do
+			{out, 0} ->
+				out
+				|> String.split("\n", trim: true)
+				|> Enum.reject(&String.contains?(&1, "pgrep"))
+				|> Enum.reject(&String.contains?(&1, "_build/test"))
+				|> Enum.reject(&String.contains?(&1, "mix test"))
+				|> Enum.any?()
+
+			{_out, _} ->
+				false
+		end
+	rescue
+		_ -> false
+	end
+
+if poller_running and Path.expand(test_db) == Path.expand(live_db) do
 	raise "Refusing: a live poller seems to be running and the test DB #{test_db} collides with the live #{live_db} " <>
 					"(see `ps aux | grep -F marketmailer`). Unset MARKETMAILER_DB " <>
 					"(tests default to isolated priv/data/test.db) or point it at a tmp file."

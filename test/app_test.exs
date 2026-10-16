@@ -1,9 +1,9 @@
-defmodule Marketmailer.LogRepairTest do
+defmodule Marketmailer.ApplicationTest do
 	use ExUnit.Case, async: false
 
 	require Logger
 
-	@handler :marketmailer_log_repair_test
+	@handler :marketmailer_app_test
 
 	setup do
 		on_exit(fn -> :logger.remove_handler(@handler) end)

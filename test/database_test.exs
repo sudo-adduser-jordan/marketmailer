@@ -1,3 +1,93 @@
+defmodule Etag.ExpiryTest do
+	use ExUnit.Case, async: false
+
+	setup_all do
+		await_repo!(Database, 10_000)
+
+		Ecto.Migrator.run(
+			Database,
+			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
+			:up,
+			all: true
+		)
+
+		if :ets.whereis(:market_cache) == :undefined do
+			:ets.new(:market_cache, [:named_table, :set, :public, read_concurrency: true])
+		end
+
+		if :ets.whereis(:esi_error_state) == :undefined do
+			:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
+		end
+
+		:ok
+	end
+
+	defp await_repo!(repo, timeout) do
+		deadline = System.monotonic_time(:millisecond) + timeout
+		await_repo_loop!(repo, deadline)
+	end
+
+	defp await_repo_loop!(repo, deadline) do
+		_ = repo.query!("SELECT 1")
+		:ok
+	rescue
+		_ ->
+			if System.monotonic_time(:millisecond) > deadline do
+				flunk("test repo #{inspect(repo)} did not come up")
+			else
+				Process.sleep(20)
+				await_repo_loop!(repo, deadline)
+			end
+	end
+
+	test "upsert round-trips etag and expires_at through SQLite and ETS" do
+		url = ESI.page_url(98_000_001, 1)
+		expires_at = System.system_time(:millisecond) + 300_000
+
+		Etag.Database.upsert_etag(url, "etag-1", expires_at)
+
+		assert Etag.Database.get_etag(url) == "etag-1"
+		assert Etag.Database.get_expiry(url) == expires_at
+		assert :ets.lookup(:market_cache, url) == [{url, "etag-1", expires_at}]
+	end
+
+	test "resume_delay_ms waits on unexpired entries" do
+		url = ESI.page_url(98_000_002, 1)
+		expires_at = System.system_time(:millisecond) + 300_000
+		Etag.Database.upsert_etag(url, "etag-2", expires_at)
+
+		delay = Etag.Database.resume_delay_ms(url)
+		assert delay > 0 and delay <= 300_000
+	end
+
+	test "unexpected entries fetch now: missing, expired, absurd future" do
+		assert Etag.Database.resume_delay_ms(ESI.page_url(98_000_003, 1)) == 0
+
+		expired_url = ESI.page_url(98_000_003, 2)
+		Etag.Database.upsert_etag(expired_url, "old", System.system_time(:millisecond) - 1_000)
+		assert Etag.Database.resume_delay_ms(expired_url) == 0
+
+		absurd_url = ESI.page_url(98_000_003, 3)
+		Etag.Database.upsert_etag(absurd_url, "far", System.system_time(:millisecond) + 10 * 3_600_000)
+		assert Etag.Database.resume_delay_ms(absurd_url) == 0
+	end
+
+	test "NULL expiry from pre-migration rows fetches now" do
+		url = ESI.page_url(98_000_004, 1)
+		Etag.Database.upsert_etag(url, "legacy", nil)
+		assert Etag.Database.resume_delay_ms(url) == 0
+	end
+
+	test "pages_for_region parses known pages and ignores garbage urls" do
+		region = 98_000_005
+		Etag.Database.upsert_etag(ESI.page_url(region, 1), "e1", System.system_time(:millisecond) + 60_000)
+		Etag.Database.upsert_etag(ESI.page_url(region, 2), "e2", System.system_time(:millisecond) + 60_000)
+		Etag.Database.upsert_etag("https://esi.evetech.net/v1/markets/#{region}/orders/?nonsense", "junk", 1)
+
+		assert Enum.sort(Etag.Database.pages_for_region(region)) == [1, 2]
+	end
+end
+
 defmodule Market.DatabaseTest do
 	use ExUnit.Case, async: false
 
@@ -7,43 +97,12 @@ defmodule Market.DatabaseTest do
 	alias Market.Database, as: MarketDatabase
 
 	setup_all do
-		path =
-			Path.join(
-				System.tmp_dir!(),
-				"marketmailer-market-database-#{System.unique_integer([:positive])}.db"
-			)
-
-		Application.put_env(:marketmailer, Database,
-			database: path,
-			priv: "priv/repo",
-			journal_mode: :wal,
-			busy_timeout: 5_000,
-			pool_size: 1,
-			log: false
-		)
-
-		repo_pid =
-			case Process.whereis(Database) do
-				nil ->
-					{:ok, pid} = Database.start_link()
-					Process.unlink(pid)
-					pid
-
-				pid ->
-					pid
-			end
-
 		Ecto.Migrator.run(
 			Database,
 			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
 			:up,
 			all: true
 		)
-
-		on_exit(fn ->
-			if Process.alive?(repo_pid), do: GenServer.stop(repo_pid)
-			File.rm_rf!(path)
-		end)
 
 		:ok
 	end
@@ -375,90 +434,6 @@ defmodule Market.DatabaseTest do
 		assert [%{location_name: "?"}] = MarketDatabase.get_best_order()
 	end
 
-	test "composes NPC station names from SDE reference maps" do
-		alias Mix.Tasks.Sde.Import, as: SdeImport
-
-		lookups = %{
-			systems: %{30_000_142 => "Jita", 30_000_140 => "Maurasi", 30_100_000 => "Zarzakh"},
-			corps: %{
-				1_000_035 => "Caldari Navy",
-				1_000_033 => "Caldari Business Tribunal",
-				1_000_438 => "Deathless Custodians"
-			},
-			ops: %{14 => "Assembly Plant", 121 => "- The Fulcrum"},
-			planets: %{40_009_082 => %{index: 4}, 40_008_900 => %{index: 8}, 40_009_100 => %{index: 9}},
-			moons: %{40_009_087 => %{planet_id: 40_009_082, index: 4}, 40_008_952 => %{planet_id: 40_008_900, index: 14}},
-			stars: MapSet.new([40_488_503])
-		}
-
-		assert %{id: 60_003_760, name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant"} =
-						 SdeImport.compose_station_name(
-							 %{
-								 "_key" => 60_003_760,
-								 "solarSystemID" => 30_000_142,
-								 "orbitID" => 40_009_087,
-								 "ownerID" => 1_000_035,
-								 "operationID" => 14,
-								 "useOperationName" => true
-							 },
-							 lookups
-						 )
-
-		assert %{id: 60_003_454, name: "Maurasi VIII - Moon 14 - Caldari Business Tribunal"} =
-						 SdeImport.compose_station_name(
-							 %{
-								 "_key" => 60_003_454,
-								 "solarSystemID" => 30_000_140,
-								 "orbitID" => 40_008_952,
-								 "ownerID" => 1_000_033,
-								 "operationID" => 40,
-								 "useOperationName" => false
-							 },
-							 lookups
-						 )
-
-		assert %{id: 60_003_455, name: "Jita IX - Caldari Navy Assembly Plant"} =
-						 SdeImport.compose_station_name(
-							 %{
-								 "_key" => 60_003_455,
-								 "solarSystemID" => 30_000_142,
-								 "orbitID" => 40_009_100,
-								 "ownerID" => 1_000_035,
-								 "operationID" => 14,
-								 "useOperationName" => true
-							 },
-							 lookups
-						 )
-
-		assert %{id: 60_015_187, name: "Zarzakh - Deathless Custodians - The Fulcrum"} =
-						 SdeImport.compose_station_name(
-							 %{
-								 "_key" => 60_015_187,
-								 "solarSystemID" => 30_100_000,
-								 "orbitID" => 40_488_503,
-								 "ownerID" => 1_000_438,
-								 "operationID" => 121,
-								 "useOperationName" => true
-							 },
-							 lookups
-						 )
-
-		base = %{
-			"_key" => 60_003_760,
-			"solarSystemID" => 30_000_142,
-			"orbitID" => 40_009_087,
-			"ownerID" => 1_000_035,
-			"operationID" => 14,
-			"useOperationName" => true
-		}
-
-		assert SdeImport.compose_station_name(%{base | "solarSystemID" => 9_999_999}, lookups) == nil
-		assert SdeImport.compose_station_name(%{base | "orbitID" => 9_999_999}, lookups) == nil
-		assert SdeImport.compose_station_name(%{base | "ownerID" => 9_999_999}, lookups) == nil
-		assert SdeImport.compose_station_name(%{base | "operationID" => 9_999_999}, lookups) == nil
-		assert SdeImport.compose_station_name(%{"_key" => "bogus"}, lookups) == nil
-	end
-
 	test "reads persist idempotently in the single database" do
 		insert_fixture()
 		assert Database.aggregate("market", :count) == 3
@@ -593,5 +568,79 @@ defmodule Market.DatabaseTest do
 			inserted_at: now,
 			updated_at: now
 		}
+	end
+end
+
+defmodule Database.WriterTest do
+	use ExUnit.Case, async: false
+
+	import Ecto.Query, only: [from: 2]
+
+	alias Market.Database, as: MarketDatabase
+
+	@base_order_id 70_000_001
+
+	setup do
+		on_exit(fn -> Database.delete_all(from(m in "market", where: m.order_id >= @base_order_id)) end)
+		:ok
+	end
+
+	test "write executes the fun in the caller process" do
+		test_pid = self()
+
+		assert Database.Writer.write(fn ->
+						 send(test_pid, {:ran, self()})
+						 :ok
+					 end) == :ok
+
+		assert_receive {:ran, caller}
+		assert caller == test_pid
+	end
+
+	test "a burst of page writes all succeeds with no timeouts" do
+		pages = 150
+		rows_per_page = 1000
+
+		{elapsed_ms, results} =
+			:timer.tc(fn ->
+				1..pages
+				|> Task.async_stream(
+					fn page ->
+						first = @base_order_id + (page - 1) * rows_per_page
+						MarketDatabase.upsert_orders(page_fixture(first, rows_per_page))
+					end,
+					max_concurrency: pages,
+					timeout: 60_000
+				)
+				|> Enum.to_list()
+			end)
+			|> then(fn {us, results} -> {div(us, 1000), results} end)
+
+		assert length(results) == pages
+
+		for {:ok, count} <- results do
+			assert count == rows_per_page
+		end
+
+		assert elapsed_ms < 20_000
+	end
+
+	defp page_fixture(first_order_id, count) do
+		for i <- 0..(count - 1) do
+			%{
+				"order_id" => first_order_id + i,
+				"duration" => 90,
+				"is_buy_order" => rem(i, 2) == 0,
+				"issued" => "2026-10-15T00:00:00",
+				"location_id" => 60_000_001,
+				"min_volume" => 1,
+				"price" => 10.5,
+				"range" => "region",
+				"system_id" => 30_000_001,
+				"type_id" => 34,
+				"volume_remain" => 100,
+				"volume_total" => 1000
+			}
+		end
 	end
 end

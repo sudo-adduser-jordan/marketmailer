@@ -31,4 +31,25 @@ defmodule ESI.ClientTest do
 				assert_received {:req_opts, opts}
 				assert Keyword.get(opts, :retry_log_level) == :info
 		end
+
+		test "ESI meta carries absolute expires_at consistent with ttl" do
+				future =
+						DateTime.utc_now()
+						|> DateTime.add(300, :second)
+						|> Calendar.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+				http_fun = fn _url, _opts ->
+						{:ok,
+							%{
+									status: 304,
+									headers: %{"expires" => [future], "x-pages" => ["2"], "etag" => ["\"abc\""]},
+									body: ""
+							}}
+				end
+
+				before = System.system_time(:millisecond)
+				{:not_modified, ctx} = ESI.fetch(98_000_006, 1, http_fun: http_fun)
+				assert ctx.expires_at - before >= ctx.ttl - 1_000
+				assert ctx.expires_at - before <= ctx.ttl + 5_000
+		end
 end

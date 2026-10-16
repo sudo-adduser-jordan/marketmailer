@@ -309,7 +309,7 @@ tasks:
   test:
     desc: Run the test suite (safe alongside live poller when DB-isolated)
     cmds:
-      - mix test.safe
+      - mix test
 
   release:
     desc: Assemble the prod OTP release with Castle hot-upgrade support

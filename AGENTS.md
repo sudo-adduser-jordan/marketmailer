@@ -85,7 +85,7 @@ happens in `task dev` (interactive shell) or the test suite.
   uses stubbed ESI fixtures, `start_pollers: false`, and an isolated DB
   (`priv/data/test.db` default, per-suite tmp files). Read-only inspection of the
   live DB is fine (WAL mode allows concurrent readers); never write to it
-  from dev/test tooling. `mix test.safe` allows a live poller when the
+  from dev/test tooling. `mix test` allows a live poller when the
   test DB is isolated and refuses only on a DB collision
   (`MARKETMAILER_DB=priv/data/marketmailer.db` while a poller holds it).
 
@@ -207,9 +207,8 @@ then pipe to jq:
 - `lib/discord.ex` - nostrum consumer, slash commands, embed builders,
   `Discord.Broadcaster`, `Discord.BotSupervisor`
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
-- `lib/mix/tasks/` - `test.safe` (runs the suite in `MIX_ENV=test`;
-  allows a live poller when the test DB is isolated, refuses only on DB
-  collision)
+- `lib/mix/tasks/` - `sde.import` (official JSONL SDE bulk seed),
+  `chartdb` (schema diagram rebuild)
 - `appup.exs` - Castle appup source (SemVer; bump `mix.exs` version + add an
   entry per hot-upgradeable change); `config/runtime.exs` - release runtime
   config resolved by Castle before boot/install; `releases/` - staged
