@@ -10,12 +10,29 @@ defmodule Discord.Messages do
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
 	@icon_database "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/database.png"
 
+	@icon_broadcast "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
-	@icon_success "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/success.png"
+
+	defp branded_author(icon_url \\ @icon_broadcast) do
+		%Embed.Author{name: "\u200B", icon_url: icon_url}
+	end
+
+	defp error_author, do: branded_author(@icon_error)
 
 	defp with_version(%Embed{timestamp: ts} = embed) do
-		%{embed | footer: %Embed.Footer{text: "#{ts} • v#{app_version()}"}, timestamp: nil}
+		%{embed | footer: %Embed.Footer{text: "#{format_footer_date(ts)} • v#{app_version()}"}, timestamp: nil}
 	end
+
+	defp format_footer_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %d, %Y %H:%M UTC")
+
+	defp format_footer_date(ts) when is_binary(ts) do
+		case DateTime.from_iso8601(String.trim(ts)) do
+			{:ok, dt, _} -> Calendar.strftime(dt, "%b %d, %Y %H:%M UTC")
+			_ -> Calendar.strftime(DateTime.utc_now(), "%b %d, %Y %H:%M UTC")
+		end
+	end
+
+	defp format_footer_date(_), do: Calendar.strftime(DateTime.utc_now(), "%b %d, %Y %H:%M UTC")
 
 	defp app_version do
 		case Application.spec(:marketmailer, :vsn) do
@@ -28,11 +45,7 @@ defmodule Discord.Messages do
 
 	def server_only(_interaction) do
 		%Embed{
-			author: %Embed.Author{
-				name: "Marketmailer",
-				url: "https://discord.com",
-				icon_url: @icon_error
-			},
+			author: error_author(),
 			title: "Server only",
 			description: "This command can only be used inside a server, not in DMs.",
 			color: @color_error,
@@ -47,11 +60,7 @@ defmodule Discord.Messages do
 			description: "Error",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: %Embed.Author{
-				name: "Marketmailer - Error",
-				url: "https://discord.com",
-				icon_url: @icon_error
-			},
+			author: error_author(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -68,11 +77,7 @@ defmodule Discord.Messages do
 			description: "No cached market order was found for **#{item_name}**.",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: %Embed.Author{
-				name: "Marketmailer - Market Lookup",
-				url: "https://discord.com",
-				icon_url: @icon_error
-			},
+			author: error_author(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -109,11 +114,7 @@ defmodule Discord.Messages do
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: %Embed.Author{
-				name: "Marketmailer",
-				url: "https://discord.com",
-				icon_url: @icon_success
-			},
+			author: branded_author(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -174,11 +175,7 @@ defmodule Discord.Messages do
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: %Embed.Author{
-				name: "Marketmailer",
-				url: "https://discord.com",
-				icon_url: @icon_success
-			},
+			author: branded_author(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -222,11 +219,7 @@ defmodule Discord.Messages do
 			description: description,
 			color: if(failures == %{}, do: @color_info, else: @color_error),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: %Embed.Author{
-				name: "Marketmailer",
-				url: "https://discord.com",
-				icon_url: @icon_success
-			},
+			author: if(failures == %{}, do: branded_author(), else: error_author()),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -406,6 +399,7 @@ defmodule Discord.Messages do
 		type_icon = "https://images.evetech.net/types/#{item.type_id}/icon?size=64"
 
 		%Embed{
+			author: branded_author(),
 			title: item.item_name || "Market order",
 			description: "[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Tycoon](#{eve_tycoon_url})",
 			color: embed_color(per_unit_margin(item)),
@@ -478,11 +472,7 @@ defmodule Discord.Messages do
 
 	defp channel_embed(description, color) do
 		%Embed{
-			author: %Embed.Author{
-				name: "Marketmailer",
-				url: "https://discord.com",
-				icon_url: @icon_success
-			},
+			author: if(color == @color_error, do: error_author(), else: branded_author()),
 			title: "Channel Registration",
 			description: description,
 			color: color,

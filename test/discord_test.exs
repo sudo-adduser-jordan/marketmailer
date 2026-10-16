@@ -416,7 +416,8 @@ defmodule Discord.MessagesTest do
 		fields = Map.new(embed.fields, &{&1.name, &1.value})
 
 		assert %Embed{title: "Tritanium"} = embed
-		assert embed.author == nil
+		assert %Embed.Author{name: "\u200B", icon_url: broadcast} = embed.author
+		assert broadcast =~ "broadcast.png"
 		assert fields["Location"] == "Jita IV - Moon 4 - Jita - The Forge (0.9)"
 		assert fields["Sell"] == "10.00 ISK"
 		assert fields["Buy"] == "110.00 ISK"
