@@ -10,9 +10,10 @@ of the app keeps running).
 
 ```sh
 mix setup            # deps.get + ecto.create + ecto.migrate
-task start           # run latest tree as prod release detached (restarts when stale; never modifies the repo)
+task start           # kill every marketmailer process, rebuild the latest tree, and start it detached (never modifies the repo)
+task stop            # kill every marketmailer process on this host (prod daemon + orphaned/legacy dev nodes)
 task dev             # interactive shell with the app started (dev, shell-only; isolated priv/data/dev.db + :4001, coexists with prod)
-task live:update     # auto hot-upgrade when code changed (patch-bump + appup + release + unpack/install/commit); no-op otherwise
+task live:update     # hot-upgrade the running prod when code changed (patch-bump + appup + release + unpack/install/commit); refuses when nothing runs; never leaves the daemon down
 task release         # assemble the prod OTP release (Castle hot-upgrade support)
 mix compile          # compile; use --warnings-as-errors for strict mode
 mix ecto.migrate     # manual migration run (also happens on every boot)
@@ -25,8 +26,10 @@ the whole flow: no-op when the tree matches the newest shipped baseline
 `mix.exs` (a shipped version is frozen — same-version upgrades can never
 install), drafts the appup edge from that baseline (`mix castle.appup.gen`),
 verifies coverage, builds (`mix release --overwrite`), stages the tarball,
-then `bin/castle unpack/install/commit` if the prod daemon is running
-(builds + tells you to run `task start` if it isn't). `mix.exs`
+then `bin/castle unpack/install/commit` against the live prod daemon (it
+refuses with "run `task start`" when nothing is running, and never leaves
+the daemon down — if the VM drops it is restarted on the version just made
+permanent and the running version is asserted). `mix.exs`
 `upgrade_from` always excludes the version being built (self-relups are
 rejected). SemVer — patch = hot-loadable logic, minor =
 feature/migration/`restart_emulator`, major = breaking state/ETS/DB shape.
@@ -53,13 +56,15 @@ happens in `task dev` (interactive shell) or the test suite.
   `ps aux | grep -F marketmailer`, `pgrep -af "mix.*(run|start)|iex.*mix|bin/marketmailer|beam.*marketmailer"`,
   `lsof priv/data/marketmailer.db`.
 - If none exists, start it: `task start` (prod release daemon, survives
-  terminal close). `task stop` stops everything on this host — the prod
-  daemon plus any legacy detached-dev node (no pid archaeology needed) —
-  and is the only intended off switch. `task start` always runs the
-  current tree: it no-ops when the daemon already runs current code,
-  otherwise it stops, rebuilds (`mix release --overwrite`), seeds a fresh
-  prod DB from the in-project DB when the paths differ, and starts
-  (restart delivery needs no version bump).
+  terminal close). `task start` is a clean restart every time: it kills
+  every marketmailer process on this host (via `task stop`), rebuilds
+  (`mix release --overwrite`), seeds a fresh prod DB from the in-project DB
+  when the paths differ, and starts (restart delivery needs no version
+  bump). `task stop` is the kill-all switch — it gracefully stops the prod
+  daemon then sweeps orphaned release processes and a legacy detached-dev
+  node (no pid archaeology needed); the host-wide `epmd` and unrelated
+  Erlang nodes (editor language servers) are left alone, as is a test suite
+  under `_build/test`.
 - Talk to the live node instead of booting a second one:
   `_build/prod/rel/marketmailer/bin/marketmailer remote`
   (it reads the deployment cookie itself). `task dev` boots a second,
@@ -70,7 +75,9 @@ happens in `task dev` (interactive shell) or the test suite.
   back in and is refused while the daemon runs). Upgrades go
   through Castle (`task live:update`, i.e. `bin/castle unpack/install/commit`
   with the auto-derived `mix.exs` version); the old rpc beam-push
-  (`mix upgrade.hot`) and `recompile()` hot-loading are removed.
+  (`mix upgrade.hot`) and `recompile()` hot-loading are removed. It requires
+  a living daemon and verifies one at the end (restarting on the new version
+  if the VM dropped), so it never leaves the poller down.
   Hot upgrade keeps processes, ETS, and
   timers; state-shape changes (GenServer state, ETS tuple shapes) still
   need a poller restart (`task start` restarts a stale daemon onto the latest tree).

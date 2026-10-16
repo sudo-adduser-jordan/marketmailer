@@ -21,25 +21,13 @@ tasks:
         MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix setup
         MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import "${SDE_BUILD:-3569502}"
 
-  # Up-to-date iff the daemon runs a release built from this exact tree. The
-  # stamp is written on every start-launch under _build (gitignored), so this
-  # check never dirties the repo. Liveness uses `bin/marketmailer pid` (rpc;
-  # fails when down) instead of pgrep -f, which matched this shell and its
-  # go-task ancestors.
+  # Start is a clean slate every time: kill every marketmailer process on this
+  # host (see `stop`), rebuild the release from the current tree, and launch it
+  # detached. Liveness for other tasks uses `bin/marketmailer pid` (rpc; fails
+  # when down) instead of pgrep -f, which matched this shell and its go-task
+  # ancestors.
   start:
-    desc: Run latest tree as prod release detached (restarts when stale; never modifies the repo)
-    status:
-      - |
-        STAMP=_build/prod/.start_stamp
-        test -f "$STAMP" || exit 1
-        FPRINT="$(git rev-parse HEAD 2>/dev/null || echo no-git):$(git status --porcelain 2>/dev/null | sha256sum | cut -d' ' -f1)"
-        test "$(cat "$STAMP")" = "$FPRINT" || exit 1
-        BIN=_build/prod/rel/marketmailer/bin/marketmailer
-        if [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; then
-          echo "prod release already running current code — nothing to do"
-        else
-          exit 1
-        fi
+    desc: Kill every marketmailer process, rebuild the current tree, and start it detached
     cmds:
       # Fail fast when the SDE name/system caches are not loaded: names render
       # from the single DB, seeded from here. Checks the effective prod file
@@ -95,44 +83,73 @@ tasks:
           echo "start: seeded $PROD_DB from $DEV_DB"
         fi
       # Stale pidfile from the removed detached-dev workflow (dev is now
-      # shell-only via `task dev`); the release daemon never uses it. Records
-      # the tree this release was built from (see `status` above).
+      # shell-only via `task dev`); the release daemon never uses it.
       - |
         rm -f priv/data/marketmailer.pid
         _build/prod/rel/marketmailer/bin/marketmailer daemon
         echo "started prod release (daemon)"
-        mkdir -p _build/prod
-        echo "$(git rev-parse HEAD 2>/dev/null || echo no-git):$(git status --porcelain 2>/dev/null | sha256sum | cut -d' ' -f1)" > _build/prod/.start_stamp
 
-  # Graceful prod stop via the release script (`pid` doubles as the liveness
-  # check). Stale pidfile is from the removed detached-dev workflow.
+  # Kill all: graceful stop first (so the app shuts down cleanly), then sweep
+  # any leftovers — orphaned release processes and a legacy detached-dev node —
+  # terminating then killing. Matched only on this project's absolute _build
+  # paths, so the go-task shell, editors and unrelated Erlang nodes (and the
+  # shared epmd) are never touched; a running test suite under _build/test is
+  # left alone. Stale pidfile is from the removed detached-dev workflow.
   stop:
-    desc: Stop prod daemon
+    desc: Kill every marketmailer process on this host
     cmds:
       - |
         BIN=_build/prod/rel/marketmailer/bin/marketmailer
+        ROOT="$PWD/_build"
         if [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; then
           LIVE=$("$BIN" pid 2>/dev/null || echo unknown)
           "$BIN" stop >/dev/null 2>&1 || true
-          echo "stopped prod release (was pid $LIVE)"
-        else
-          echo "prod release not running — nothing to do"
+          echo "stop: asked prod release to stop (was pid $LIVE)"
         fi
+
+        # Match only the runtime binaries (beam.smp/run_erl/erl/inet_gethost):
+        # epmd also lives under the release path but is the host-wide port
+        # mapper, shared with other Erlang nodes (e.g. editor language servers),
+        # so it stays. The dev anchor is this project's _build/dev; _build/test
+        # (a running suite) is untouched.
+        targets() {
+          pgrep -f "$ROOT/prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)" 2>/dev/null || true
+          pgrep -f "$ROOT/dev/" 2>/dev/null || true
+        }
+
+        pids=$(targets | sort -u)
+        if [ -n "$pids" ]; then
+          echo "stop: terminating leftovers: $(echo $pids | tr '\n' ' ')"
+          kill $pids 2>/dev/null || true
+          for _ in $(seq 1 20); do
+            pids=$(targets | sort -u)
+            [ -z "$pids" ] && break
+            sleep 0.5
+          done
+          pids=$(targets | sort -u)
+          if [ -n "$pids" ]; then
+            echo "stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' ')"
+            kill -9 $pids 2>/dev/null || true
+          fi
+        fi
+        echo "stop: done"
         rm -f priv/data/marketmailer.pid
 
   # Living process: hot-upgrade prod when code changed (auto patch-bump,
-  # appup, build, unpack/install/commit); no-op otherwise. Shipped baselines
-  # are local staging (gitignored): linear deploys upgrade from the newest
-  # tarball older than the version being built; that single baseline gets the
-  # appup edge and the relup. A version whose tarball already shipped is
-  # frozen: patch-bump mix.exs so the relup has a from->to transition
-  # (same-version upgrades can never install). appup gen drafts edges under
-  # the file's top-level tag, which must name the version being built (mix
-  # release refuses anything else). Liveness uses `bin/marketmailer pid`.
-  # The relup only spans FROM_VER -> VSN: refuse to install onto a node that
-  # skipped the baseline instead of failing opaquely in castle. castle unpack
-  # reads the tarball from the release's own releases/ dir, but `mix release`
-  # leaves it at _build/prod/, so stage it over.
+  # appup, build, unpack/install/commit); no-op otherwise. Refuses when no prod
+  # process is running — use `task start` for that. Shipped baselines are local
+  # staging (gitignored): linear deploys upgrade from the newest tarball older
+  # than the version being built; that single baseline gets the appup edge and
+  # the relup. A version whose tarball already shipped is frozen: patch-bump
+  # mix.exs so the relup has a from->to transition (same-version upgrades can
+  # never install). appup gen drafts edges under the file's top-level tag, which
+  # must name the version being built (mix release refuses anything else).
+  # Liveness uses `bin/marketmailer pid`. The relup only spans FROM_VER -> VSN:
+  # refuse to install onto a node that skipped the baseline instead of failing
+  # opaquely in castle. castle unpack reads the tarball from the release's own
+  # releases/ dir, but `mix release` leaves it at _build/prod/, so stage it
+  # over. Every path ends by asserting the daemon is up on the target version —
+  # it never leaves the daemon down.
   live:update:
     desc: Hot-upgrade prod when code changed (auto patch-bump, appup, build, unpack/install/commit); no-op otherwise
     cmds:
@@ -143,12 +160,55 @@ tasks:
         CASTLE=_build/prod/rel/marketmailer/bin/castle
         ALL_TARS=$(ls releases/marketmailer-*.tar.gz 2>/dev/null | sort -V || true)
         DIRTY=$(git status --porcelain || true)
+
+        # live:update updates the living process: with none running there is
+        # nothing to hot-upgrade, so refuse instead of building into the void.
+        if ! { [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; }; then
+          echo "live:update: no living prod process to update — run task start"
+          exit 1
+        fi
+
+        # Never leave the daemon down. A hot upgrade usually keeps the VM, but
+        # a commit whose upgrade the launcher does not come back from — or a
+        # concurrent `mix release --overwrite` of the running tree — can drop
+        # it. Every path ends here: if the node is not answering, restart it on
+        # the version just made permanent, then assert the running version.
+        # `task stop` first clears any orphan still holding the pipe.
+        ensure_up() {
+          live=0
+          for _ in $(seq 1 30); do
+            if "$BIN" pid >/dev/null 2>&1; then live=1; break; fi
+            sleep 1
+          done
+          if [ "$live" != "1" ]; then
+            echo "live:update: daemon is down — restarting on $VSN"
+            task stop >/dev/null 2>&1 || true
+            "$BIN" daemon || { echo "live:update: could not restart the daemon — run task start"; return 1; }
+            live=0
+            for _ in $(seq 1 30); do
+              if "$BIN" pid >/dev/null 2>&1; then live=1; break; fi
+              sleep 1
+            done
+          fi
+          if [ "$live" != "1" ]; then
+            echo "live:update: daemon did not come back up — run task start"
+            return 1
+          fi
+          RUN_NOW=$("$BIN" version 2>/dev/null | awk '{print $NF}')
+          if [ "$RUN_NOW" != "$VSN" ]; then
+            echo "live:update: daemon is up on $RUN_NOW, expected $VSN — run task start"
+            return 1
+          fi
+          return 0
+        }
+
         if [ -z "$ALL_TARS" ]; then
           echo "live:update: no shipped baseline — first build, no upgrade path"
           MIX_ENV=prod mix release --overwrite
           mkdir -p releases
           cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
-          echo "live:update: staged releases/marketmailer-$VSN.tar.gz — run task start to launch it"
+          echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
+          ensure_up || exit 1
           exit 0
         fi
         FROM_TAR=""
@@ -176,6 +236,7 @@ tasks:
             mkdir -p releases
             cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
             echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
+            ensure_up || exit 1
             exit 0
           fi
         fi
@@ -196,6 +257,7 @@ tasks:
             else
               echo "live:update: no changes (version $VSN matches $FROM_TAR) — nothing to do"
             fi
+            ensure_up || exit 1
             exit 0
           fi
         else
@@ -231,11 +293,6 @@ tasks:
           cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
           echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
         fi
-        if ! { [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; }; then
-          echo "live:update: prod release not running — built $VSN, run task start to launch it"
-          echo "live:update: remember to commit mix.exs + appup.exs"
-          exit 0
-        fi
         RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
         if [ -n "$RUN_VSN" ] && [ "$RUN_VSN" != "$FROM_VER" ] && [ "$RUN_VSN" != "$VSN" ]; then
           echo "live:update: prod runs $RUN_VSN but the relup spans $FROM_VER -> $VSN"
@@ -248,6 +305,7 @@ tasks:
           echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start)"
           exit 1
         )
+        ensure_up || exit 1
         echo "live:update: now on $VSN — remember to commit mix.exs + appup.exs"
 
   # Isolated dev defaults so plain `task dev` coexists with the prod daemon
