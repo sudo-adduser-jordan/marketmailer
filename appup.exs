@@ -22,6 +22,8 @@
        # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
        # anything.
        {:load_module, Marketmailer.Log.Format},
+       # Discord.Messages: removed by this transition.
+       {:delete_module, Discord.Messages}
      ]},
     {~c"0.1.24",
      [
@@ -42,8 +44,6 @@
        # Discord.Database: no behaviour. The code is replaced without suspending
        # anything.
        {:load_module, Discord.Database},
-       # Discord.Embeds: new module extracted from Discord; add it.
-       {:add_module, Discord.Embeds},
        # ESI: no behaviour. The code is replaced without suspending anything.
        {:load_module, ESI},
        # Etag.Database: no behaviour. The code is replaced without suspending anything.
@@ -187,10 +187,6 @@
        # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
        # anything.
        {:load_module, Marketmailer.Log.Format},
-       # Discord.Embeds: added by this transition (extracted from Discord).
-       {:add_module, Discord.Embeds},
-       # Discord.Messages: removed by this transition.
-       {:delete_module, Discord.Messages}
      ]},
     {~c"0.1.24",
      [
