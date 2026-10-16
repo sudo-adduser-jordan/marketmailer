@@ -58,12 +58,30 @@ defmodule Discord.BroadcasterTest do
 			end)
 
 		Marketmailer.RegionManager.page_started(region, 1)
-		Marketmailer.RegionManager.page_result(region, 1, :failed, %{pages: 1, reason: :timeout})
+		Marketmailer.RegionManager.page_result(region, 1, :failed, %{pages: 1, reason: :service_unavailable})
 
 		assert_receive {:sent, 300, payload}
 		assert [warning] = payload.embeds
 		assert warning.title == "ESI is down"
-		assert warning.description =~ "#{region}"
+		assert warning.description == "Market data is stale; ESI appears to be down."
+	end
+
+	test "a local timeout is not ESI down", %{task_supervisor: _task_supervisor} do
+		test_pid = self()
+		region = 97_000_041
+
+		_broadcaster =
+			start_broadcaster([region], [310], market_list(), fn channel, payload ->
+				send(test_pid, {:sent, channel, payload})
+				{:ok, :sent}
+			end)
+
+		Marketmailer.RegionManager.page_started(region, 1)
+		Marketmailer.RegionManager.page_result(region, 1, :failed, %{pages: 1, reason: :timeout})
+
+		assert_receive {:sent, 310, payload}
+		assert [error | _] = payload.embeds
+		assert error.title == "No market updates"
 	end
 
 	test "broadcasts the list even when the market query has no items", %{
@@ -252,7 +270,7 @@ defmodule Discord.BroadcasterTest do
 		assert_receive {:sent, 1400, _payload}
 	end
 
-	test "broadcasts an ESI-down warning on deadline with pending regions listed", %{
+	test "broadcasts an ESI-down warning when every region reports unavailable", %{
 		task_supervisor: _task_supervisor
 	} do
 		test_pid = self()
@@ -267,17 +285,18 @@ defmodule Discord.BroadcasterTest do
 				fn channel, payload ->
 					send(test_pid, {:sent, channel, payload})
 					{:ok, :sent}
-				end,
-				round_timeout: 100
+				end
 			)
 
-		complete_cycle(reporter, :updated)
+		Marketmailer.RegionManager.page_started(reporter, 1)
+		Marketmailer.RegionManager.page_result(reporter, 1, :failed, %{pages: 1, reason: :service_unavailable})
+		Marketmailer.RegionManager.page_started(stalled, 1)
+		Marketmailer.RegionManager.page_result(stalled, 1, :failed, %{pages: 1, reason: :service_unavailable})
 
 		assert_receive {:sent, 1200, payload}, 1_000
 		assert [warning] = payload.embeds
 		assert warning.title == "ESI is down"
-		assert warning.description =~ "#{stalled}"
-		assert warning.description =~ "awaiting cycle"
+		assert warning.description == "Market data is stale; ESI appears to be down."
 	end
 
 	test "broadcasts list plus status when one region updates and another fails locally", %{
@@ -668,7 +687,7 @@ defmodule Discord.MessagesTest do
 			Discord.Messages.channel_removed(%{channel_id: 123}),
 			Discord.Messages.list_channel(%{channel_id: 123}),
 			Discord.Messages.list_channel(nil),
-			Discord.Messages.esi_down_embed(%{}, []),
+			Discord.Messages.esi_down_embed(),
 			Discord.Messages.no_update_embed()
 		]
 

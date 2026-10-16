@@ -37,6 +37,7 @@ defmodule Market do
 		field :type_id, :integer
 		field :volume_remain, :integer
 		field :volume_total, :integer
+		field :url, :string
 		timestamps()
 	end
 end

@@ -484,6 +484,21 @@ defmodule Market.DatabaseTest do
 						 Database.all(from m in "market", where: m.order_id == 50_001, select: %{price: m.price})
 	end
 
+	test "upsert_orders with a page url skips unchanged rows and deletes missing ones" do
+		url = ESI.page_url(98_001_001, 1)
+
+		orders = for n <- 1..10, do: order_fixture(80_000 + n)
+		assert MarketDatabase.upsert_orders(orders, url) == 10
+
+		before = Database.one(from m in "market", where: m.order_id == 80_001, select: m.updated_at)
+		assert MarketDatabase.upsert_orders(orders, url) == 0
+		assert Database.one(from m in "market", where: m.order_id == 80_001, select: m.updated_at) == before
+
+		shorter = for n <- 1..7, do: order_fixture(80_000 + n)
+		assert MarketDatabase.upsert_orders(shorter, url) == 0
+		assert Database.aggregate(from(m in "market", where: m.url == ^url), :count) == 7
+	end
+
 	test "concurrent upserts through the single writer never fail" do
 		tasks =
 			for w <- 1..20 do
@@ -585,7 +600,7 @@ defmodule Database.WriterTest do
 		:ok
 	end
 
-	test "write executes the fun in the caller process" do
+	test "write executes the fun and returns its result" do
 		test_pid = self()
 
 		assert Database.Writer.write(fn ->
@@ -593,8 +608,7 @@ defmodule Database.WriterTest do
 						 :ok
 					 end) == :ok
 
-		assert_receive {:ran, caller}
-		assert caller == test_pid
+		assert_receive {:ran, _pid}
 	end
 
 	test "a burst of page writes all succeeds with no timeouts" do

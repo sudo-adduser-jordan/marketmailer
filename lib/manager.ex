@@ -2,8 +2,6 @@ defmodule Marketmailer.RegionManager do
 	@moduledoc false
 	use GenServer, restart: :permanent
 
-	@default_cycle_timeout 6 * 60_000
-
 	def start_link(id, opts \\ []) when is_integer(id) and is_list(opts) do
 		GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
 	end
@@ -28,8 +26,7 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	@impl true
-	def init({id, opts}) do
-		timeout = Keyword.get(opts, :cycle_timeout, @default_cycle_timeout)
+	def init({id, _opts}) do
 		pages = [1 | Etag.Database.pages_for_region(id)] |> Enum.uniq()
 		Enum.each(pages, &start_page(id, &1))
 
@@ -47,9 +44,7 @@ defmodule Marketmailer.RegionManager do
 			 started: MapSet.new(),
 			 results: %{},
 			 expected_pages: nil,
-			 timer: nil,
-			 listeners: listeners,
-			 cycle_timeout: timeout
+			 listeners: listeners
 		 }}
 	end
 
@@ -76,7 +71,7 @@ defmodule Marketmailer.RegionManager do
 				state
 			end
 
-		{:noreply, refresh_timer(state)}
+		{:noreply, state}
 	end
 
 	@impl true
@@ -102,27 +97,6 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	@impl true
-	def handle_info({:cycle_timeout, timer_token}, state) do
-		case state.timer do
-			{^timer_token, _timer_handle} ->
-				failures = pending_failures(state)
-
-				failure = %{
-					region: state.id,
-					cycle_id: state.cycle_id,
-					pages: state.expected_pages,
-					failures: failures,
-					updated_pages: updated_pages(state.results)
-				}
-
-				log_failure(state.id, failure)
-				{:noreply, state |> new_cycle() |> emit({:region_refresh_failed, failure})}
-
-			_ ->
-				{:noreply, state}
-		end
-	end
-
 	def handle_info(_message, state), do: {:noreply, state}
 
 	defp handle_page_count(count, state) do
@@ -149,7 +123,7 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	defp new_cycle(state) do
-		%{state | cycle_id: nil, started: MapSet.new(), results: %{}, timer: nil}
+		%{state | cycle_id: nil, started: MapSet.new(), results: %{}}
 	end
 
 	defp set_expected_pages(%{expected_pages: previous} = state, count) when is_integer(previous) and previous > count do
@@ -169,7 +143,6 @@ defmodule Marketmailer.RegionManager do
 		expected_pages = state.expected_pages
 
 		if complete?(expected_pages, state.results) do
-			cancel_timer(state)
 			statuses = Enum.map(state.results, fn {_page, result} -> result.status end)
 			failures = failures(state.results)
 
@@ -222,7 +195,7 @@ defmodule Marketmailer.RegionManager do
 
 			{:completed, event, new_cycle(%{state | expected_pages: expected_pages})}
 		else
-			{:pending, refresh_timer(state)}
+			{:pending, state}
 		end
 	end
 
@@ -240,37 +213,6 @@ defmodule Marketmailer.RegionManager do
 	defp updated_pages(results) do
 		pages = for {page, %{status: :updated}} <- results, do: page
 		Enum.sort(pages)
-	end
-
-	defp refresh_timer(%{timer: nil} = state), do: schedule_timer(state)
-
-	defp refresh_timer(state) do
-		cancel_timer(state)
-		schedule_timer(%{state | timer: nil})
-	end
-
-	defp schedule_timer(state) do
-		timer_token = make_ref()
-		timer_handle = Process.send_after(self(), {:cycle_timeout, timer_token}, state.cycle_timeout)
-		%{state | timer: {timer_token, timer_handle}}
-	end
-
-	defp pending_failures(%{expected_pages: nil}), do: [%{page: nil, reason: :cycle_timeout}]
-
-	defp pending_failures(%{expected_pages: expected, results: results}) when is_integer(expected) and expected > 0 do
-		pending = for page <- 1..expected//1, not Map.has_key?(results, page), do: page
-
-		case pending do
-			[] -> [%{page: nil, reason: :cycle_timeout}]
-			pages -> Enum.map(pages, &%{page: &1, reason: :cycle_timeout})
-		end
-	end
-
-	defp cancel_timer(%{timer: nil}), do: :ok
-
-	defp cancel_timer(%{timer: {_timer_token, timer_handle}}) do
-		Process.cancel_timer(timer_handle)
-		:ok
 	end
 
 	defp emit(state, {event, payload}) do

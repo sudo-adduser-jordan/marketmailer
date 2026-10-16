@@ -213,13 +213,10 @@ defmodule Discord.Messages do
 		|> with_version()
 	end
 
-	def esi_down_embed(failures \\ %{}, pending \\ []) do
-		description =
-			truncate_lines(status_lines(failures, pending), "Market data is stale; ESI appears to be down.")
-
+	def esi_down_embed do
 		%Embed{
 			title: "ESI is down",
-			description: description,
+			description: "Market data is stale; ESI appears to be down.",
 			color: @color_warning,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			author: branded_author(),
@@ -998,8 +995,6 @@ defmodule Discord.Broadcaster do
 	alias Nostrum.Bot
 
 	@seen_limit 10_000
-	# ESI market cache is ~5 min; the deadline only detects a probably-down ESI.
-	@round_timeout 6 * 60_000
 
 	def start_link(opts \\ []) do
 		name = Keyword.get(opts, :name, __MODULE__)
@@ -1020,27 +1015,23 @@ defmodule Discord.Broadcaster do
 			prune_fun: Keyword.get(opts, :prune_fun, :default),
 			regions: regions,
 			round: Keyword.get(opts, :round, 1),
-			round_timeout: Keyword.get(opts, :round_timeout, @round_timeout),
 			reports: %{},
-			seen: MapSet.new(),
-			round_timer: nil
+			seen: MapSet.new()
 		}
 
-		{:ok, schedule_round(state)}
+		{:ok, state}
 	end
 
 	@impl true
 	def code_change(_vsn, state, _extra) when is_map(state) do
 		state =
 			state
-			|> Map.delete(:pending)
+			|> Map.drop([:pending, :round_timer, :round_timeout])
 			|> Map.merge(%{
 				regions: Map.get(state, :regions, Marketmailer.RegionManagerSupervisor.region_ids()),
 				round: Map.get(state, :round, 1),
-				round_timeout: Map.get(state, :round_timeout, @round_timeout),
 				reports: %{},
-				seen: Map.get(state, :seen, MapSet.new()),
-				round_timer: nil
+				seen: Map.get(state, :seen, MapSet.new())
 			})
 			|> Map.new(fn
 				{key, fun} when key in [:channels_fun, :market_fun, :deliver_fun, :prune_fun] and is_function(fun) ->
@@ -1050,7 +1041,7 @@ defmodule Discord.Broadcaster do
 					{k, v}
 			end)
 
-		{:ok, schedule_round(state)}
+		{:ok, state}
 	end
 
 	@impl true
@@ -1078,10 +1069,6 @@ defmodule Discord.Broadcaster do
 		end
 
 		{:noreply, state}
-	end
-
-	def handle_info({:round_timeout, round}, %{round: round} = state) do
-		close_round(state)
 	end
 
 	def handle_info(_message, state), do: {:noreply, state}
@@ -1121,12 +1108,8 @@ defmodule Discord.Broadcaster do
 	end
 
 	defp close_round(state) do
-		cancel_round_timer(state)
-
-		pending = Enum.reject(state.regions, &Map.has_key?(state.reports, &1))
-		snapshot = %{round: state.round, reports: state.reports, pending: pending}
+		snapshot = %{round: state.round, reports: state.reports, pending: []}
 		state = %{state | round: state.round + 1, reports: %{}}
-		state = schedule_round(state)
 
 		if state.async do
 			start_async_digest(state, snapshot)
@@ -1155,23 +1138,6 @@ defmodule Discord.Broadcaster do
 				log_broadcast_failure("broadcast_task_failed", reason)
 				{:noreply, state}
 		end
-	end
-
-	defp schedule_round(%{round_timer: nil} = state) do
-		handle = Process.send_after(self(), {:round_timeout, state.round}, state.round_timeout)
-		%{state | round_timer: handle}
-	end
-
-	defp schedule_round(state) do
-		cancel_round_timer(state)
-		schedule_round(%{state | round_timer: nil})
-	end
-
-	defp cancel_round_timer(%{round_timer: nil}), do: :ok
-
-	defp cancel_round_timer(%{round_timer: handle}) do
-		Process.cancel_timer(handle)
-		:ok
 	end
 
 	defp note_seen(state, key) do
@@ -1230,10 +1196,8 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
-	defp warning_payload(snapshot) do
-		failures = digest_failures(Map.get(snapshot, :reports, %{}))
-		pending = Map.get(snapshot, :pending, [])
-		%{embeds: [Messages.esi_down_embed(failures, pending)], components: []}
+	defp warning_payload(_snapshot) do
+		%{embeds: [Messages.esi_down_embed()], components: []}
 	end
 
 	defp error_payload(snapshot) do
@@ -1249,21 +1213,13 @@ defmodule Discord.Broadcaster do
 		%{embeds: embeds, components: []}
 	end
 
-	@esi_down_reasons [:service_unavailable, :rate_limited, :offline, :cycle_timeout, :timeout]
-
 	defp esi_down?(snapshot) do
 		reports = Map.get(snapshot, :reports, %{})
-		pending = Map.get(snapshot, :pending, [])
 		failures = digest_failures(reports)
 
 		cond do
-			# Timeout means the round never completed: ESI is probably down.
-			pending != [] -> true
-			# The market updated: broadcast the list even if ESI hiccuped elsewhere.
 			any_updated?(reports) -> false
-			# No failures at all means ESI answered (all 304s): no update, not down.
 			failures == %{} -> false
-			maintenance_active?() -> true
 			true -> esi_failures_only?(reports)
 		end
 	end
@@ -1282,9 +1238,13 @@ defmodule Discord.Broadcaster do
 				%{reason: reason} -> reason
 				reason -> reason
 			end)
-			|> Enum.all?(&(&1 in @esi_down_reasons))
+			|> Enum.all?(&down_reason?/1)
 		end
 	end
+
+	defp down_reason?(:service_unavailable), do: true
+	defp down_reason?(status) when status in [420, 500, 502, 503, 504], do: true
+	defp down_reason?(_), do: false
 
 	defp any_updated?(reports) do
 		Enum.any?(reports, fn
@@ -1293,14 +1253,6 @@ defmodule Discord.Broadcaster do
 			{_region, {_cycle, {:failed, _}}} -> false
 			_ -> false
 		end)
-	end
-
-	defp maintenance_active? do
-		ESI.maintenance_active?()
-	rescue
-		_ -> false
-	catch
-		_, _ -> false
 	end
 
 	defp digest_failures(reports) do

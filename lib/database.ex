@@ -4,18 +4,30 @@ defmodule Database do
 		adapter: Ecto.Adapters.SQLite3
 end
 
-defmodule Database.Writer do
-	@retry_delays [10, 25, 50, 100, 200, 400, 800, 1_600, 3_200]
+defmodule Database.Queue do
+	use GenServer
+
+	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
 	def write(fun) when is_function(fun, 0) do
-		case run(fun, @retry_delays) do
-			{:ok, result} -> result
-			{:error, error} -> raise error
+		case Process.whereis(__MODULE__) do
+			nil -> fun.()
+			_ -> GenServer.call(__MODULE__, {:write, fun}, :infinity)
 		end
 	end
 
-	defp run(fun, delays) do
-		{:ok, fun.()}
+	@impl true
+	def init(_), do: {:ok, %{}}
+
+	@impl true
+	def handle_call({:write, fun}, _from, state) do
+		{:reply, fun.(), state}
+	end
+end
+
+defmodule Database.Writer do
+	def write(fun) when is_function(fun, 0) do
+		Database.Queue.write(fun)
 	rescue
 		e ->
 			if disk_full?(e) do
@@ -24,17 +36,9 @@ defmodule Database.Writer do
 					%{reason: Exception.message(e)},
 					"Database or disk is full; skipping write"
 				)
-
-				{:error, e}
-			else
-				if retryable?(e) and delays != [] do
-					[wait | rest] = delays
-					Process.sleep(wait + :rand.uniform(10))
-					run(fun, rest)
-				else
-					{:error, e}
-				end
 			end
+
+			raise e
 	end
 
 	def disk_full?(%Exqlite.Error{} = e), do: String.contains?(Exception.message(e), "database or disk is full")
@@ -52,11 +56,6 @@ defmodule Database.Writer do
 	catch
 		_, _ -> false
 	end
-
-	defp retryable?(%Exqlite.Error{} = e), do: String.starts_with?(Exception.message(e), "Database busy")
-
-	defp retryable?(%DBConnection.ConnectionError{}), do: true
-	defp retryable?(_), do: false
 end
 
 defmodule Etag.Database do
@@ -170,17 +169,21 @@ defmodule Etag.Database do
 	def upsert_etag(url, etag, expires_at \\ nil) do
 		now = NaiveDateTime.utc_now(:second)
 
-		case Database.Writer.write(fn ->
-					 Database.insert_all(
-						 "etags",
-						 [%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
-						 on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
-						 conflict_target: :url
-					 )
-				 end) do
-			{:error, e} -> raise e
-			_ -> :ets.insert(:market_cache, {url, etag, expires_at})
-		end
+		Database.Writer.write(fn ->
+			Database.insert_all(
+				"etags",
+				[%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
+				on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
+				conflict_target: :url
+			)
+		end)
+
+		:ets.insert(:market_cache, {url, etag, expires_at})
+	end
+
+	def touch_cache(url, etag, expires_at) do
+		:ets.insert(:market_cache, {url, etag, expires_at})
+		:ok
 	end
 end
 
@@ -230,12 +233,15 @@ defmodule Discord.Database do
 end
 
 defmodule Market.Database do
+	import Ecto.Query
+
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
+	@compare_fields ~w(duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
 	@table "market"
 
-	@upsert_chunk_size 200
+	@upsert_chunk_size 1000
 
-	def upsert_orders(orders) do
+	def upsert_orders(orders, url \\ nil) do
 		timestamp = NaiveDateTime.utc_now(:second)
 
 		rows =
@@ -247,25 +253,90 @@ defmodule Market.Database do
 					false -> 0
 					other -> other
 				end)
-				|> Map.merge(%{inserted_at: timestamp, updated_at: timestamp})
+				|> Map.merge(%{url: url, inserted_at: timestamp, updated_at: timestamp})
 			end)
 
 		Database.Writer.write(fn ->
-			rows
-			|> Enum.chunk_every(@upsert_chunk_size)
-			|> Enum.reduce(0, fn chunk, total ->
-				{count, _} =
-					Database.insert_all(@table, chunk,
-						on_conflict: {:replace, @fields ++ [:updated_at]},
-						conflict_target: :order_id
-					)
+			{changed, seen_ids} =
+				if is_binary(url) do
+					existing =
+						from(m in "market",
+							where: m.url == ^url,
+							select:
+								{m.order_id, m.duration, m.is_buy_order, m.issued, m.location_id, m.min_volume, m.price, m.range,
+								 m.system_id, m.type_id, m.volume_remain, m.volume_total}
+						)
+						|> Database.all()
+						|> Map.new(fn {order_id, duration, is_buy, issued, location_id, min_volume, price, range, system_id,
+													 type_id, volume_remain, volume_total} ->
+							{order_id,
+							 %{
+								 duration: duration,
+								 is_buy_order: is_buy,
+								 issued: issued,
+								 location_id: location_id,
+								 min_volume: min_volume,
+								 price: price,
+								 range: range,
+								 system_id: system_id,
+								 type_id: type_id,
+								 volume_remain: volume_remain,
+								 volume_total: volume_total
+							 }}
+						end)
 
-				total + count
-			end)
+					changed =
+						Enum.filter(rows, fn row ->
+							case Map.get(existing, row.order_id) do
+								nil ->
+									true
+
+								prev ->
+									Enum.any?(@compare_fields, fn field ->
+										normalize_field(field, Map.get(prev, field)) != Map.get(row, field)
+									end)
+							end
+						end)
+
+					{changed, MapSet.new(rows, & &1.order_id)}
+				else
+					{rows, MapSet.new(rows, & &1.order_id)}
+				end
+
+			written =
+				changed
+				|> Enum.chunk_every(@upsert_chunk_size)
+				|> Enum.reduce(0, fn chunk, total ->
+					{count, _} =
+						Database.insert_all(@table, chunk,
+							on_conflict: {:replace, @fields ++ [:url, :updated_at]},
+							conflict_target: :order_id
+						)
+
+					total + count
+				end)
+
+			if is_binary(url) do
+				stale_ids =
+					from(m in "market", where: m.url == ^url, select: m.order_id)
+					|> Database.all()
+					|> Enum.reject(&MapSet.member?(seen_ids, &1))
+
+				Enum.chunk_every(stale_ids, @upsert_chunk_size)
+				|> Enum.each(fn chunk ->
+					Database.delete_all(from m in "market", where: m.order_id in ^chunk)
+				end)
+			end
+
+			written
 		end)
 	end
 
 	def upsert_chunk_size, do: @upsert_chunk_size
+
+	defp normalize_field(:is_buy_order, true), do: 1
+	defp normalize_field(:is_buy_order, false), do: 0
+	defp normalize_field(_field, value), do: value
 
 	def get_best_order do
 		load_rows("getBestOrder.sql")

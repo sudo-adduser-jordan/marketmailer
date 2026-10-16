@@ -9,7 +9,7 @@ defmodule ESI do
 
 	@token_cost 2
 	@unknown_group :unknown
-	@default_limit 150
+	@default_limit 12_000
 	@default_window_ms 15 * 60_000
 	@margin_ms 1_500
 	@min_block_ms 1_000
@@ -87,6 +87,10 @@ defmodule ESI do
 				{:error, :rate_limited, meta(response, url)}
 
 			{:ok, %{status: 503} = response} ->
+				activate_maintenance()
+				{:error, :service_unavailable, meta(response, url)}
+
+			{:ok, %{status: status} = response} when status in [420, 500, 502, 504] ->
 				activate_maintenance()
 				{:error, :service_unavailable, meta(response, url)}
 

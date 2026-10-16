@@ -144,16 +144,21 @@ defmodule Marketmailer.RegionManagerTest do
 		assert_receive {:region_refresh_complete, %{pages: 1}}
 	end
 
-	test "fails a cycle that does not finish before its deadline" do
+	test "an unfinished cycle emits nothing until every page reports" do
 		region = 98_000_006
 		start_cycle_manager(region)
 
 		Marketmailer.RegionManager.page_started(region, 1)
 		Marketmailer.RegionManager.page_result(region, 1, :updated, %{pages: 2})
 
-		assert_receive {:region_refresh_failed, summary}, 500
+		refute_receive {:region_refresh_failed, _summary}, 300
+		refute_receive {:region_refresh_complete, _summary}, 100
+
+		Marketmailer.RegionManager.page_started(region, 2)
+		Marketmailer.RegionManager.page_result(region, 2, :updated, %{pages: 2})
+
+		assert_receive {:region_refresh_complete, summary}, 500
 		assert summary.region == region
-		assert summary.failures == [%{page: 2, reason: :cycle_timeout}]
 	end
 
 	defp start_cycle_manager(region, timeout \\ 100) do

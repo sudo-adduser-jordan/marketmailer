@@ -11,12 +11,7 @@ defmodule Marketmailer.PageWorker do
 
 	@impl true
 	def init({_manager, id, page}) do
-		delay =
-			case Etag.Database.resume_delay_ms(ESI.page_url(id, page)) do
-				0 -> :erlang.phash2({id, page}, 500)
-				remaining -> remaining + :erlang.phash2({id, page}, 2_000)
-			end
-
+		delay = Etag.Database.resume_delay_ms(ESI.page_url(id, page))
 		Process.send_after(self(), :work, delay)
 		{:ok, %{id: id, page: page, errors: 0}}
 	end
@@ -81,17 +76,10 @@ defmodule Marketmailer.PageWorker do
 					"304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
 				)
 
-				case safe_upsert_etag(ctx) do
-					:ok ->
-						Marketmailer.RegionManager.page_result(id, page, :not_modified, %{pages: ctx.pages})
-						new_state = notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})
-						{:noreply, new_state}
-
-					{:error, reason} ->
-						Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: reason})
-						schedule_next(backoff_ms(state.errors, {id, page}))
-						{:noreply, %{state | errors: state.errors + 1}}
-				end
+				:ok = safe_upsert_etag(ctx)
+				Marketmailer.RegionManager.page_result(id, page, :not_modified, %{pages: ctx.pages})
+				new_state = notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})
+				{:noreply, new_state}
 
 			{:error, :service_unavailable, ctx} ->
 				Marketmailer.Log.info(
@@ -102,7 +90,7 @@ defmodule Marketmailer.PageWorker do
 						status: 503,
 						url: ctx.url
 					},
-					"503 #{id}     \t #{ctx.url}"
+					"5xx #{id}     \t #{ctx.url}"
 				)
 
 				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :service_unavailable})
@@ -127,7 +115,7 @@ defmodule Marketmailer.PageWorker do
 				{:noreply, %{state | errors: 0}}
 
 			{:error, reason} ->
-				delay = backoff_ms(errs, {id, page})
+				delay = backoff_ms(errs)
 				schedule_next(delay)
 
 				Marketmailer.Log.warning(
@@ -147,7 +135,7 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	defp persist_orders(data, ctx) do
-		case Market.Database.upsert_orders(data) do
+		case Market.Database.upsert_orders(data, ctx.url) do
 			{:error, e} ->
 				{:error, persist_failure_reason(e, ctx, length(data))}
 
@@ -185,27 +173,8 @@ defmodule Marketmailer.PageWorker do
 	defp safe_upsert_etag(%{etag: false}), do: :ok
 
 	defp safe_upsert_etag(ctx) do
-		Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
+		Etag.Database.touch_cache(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
 		:ok
-	rescue
-		e ->
-			if Database.Writer.disk_full?(e) do
-				Marketmailer.Log.error(
-					"disk_full",
-					%{region: ctx |> Map.get(:url), reason: first_line(e)},
-					"Disk full; skipping etag persist for #{ctx.url}"
-				)
-
-				{:error, :disk_full}
-			else
-				Marketmailer.Log.warning(
-					"page_persist_failed",
-					%{region: ctx |> Map.get(:url), reason: first_line(e)},
-					"Persist failed for #{ctx.url}"
-				)
-
-				{:error, :persist_failed}
-			end
 	end
 
 	defp first_line(e), do: e |> Exception.message() |> String.split("\n") |> List.first()
@@ -275,9 +244,8 @@ defmodule Marketmailer.PageWorker do
 
 	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)
 
-	defp backoff_ms(errors, jitter_key) do
-		base = (60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
-		base + :erlang.phash2(jitter_key, 30_000)
+	defp backoff_ms(errors) do
+		(60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
 	end
 
 	def format_ttl(ttl_ms) do
