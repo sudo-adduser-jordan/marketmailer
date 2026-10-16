@@ -353,8 +353,51 @@ defmodule Discord.Messages do
 		"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
 	end
 
+	# Compact millions with 2 decimals at/above 1M, shared by Sell/Buy
+	# and Margin so the three fields can't drift.
+	defp millions_compact(abs_value),
+		do: :erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2) <> "M"
+
+	defp to_number(nil), do: nil
+	defp to_number(number) when is_number(number), do: number * 1.0
+
+	defp to_number(binary) when is_binary(binary) do
+		case Float.parse(String.trim(binary)) do
+			{number, _} -> number
+			:error -> nil
+		end
+	end
+
+	defp to_number(_), do: nil
+
+	# Per-unit margin: buy wall minus sell price. Nil when either side
+	# is missing so the embed renders "? ISK".
+	defp per_unit_margin(item) do
+		with buy when not is_nil(buy) <- to_number(item.buy_price),
+				 sell when not is_nil(sell) <- to_number(item.price) do
+			buy - sell
+		else
+			_ -> nil
+		end
+	end
+
 	defp price_value(nil), do: "? ISK"
-	defp price_value(price), do: "#{format_isk(price)} ISK"
+
+	defp price_value(price) when is_number(price) do
+		abs_value = abs(price * 1.0)
+		formatted = if abs_value >= 1_000_000, do: millions_compact(abs_value), else: format_isk(abs_value)
+		prefix = if price < 0, do: "-", else: ""
+		"#{prefix}#{formatted} ISK"
+	end
+
+	defp price_value(price) when is_binary(price) do
+		case to_number(price) do
+			nil -> "? ISK"
+			number -> price_value(number)
+		end
+	end
+
+	defp price_value(_), do: "? ISK"
 
 	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
 		janice_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
@@ -368,7 +411,7 @@ defmodule Discord.Messages do
 			title: item.item_name || "Market order",
 			description: "[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Tycoon](#{eve_tycoon_url})",
 			# url: "https://discord.com",
-			color: embed_color(item.instant_sell_profit),
+			color: embed_color(per_unit_margin(item)),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: thumbnail_url || type_icon
@@ -394,7 +437,7 @@ defmodule Discord.Messages do
 				},
 				%Embed.Field{
 					name: "Margin",
-					value: margin_value(item.instant_sell_profit),
+					value: margin_value(per_unit_margin(item)),
 					inline: false
 				}
 			]
@@ -416,7 +459,7 @@ defmodule Discord.Messages do
 		abs_value = abs(profit * 1.0)
 
 		if abs_value >= 1_000_000 do
-			"#{sign}#{:erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2)}M ISK"
+			"#{sign}#{millions_compact(abs_value)} ISK"
 		else
 			"#{sign}#{format_isk(abs_value)} ISK"
 		end

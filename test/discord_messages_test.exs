@@ -20,8 +20,7 @@ defmodule Discord.MessagesTest do
 			location_name: "Jita IV - Moon 4",
 			security_status: 0.9,
 			price: 10.0,
-			buy_price: 110.0,
-			instant_sell_profit: 1_000.0
+			buy_price: 110.0
 		}
 
 		embed = Discord.Messages.market_embed(item)
@@ -32,7 +31,7 @@ defmodule Discord.MessagesTest do
 		assert fields["Location"] == "Jita IV - Moon 4 - Jita - The Forge (0.9)"
 		assert fields["Sell"] == "10.00 ISK"
 		assert fields["Buy"] == "110.00 ISK"
-		assert fields["Margin"] == "+1000.00 ISK"
+		assert fields["Margin"] == "+100.00 ISK"
 		assert embed.description =~ "janice.e-351.com/i/1001/market/2"
 		assert embed.description =~ "[Janice](https://janice.e-351.com/i/1001/market/2)"
 		assert embed.description =~ "[Eve Ref](https://everef.net/types/1001)"
@@ -57,14 +56,13 @@ defmodule Discord.MessagesTest do
 			type_id: 1_001,
 			item_name: "Tritanium",
 			price: 120.0,
-			buy_price: 110.0,
-			instant_sell_profit: -100.0
+			buy_price: 110.0
 		}
 
 		loss_embed = Discord.Messages.market_embed(loss)
 		loss_fields = Map.new(loss_embed.fields, &{&1.name, &1.value})
 
-		assert loss_fields["Margin"] == "-100.00 ISK"
+		assert loss_fields["Margin"] == "-10.00 ISK"
 		assert loss_embed.color == 0xF04747
 
 		unknown = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0}
@@ -76,6 +74,27 @@ defmodule Discord.MessagesTest do
 		assert unknown_fields["Margin"] == "? ISK"
 		assert unknown_fields["Location"] == "? - ? - ? (?)"
 		assert unknown_embed.color == 0x7289DA
+	end
+
+	test "compacts sell, buy and margin to millions at/above 1M" do
+		item = %MarketView{
+			type_id: 44_992,
+			item_name: "PLEX",
+			price: 4_660_000.0,
+			buy_price: 4_849_000.0
+		}
+
+		embed = Discord.Messages.market_embed(item)
+		fields = Map.new(embed.fields, &{&1.name, &1.value})
+
+		assert fields["Sell"] == "4.66M ISK"
+		assert fields["Buy"] == "4.85M ISK"
+		assert fields["Margin"] == "+189000.00 ISK"
+
+		big = %MarketView{type_id: 1_001, item_name: "Tritanium", price: 10.0, buy_price: 2_000_010.0}
+		big_fields = big |> Discord.Messages.market_embed() |> Map.get(:fields) |> Map.new(&{&1.name, &1.value})
+
+		assert big_fields["Margin"] == "+2.00M ISK"
 	end
 
 	test "places the Janice graph in the image slot, keeping the item icon" do
