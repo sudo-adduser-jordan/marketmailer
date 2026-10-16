@@ -23,10 +23,10 @@ defmodule Discord.Messages do
 
 	# Footer carries both date and version — date left, version right,
 	# joined with a middle dot so Discord renders a single footer line.
+	# Every embed sets `timestamp` just before piping here, so it is always
+	# present (no nil fallback).
 	defp with_version(%Embed{timestamp: ts} = embed) do
-		date = ts || DateTime.utc_now() |> DateTime.to_iso8601()
-
-		%{embed | footer: %Embed.Footer{text: "#{date} • v#{app_version()}"}, timestamp: nil}
+		%{embed | footer: %Embed.Footer{text: "#{ts} • v#{app_version()}"}, timestamp: nil}
 	end
 
 	defp app_version do
@@ -376,19 +376,10 @@ defmodule Discord.Messages do
 		end
 	end
 
-	defp format_isk(nil), do: "?"
-
+	# Callers normalize to float before reaching here (`price_value/1` and
+	# `margin_value/1` handle nil/binary one level up), so only numbers arrive.
 	defp format_isk(number) when is_number(number),
 		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
-
-	defp format_isk(binary) when is_binary(binary) do
-		case Float.parse(String.trim(binary)) do
-			{number, _} -> format_isk(number)
-			:error -> "?"
-		end
-	end
-
-	defp format_isk(_), do: "?"
 
 	defp location_value(item) do
 		"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
@@ -506,8 +497,6 @@ defmodule Discord.Messages do
 		end
 	end
 
-	defp margin_value(_), do: "? ISK"
-
 	defp or_unknown(nil), do: "?"
 	defp or_unknown(""), do: "?"
 	defp or_unknown(value), do: value
@@ -573,6 +562,8 @@ defmodule Discord.Consumer do
 	alias Discord.Messages
 	alias Nostrum.Api
 	alias Nostrum.Bot
+	alias Nostrum.Cache.Me
+	alias Nostrum.Constants
 	alias Nostrum.Constants.ApplicationCommandOptionType
 	alias Nostrum.Constants.InteractionCallbackType
 	alias Nostrum.Struct.Interaction
@@ -634,7 +625,13 @@ defmodule Discord.Consumer do
 			}
 		]
 
-		Api.ApplicationCommand.bulk_overwrite_global_commands(server_commands ++ market_commands)
+		# Same PUT the `bulk_overwrite_global_commands/2` wrapper performs, but
+		# issued via the generically-typed `Api.request/4`: the wrapper's
+		# `application_command_map` type predates Discord's `integration_types`
+		# / `default_member_permissions` fields (the installed Nostrum knows
+		# only `default_permission`), so passing current API fields through it
+		# breaks its contract while Discord itself accepts them.
+		Api.request(:put, Constants.global_application_commands(Me.get().id), server_commands ++ market_commands)
 	end
 
 	# Autocomplete must come before the command clause below: autocomplete
@@ -727,9 +724,10 @@ defmodule Discord.Consumer do
 						}
 
 						try do
+							# `create_response/2` is spec'd `:ok | error`, so only
+							# those two outcomes are matched.
 							case Api.Interaction.create_response(interaction, response) do
 								:ok -> start_list_task(bot_name, interaction)
-								{:ok, _} -> start_list_task(bot_name, interaction)
 								{:error, reason} -> list_defer_fallback(interaction, reason)
 							end
 						rescue
@@ -788,10 +786,9 @@ defmodule Discord.Consumer do
 	end
 
 	defp safe_suggest_items(item_name, limit) when is_binary(item_name) and is_integer(limit) do
-		case Market.Database.suggest_items(item_name, limit) do
-			items when is_list(items) -> items
-			_ -> []
-		end
+		# `suggest_items/2` always returns a list (empty on blank input or
+		# DB error via its own rescue), so it is returned directly.
+		Market.Database.suggest_items(item_name, limit)
 	rescue
 		_ -> []
 	catch
@@ -965,11 +962,10 @@ defmodule Discord.Consumer do
 
 	# Never let a DB/ESI failure crash the interaction handler with no
 	# response: log once and fall back to the empty list embed.
+	# `get_items_less_than_jita_buy/0` always returns a list (empty on DB
+	# error via its own rescue), so it is returned directly.
 	defp safe_get_items do
-		case Market.Database.get_items_less_than_jita_buy() do
-			items when is_list(items) -> items
-			_ -> []
-		end
+		Market.Database.get_items_less_than_jita_buy()
 	rescue
 		error ->
 			Marketmailer.Log.warning(
@@ -1034,12 +1030,11 @@ defmodule Discord.Consumer do
 		# respond": Discord drops the reply and edit_response later 404s with
 		# "Unknown Webhook" because no original response exists. Log the real
 		# reason so a broken reply is never swallowed.
-		Api.Interaction.create_response(intr, %{type: 4, data: data})
-		|> case do
+		# `create_response/2` is spec'd `:ok | error`, so only those two
+		# outcomes are matched.
+		case Api.Interaction.create_response(intr, %{type: 4, data: data}) do
 			:ok -> :ok
-			{:ok, _message} -> :ok
 			{:error, reason} -> log_discord_warning("discord_respond_failed", reason, intr)
-			other -> log_discord_warning("discord_respond_failed", other, intr)
 		end
 	rescue
 		error -> log_discord_warning("discord_respond_failed", Exception.message(error), intr)

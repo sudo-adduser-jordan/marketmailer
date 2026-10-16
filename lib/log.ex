@@ -96,8 +96,11 @@ defmodule Marketmailer.Log.Format do
 					 end)
 
 	# OTP calls Formatter:format(Event, FConfig): the second element of the
-	# registered {Module, FConfig} tuple arrives here as `config`. The handlers
-	# register per-sink options, e.g. [pretty: true, color: true|false].
+	# registered {Module, FConfig} tuple arrives here as `config`. OTP types
+	# formatter config as a map, so handlers register `%{pretty: _, color: _}`
+	# (a list would break the `:logger.add_handler/3` contract); keyword
+	# lists still render for the console handler in config.exs.
+	def format(event, config) when is_map(config), do: render(event, Map.to_list(config))
 	def format(event, config) when is_list(config), do: render(event, config)
 	def format(event, _config), do: render(event, [])
 
@@ -235,8 +238,6 @@ defmodule Marketmailer.Log.Format do
 		|> IO.iodata_to_binary()
 		|> color_token(color)
 	end
-
-	defp pretty_fields([], _indent, _color), do: "{}"
 
 	defp pretty_fields(fields, indent, color) do
 		pad = indent_string(indent)

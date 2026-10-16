@@ -185,8 +185,6 @@ defmodule Mix.Tasks.Sde.Import do
 		end)
 	end
 
-	defp load_keyed_map(path, field, link), do: load_keyed_map(path, [field], link)
-
 	defp follow_link(nil, _), do: nil
 	defp follow_link(id, link) when is_map(link) and is_integer(id), do: Map.get(link, id)
 	defp follow_link(value, _), do: as_text(value)
@@ -207,18 +205,12 @@ defmodule Mix.Tasks.Sde.Import do
 	defp with_write_retry(_fun, 0), do: Mix.raise("SDE import write failed: lock budget exhausted")
 
 	defp with_write_retry(fun, attempts) do
-		case fun.() do
-			{:error, reason} ->
-				if lock_contention_value?(reason) and attempts > 1 do
-					Process.sleep(@write_delay_ms)
-					with_write_retry(fun, attempts - 1)
-				else
-					Mix.raise("SDE import write failed: #{inspect(reason)}")
-				end
-
-			_ ->
-				:ok
-		end
+		# `Database.insert_all/3` raises on failure (never returns an
+		# `{:error, _}` tuple), so lock contention surfaces as raised
+		# `Exqlite` / `DBConnection` exceptions retried below; success
+		# returns `:ok`.
+		_fun_result = fun.()
+		:ok
 	rescue
 		e ->
 			if lock_contention?(e) and attempts > 1 do
@@ -228,14 +220,6 @@ defmodule Mix.Tasks.Sde.Import do
 				reraise e, __STACKTRACE__
 			end
 	end
-
-	defp lock_contention_value?(%Exqlite.Error{} = e), do: lock_contention?(e)
-	defp lock_contention_value?(%DBConnection.ConnectionError{}), do: true
-
-	defp lock_contention_value?(reason) when is_binary(reason),
-		do: String.contains?(reason, ["database is locked", "Database busy"])
-
-	defp lock_contention_value?(_), do: false
 
 	defp lock_contention?(%Exqlite.Error{} = e),
 		do: String.contains?(Exception.message(e), ["database is locked", "Database busy"])

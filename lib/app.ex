@@ -164,6 +164,8 @@ defmodule Marketmailer.Application do
 	end
 
 	defp add_file_handler(handler, path) do
+		# Formatter config is a map: OTP types it as `#{atom() => term()}`
+		# and a keyword list breaks the `:logger.add_handler/3` contract.
 		config = %{
 			config: %{
 				type: :file,
@@ -174,7 +176,7 @@ defmodule Marketmailer.Application do
 				filesync_repeat_interval: 1_000
 			},
 			level: :warning,
-			formatter: {Marketmailer.Log.Format, [pretty: true, color: false]}
+			formatter: {Marketmailer.Log.Format, %{pretty: true, color: false}}
 		}
 
 		case :logger.add_handler(handler, :logger_std_h, config) do

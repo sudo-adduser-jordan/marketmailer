@@ -514,10 +514,12 @@ defmodule Janice.ChartPool do
 	end
 
 	defp navigate(frame, url, timeout) do
+		# `Frame.goto/2` is spec'd `{:ok, _} | {:error, _}` (its channel
+		# layer wraps every reply, including null results, into one of those
+		# two tuples), so only those outcomes are matched.
 		case Frame.goto(frame.guid, url: url, wait_until: "domcontentloaded", timeout: timeout) do
 			{:ok, _response} -> :ok
 			{:error, reason} -> {:error, reason}
-			nil -> {:error, :navigation_failed}
 		end
 	end
 
