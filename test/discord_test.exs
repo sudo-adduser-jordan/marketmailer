@@ -1,6 +1,8 @@
 defmodule Discord.BroadcasterTest do
 	use ExUnit.Case, async: false
 
+	import ExUnit.CaptureLog
+
 	setup do
 		MarketmailerTest.Fixtures.ensure_ets(:esi_error_state)
 		MarketmailerTest.Fixtures.ensure_ets(:market_cache)
@@ -344,7 +346,7 @@ defmodule Discord.BroadcasterTest do
 	end
 
 	test "production defaults store no funs in state" do
-		{:ok, state} = Discord.Broadcaster.init(regions: [], round_timeout: 60_000)
+		{:ok, state} = Discord.Broadcaster.init(regions: [])
 
 		for key <- [:channels_fun, :market_fun, :deliver_fun, :prune_fun] do
 			assert Map.get(state, key) == :default
@@ -379,6 +381,65 @@ defmodule Discord.BroadcasterTest do
 		refute Map.has_key?(migrated, :pending)
 	end
 
+	@tag :capture_log
+	test "logs the closed round and the delivered broadcast", %{task_supervisor: _task_supervisor} do
+		test_pid = self()
+		region = 97_000_050
+
+		_broadcaster =
+			start_broadcaster([region], [1_200], market_list(), fn channel, payload ->
+				send(test_pid, {:sent, channel, payload})
+				{:ok, :sent}
+			end)
+
+		log =
+			capture_log(fn ->
+				complete_cycle(region, :updated)
+				assert_receive {:sent, 1_200, _payload}
+				# `broadcast_delivered` is logged right after delivery returns
+				Process.sleep(50)
+			end)
+
+		assert log =~ "round_closed"
+		assert log =~ "broadcast_delivered"
+	end
+
+	@tag :capture_log
+	test "logs a closed round with no channels", %{task_supervisor: _task_supervisor} do
+		region = 97_000_051
+
+		_broadcaster =
+			start_broadcaster([region], [], market_list(), fn _channel, _payload ->
+				flunk("delivery should not be called")
+			end)
+
+		log =
+			capture_log(fn ->
+				complete_cycle(region, :updated)
+				Process.sleep(100)
+			end)
+
+		assert log =~ "round_closed"
+		assert log =~ "broadcast_no_channels"
+	end
+
+	@tag :capture_log
+	test "warns when a region has no manager to subscribe to" do
+		region = 97_000_052
+		name = :"broadcaster_#{System.unique_integer([:positive])}"
+
+		log =
+			capture_log(fn ->
+				start_supervised!(
+					{Discord.Broadcaster, [name: name, regions: [region], async: false, channels_fun: fn -> [] end]}
+				)
+
+				Process.sleep(50)
+			end)
+
+		assert log =~ "broadcaster_subscribe_failed"
+	end
+
 	defp start_broadcaster(regions, channels, market_result, deliver_fun, opts \\ []) do
 		Enum.each(regions, &start_cycle_manager/1)
 
@@ -397,8 +458,7 @@ defmodule Discord.BroadcasterTest do
 					 async: Keyword.get(opts, :async, false),
 					 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 					 channels_fun: fn -> channels end,
-					 market_fun: market_fun,
-					 round_timeout: Keyword.get(opts, :round_timeout, 60_000)
+					 market_fun: market_fun
 				 ] ++ deliver_opts}
 			)
 

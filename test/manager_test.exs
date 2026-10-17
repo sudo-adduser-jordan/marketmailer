@@ -27,7 +27,7 @@ defmodule Marketmailer.RegionManagerTest do
 		Marketmailer.RegionManager.page_count(region, 3)
 		assert_all_pages(region, [1, 2, 3])
 
-		assert %{page_count: 3} = :sys.get_state(manager)
+		assert %{expected_pages: 3} = :sys.get_state(manager)
 		GenServer.stop(manager, :normal)
 	end
 
@@ -42,7 +42,7 @@ defmodule Marketmailer.RegionManagerTest do
 		assert_no_pages(region, [2, 3])
 		assert_all_pages(region, [1])
 
-		assert %{page_count: 1} = :sys.get_state(manager)
+		assert %{expected_pages: 1} = :sys.get_state(manager)
 		GenServer.stop(manager, :normal)
 	end
 
@@ -193,7 +193,7 @@ defmodule Marketmailer.RegionManagerTest do
 		assert_no_pages(region, [3])
 		assert_all_pages(region, [1, 2])
 
-		assert %{page_count: 2} = :sys.get_state(manager)
+		assert %{expected_pages: 2} = :sys.get_state(manager)
 		assert Marketmailer.RegionManager.fetch_gate(region, 3) == :gone
 		GenServer.stop(manager, :normal)
 	end
@@ -209,7 +209,7 @@ defmodule Marketmailer.RegionManagerTest do
 		assert_no_pages(region, [2])
 		assert_all_pages(region, [1])
 
-		assert %{page_count: 1} = :sys.get_state(manager)
+		assert %{expected_pages: 1} = :sys.get_state(manager)
 		GenServer.stop(manager, :normal)
 	end
 
@@ -222,8 +222,67 @@ defmodule Marketmailer.RegionManagerTest do
 
 		Marketmailer.RegionManager.page_result(region, 5, :gone, %{reason: :not_found})
 		assert_all_pages(region, [1, 2, 3])
-		assert %{page_count: 3} = :sys.get_state(manager)
+		assert %{expected_pages: 3} = :sys.get_state(manager)
 		GenServer.stop(manager, :normal)
+	end
+
+	test "spawns the pages the etags never recorded when ESI's count is unchanged" do
+		region = 99_000_016
+
+		# The production wedge: the DB only knows scattered pages and page 1
+		# reports a count equal to the highest known page, so a manager that
+		# trusts the etags row count sees nothing new to start.
+		for page <- [1, 2, 5] do
+			Etag.Database.upsert_etag(
+				"https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}",
+				"etag-#{page}"
+			)
+		end
+
+		on_exit(fn -> Etag.Database.prune_region(region, 0) end)
+
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region)
+		assert_all_pages(region, [1, 2, 5])
+
+		Marketmailer.RegionManager.page_count(region, 5)
+		assert_all_pages(region, [1, 2, 3, 4, 5])
+
+		GenServer.stop(manager, :normal)
+	end
+
+	test "a page 1 failure still closes the cycle instead of going silent" do
+		region = 98_000_007
+		start_cycle_manager(region)
+
+		Marketmailer.RegionManager.page_started(region, 1)
+		Marketmailer.RegionManager.page_result(region, 1, :failed, %{reason: :offline})
+
+		assert_receive {:region_refresh_failed, summary}, 500
+		assert summary.region == region
+		assert summary.pages == 1
+		assert summary.failures == [%{page: 1, reason: :offline}]
+	end
+
+	test "a page other than page 1 can change the region count" do
+		region = 98_000_008
+		start_cycle_manager(region)
+
+		Marketmailer.RegionManager.page_started(region, 1)
+		Marketmailer.RegionManager.page_result(region, 1, :updated, %{pages: 2})
+
+		Marketmailer.RegionManager.page_started(region, 2)
+		Marketmailer.RegionManager.page_result(region, 2, :updated, %{pages: 3})
+		refute_receive {:region_refresh_complete, _summary}, 150
+
+		Marketmailer.RegionManager.page_count(region, 3)
+		assert_all_pages(region, [2, 3])
+
+		Marketmailer.RegionManager.page_started(region, 3)
+		Marketmailer.RegionManager.page_result(region, 3, :not_modified, %{pages: 3})
+
+		assert_receive {:region_refresh_complete, summary}, 500
+		assert summary.pages == 3
+		assert summary.updated_pages == [1, 2]
 	end
 
 	defp start_cycle_manager(region, timeout \\ 100) do

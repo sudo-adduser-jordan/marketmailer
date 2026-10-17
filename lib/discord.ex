@@ -532,7 +532,14 @@ defmodule Discord.Broadcaster do
 		RegionManager.subscribe(region, self())
 		:ok
 	catch
-		:exit, _ -> :ok
+		:exit, reason ->
+			Marketmailer.Log.warning(
+				"broadcaster_subscribe_failed",
+				%{region: region, reason: inspect(reason)},
+				"Market broadcaster could not subscribe to region #{region}"
+			)
+
+			:ok
 	end
 
 	defp record_report(summary, outcome, state) do
@@ -562,6 +569,7 @@ defmodule Discord.Broadcaster do
 	defp close_round(state) do
 		snapshot = %{round: state.round, reports: state.reports, pending: []}
 		state = %{state | round: state.round + 1, reports: %{}}
+		log_round_closed(snapshot)
 
 		if state.async do
 			start_async_digest(state, snapshot)
@@ -616,27 +624,79 @@ defmodule Discord.Broadcaster do
 	defp process_digest(snapshot, state) do
 		case fetch_channels(state) do
 			{:ok, []} ->
+				Marketmailer.Log.info(
+					"broadcast_no_channels",
+					%{round: snapshot.round},
+					"Round #{snapshot.round} closed with no registered channels"
+				)
+
 				{:ok, :no_channels}
 
 			{:ok, channels} ->
-				cond do
-					esi_down?(snapshot) ->
-						deliver_all(channels, warning_payload(snapshot), state)
+				{kind, payload} =
+					cond do
+						esi_down?(snapshot) ->
+							{:esi_down, warning_payload(snapshot)}
 
-					any_updated?(snapshot.reports) ->
-						items = fetch_market_list(state)
-						failures = digest_failures(snapshot.reports)
-						payload = digest_payload(items, failures)
-						deliver_all(channels, payload, state)
+						any_updated?(snapshot.reports) ->
+							items = fetch_market_list(state)
+							failures = digest_failures(snapshot.reports)
+							{:market_list, digest_payload(items, failures)}
 
-					true ->
-						deliver_all(channels, error_payload(snapshot), state)
-				end
+						true ->
+							{:no_update, error_payload(snapshot)}
+					end
+
+				result = deliver_all(channels, payload, state)
+				log_delivery(snapshot, channels, kind, payload, result)
+				result
 
 			{:error, reason} ->
 				{:error, reason}
 		end
 	end
+
+	defp log_round_closed(snapshot) do
+		reports = Map.get(snapshot, :reports, %{})
+		counts = round_outcomes(reports)
+
+		Marketmailer.Log.info(
+			"round_closed",
+			%{
+				round: snapshot.round,
+				regions: map_size(reports),
+				updated: counts.updated,
+				unchanged: counts.unchanged,
+				failed: counts.failed
+			},
+			"Round #{snapshot.round} closed across #{map_size(reports)} regions"
+		)
+	end
+
+	defp round_outcomes(reports) do
+		Enum.reduce(reports, %{updated: 0, unchanged: 0, failed: 0}, fn
+			{_region, {_cycle, :complete}}, counts -> %{counts | updated: counts.updated + 1}
+			{_region, {_cycle, :unchanged}}, counts -> %{counts | unchanged: counts.unchanged + 1}
+			{_region, {_cycle, {:failed, _reasons, _updated}}}, counts -> %{counts | failed: counts.failed + 1}
+			{_region, {_cycle, {:failed, _reasons}}}, counts -> %{counts | failed: counts.failed + 1}
+			_other, counts -> counts
+		end)
+	end
+
+	defp log_delivery(snapshot, channels, kind, payload, :ok) do
+		Marketmailer.Log.info(
+			"broadcast_delivered",
+			%{
+				round: snapshot.round,
+				kind: kind,
+				channels: length(channels),
+				embeds: length(Map.get(payload, :embeds, []))
+			},
+			"Round #{snapshot.round} broadcast #{kind} to #{length(channels)} channel(s)"
+		)
+	end
+
+	defp log_delivery(_snapshot, _channels, _kind, _payload, {:error, _reason}), do: :ok
 
 	defp digest_payload(items, failures) do
 		base = Embeds.market_list_payload(items, 1, Embeds.list_broadcast_per_page())

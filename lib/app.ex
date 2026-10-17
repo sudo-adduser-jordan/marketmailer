@@ -2,8 +2,7 @@ defmodule Marketmailer.Application do
 	use Application
 
 	@unmigrated_tables ["systems", "names", "discord", "etags", "market"]
-	@log_dir "logs"
-	@log_file "logs/errors.jsonl"
+	@default_error_log_path "logs/errors.jsonl"
 	@log_handler :marketmailer_errors
 
 	@impl true
@@ -23,7 +22,7 @@ defmodule Marketmailer.Application do
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
 				{Task.Supervisor, name: Marketmailer.TaskSup}
-			] ++ poller_core_children() ++ [Discord.Broadcaster, Janice.Supervisor] ++ dashboard_children() ++ bot_children()
+			] ++ poller_core_children() ++ [Janice.Supervisor] ++ dashboard_children() ++ bot_children()
 
 		opts = [
 			strategy: :one_for_one,
@@ -39,7 +38,9 @@ defmodule Marketmailer.Application do
 		if pollers_enabled?() do
 			[
 				{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
-				Marketmailer.RegionManagerSupervisor
+				Marketmailer.RegionManagerSupervisor,
+				# The broadcaster only exists to deliver what the pollers report.
+				Discord.Broadcaster
 			]
 		else
 			[]
@@ -113,11 +114,41 @@ defmodule Marketmailer.Application do
 	end
 
 	defp configure_file_logger do
-		File.rm_rf!(@log_dir)
-		ensure_file_logger()
+		path = error_log_path()
+		File.mkdir_p!(Path.dirname(path))
+		reset_error_log(path)
+		ensure_file_logger(path)
 	end
 
-	def ensure_file_logger(path \\ @log_file, handler \\ @log_handler) do
+	# The production error sink. Tests point this at their own file under the
+	# same directory, so a test run can never delete or append to the live
+	# `logs/errors.jsonl` (or its rotated archives).
+	def error_log_path do
+		Application.get_env(:marketmailer, :error_log_path, @default_error_log_path)
+	end
+
+	# Start each boot with a fresh sink: remove the configured file and the
+	# rotation archives that belong to it. Sibling sinks (prod vs test) keep
+	# their files, so the directory itself is never removed.
+	def reset_error_log(path) do
+		_ = File.rm(path)
+
+		case File.ls(Path.dirname(path)) do
+			{:ok, entries} ->
+				prefix = Path.basename(path)
+				dir = Path.dirname(path)
+
+				for entry <- entries, String.starts_with?(entry, prefix), do: File.rm(Path.join(dir, entry))
+
+			_ ->
+				:ok
+		end
+
+		:ok
+	end
+
+	def ensure_file_logger(path \\ nil, handler \\ @log_handler) do
+		path = path || error_log_path()
 		File.mkdir_p!(Path.dirname(path))
 
 		if handler_healthy?(handler, path) do

@@ -91,6 +91,12 @@ happens in `task dev` (interactive shell) or the test suite.
   Hot upgrade keeps processes, ETS, and
   timers; state-shape changes (GenServer state, ETS tuple shapes) still
   need a poller restart (`task start` restarts a stale daemon onto the latest tree).
+- Never run `bin/marketmailer remote` with non-TTY stdin (a pipe,
+  `</dev/null`, or a capture in a script): it is `iex --remsh`, so stdin EOF
+  halts the *remote* node — it kills the prod daemon and leaves no log
+  record, no crash dump, and no `epmd` entry. Use
+  `bin/marketmailer rpc "EXPR"` for one-shot evaluation on the live node
+  (same cookie, no shell).
 - Safety while a poller runs: dev tests run fine alongside it — the suite
   uses stubbed ESI fixtures, `start_pollers: false`, and an isolated DB
   (`priv/data/test.db` default, per-suite tmp files). Read-only inspection of the
@@ -181,9 +187,12 @@ queryable fields, no sensitive data in fields). Everything funnels through
   indent) with keys colored per level and values colored by type
   (strings/numbers/booleans) (`config.exs`,
   `:default_handler` level `:info`).
-- **File** — warning-level events and above, plain pretty JSON to `./logs/errors.jsonl`
-  (rotation: 5 × 10 MB, gz on rotate). `logs/` is removed and recreated on
-  every boot.
+- **File** — warning-level events and above, plain pretty JSON to
+  `./logs/errors.jsonl` (rotation: 5 × 10 MB, gz on rotate). The sink path is
+  `config :marketmailer, :error_log_path`; on every boot only that sink's
+  file and rotation archives are removed and recreated, never the whole
+  `logs/` directory. `config/test.exs` points the sink at `logs/test.jsonl`,
+  so `mix test` can never delete or append to the live `logs/errors.jsonl`.
 
 Records on both sinks are back-to-back (no blank line) and share a stable
 field order: `level`, `commit`, `ts`, `pid`, `event`, then domain fields
@@ -208,14 +217,19 @@ then pipe to jq:
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
 - `lib/manager.ex`, `lib/supervisor.ex`, `lib/worker.ex` - per-region fan-out
   and refresh cycles (one `RegionManager` per region, one `PageWorker` per
-  page; page 1 reports `X-Pages` and the manager starts/stops workers; each
-  page polls on its own ESI TTL/ETag so unchanged pages stay cheap `304`s;
-  persist failures report `:failed` instead of crashing; the manager tracks
-  each cycle with a sliding deadline per activity and timeout failures name
-  the pending pages, not `page: nil`)
+  page; page 1 reports `X-Pages` and every report reconciles the worker set
+  to exactly `1..count` — missing pages are started, pages above the count
+  are stopped, so a stale/sparse `etags` table can never wedge a region;
+  each page polls on its own ESI TTL/ETag so unchanged pages stay cheap
+  `304`s; every region emits exactly one event per cycle, including a
+  zero-order region and a page-1 failure, so the broadcast barrier always
+  closes)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
 - `lib/discord.ex` - nostrum consumer, slash commands, embed builders,
-  `Discord.Broadcaster`, `Discord.BotSupervisor`
+  `Discord.Broadcaster` (starts only with the pollers; collects one report
+  per configured region and broadcasts when every one has reported, logging
+  `round_closed`, `broadcast_delivered`/`broadcast_no_channels` at info),
+  `Discord.BotSupervisor`
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
 - `lib/mix/tasks/` - `sde.import` (official JSONL SDE bulk seed),
   `chartdb` (schema diagram rebuild)

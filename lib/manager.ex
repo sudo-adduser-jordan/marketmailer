@@ -43,7 +43,6 @@ defmodule Marketmailer.RegionManager do
 		{:ok,
 		 %{
 			 id: id,
-			 page_count: Enum.max(pages),
 			 cycle_id: nil,
 			 started: MapSet.new(),
 			 results: %{},
@@ -123,7 +122,7 @@ defmodule Marketmailer.RegionManager do
 	@impl true
 	def handle_cast({:page_result, page, status, context}, state) do
 		if MapSet.member?(state.started, page) do
-			expected_pages = expected_pages(context, state.expected_pages)
+			expected_pages = expected_pages(context, state.expected_pages, page)
 			result = %{status: status, reason: Map.get(context, :reason)}
 			state = %{state | expected_pages: expected_pages, results: Map.put(state.results, page, result)}
 
@@ -144,6 +143,7 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	defp apply_count(count, state) do
+		previous = state.expected_pages
 		state = set_expected_pages(state, count)
 
 		state =
@@ -152,21 +152,49 @@ defmodule Marketmailer.RegionManager do
 				{:pending, state} -> state
 			end
 
-		if count == state.page_count do
-			state
-		else
-			old = state.page_count
-			if count < old, do: Etag.Database.prune_region(state.id, count)
+		state = note_page_count(state, previous, count)
+
+		reconcile_pages(count, state)
+	end
+
+	defp note_page_count(state, previous, count) do
+		if is_integer(previous) and previous != count do
+			if count < previous, do: Etag.Database.prune_region(state.id, count)
 
 			Marketmailer.Log.info(
 				"page_count_changed",
-				%{region: state.id, old: old, new: count},
-				"Region #{state.id}: pages #{old} -> #{count}"
+				%{region: state.id, old: previous, new: count},
+				"Region #{state.id}: pages #{previous} -> #{count}"
 			)
-
-			adjust_workers(state.id, old, count)
-			%{state | page_count: count}
 		end
+
+		state
+	end
+
+	defp reconcile_pages(count, state) do
+		live = live_pages(state.id)
+		wanted = MapSet.new(1..count)
+		missing = MapSet.difference(wanted, live)
+		extra = MapSet.difference(live, wanted)
+
+		Enum.each(missing, &start_page(state.id, &1))
+		Enum.each(extra, &stop_page(state.id, &1))
+
+		if MapSet.size(missing) > 0 do
+			Marketmailer.Log.info(
+				"region_pages_reconciled",
+				%{region: state.id, pages: count, missing: MapSet.size(missing)},
+				"Region #{state.id}: started #{MapSet.size(missing)} missing page workers"
+			)
+		end
+
+		state
+	end
+
+	defp live_pages(id) do
+		Marketmailer.Registry
+		|> Registry.select([{{{:page, :"$1", :"$2"}, :_, :_}, [{:==, :"$1", id}], [:"$2"]}])
+		|> MapSet.new()
 	end
 
 	defp new_cycle(state) do
@@ -181,8 +209,10 @@ defmodule Marketmailer.RegionManager do
 
 	defp set_expected_pages(state, count), do: %{state | expected_pages: count}
 
-	defp expected_pages(%{pages: pages}, _current) when is_integer(pages) and pages > 0, do: pages
-	defp expected_pages(_context, current), do: current
+	defp expected_pages(%{pages: pages}, _current, _page) when is_integer(pages) and pages > 0, do: pages
+	defp expected_pages(_context, current, _page) when is_integer(current), do: current
+	defp expected_pages(_context, nil, 1), do: 1
+	defp expected_pages(_context, nil, _page), do: nil
 
 	defp check_cycle(%{expected_pages: nil} = state), do: {:pending, state}
 
@@ -275,14 +305,6 @@ defmodule Marketmailer.RegionManager do
 		)
 	end
 
-	defp adjust_workers(id, old, new) do
-		cond do
-			new > old -> Enum.each((old + 1)..new, &start_page(id, &1))
-			new < old -> Enum.each((new + 1)..old, &stop_page(id, &1))
-			true -> :ok
-		end
-	end
-
 	defp start_page(id, page) do
 		case Registry.lookup(Marketmailer.Registry, {:page, id, page}) do
 			[] ->
@@ -298,6 +320,6 @@ defmodule Marketmailer.RegionManager do
 
 	defp stop_page(id, page) do
 		for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, id, page}),
-				do: GenServer.stop(pid, :normal)
+				do: DynamicSupervisor.terminate_child(Marketmailer.PageSup, pid)
 	end
 end

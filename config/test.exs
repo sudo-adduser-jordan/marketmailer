@@ -11,6 +11,9 @@ config :marketmailer, Database,
 	log: false
 
 config :marketmailer, MarketmailerWeb.Endpoint, server: false
+# Same directory as production, separate sink: a test run must never delete or
+# append to the live `logs/errors.jsonl`.
 config :marketmailer, :dashboard_enabled, false
+config :marketmailer, :error_log_path, "logs/test.jsonl"
 config :marketmailer, :start_pollers, false
 config :marketmailer, ecto_repos: [Database]
