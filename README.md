@@ -74,8 +74,7 @@ to per-region `RegionManager`s (`GenServer.cast`), all keyed through
 `Marketmailer.Registry` (`via` tuples). Poller children (`PageSup`,
 `RegionManagerSupervisor`, `BotSupervisor`) only boot when `start_pollers`
 is true; dashboard children (`PubSub`, `Telemetry`, `Endpoint`) only when
-the dashboard is enabled. ETS tables and `Task.start` name seeders live
-outside the tree.
+the dashboard is enabled. ETS tables live outside the tree.
 
 ## Database schema
 
@@ -86,10 +85,9 @@ open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 `assets/` after edits.
 
 SQLite at `priv/data/marketmailer.db` (WAL, gitignored): `market` order
-cache, `etags` per-page ETag/Expires, `names`/`systems` EVE caches (SDE-seeded,
-ticker-backed), `discord` channel routing, plus the `marketListView` undercut
-view serving all user-facing queries; see `AGENTS.md` for the fetch ->
-write -> read policy.
+cache, `etags` per-page ETag/Expires, `names`/`systems` EVE caches (SDE-seeded),
+`discord` channel routing, plus the `marketListView` undercut view serving all
+user-facing queries; see `AGENTS.md` for the fetch -> write -> read policy.
 `MarketView` (`lib/schema.ex`) is a query struct, not a DB view. Arrows
 are logical FKs joined by the app, not DB constraints.
 

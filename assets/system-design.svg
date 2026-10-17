@@ -11,8 +11,8 @@
     <rect x="40" y="80" width="230" height="150" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
     <text x="155" y="108" font-weight="bold">ESI (external)</text>
     <text x="155" y="130">/v1/markets/{region}/orders</text>
-    <text x="155" y="150">/universe/names</text>
-    <text x="155" y="170">system → constell. → region</text>
+    <text x="155" y="150">429 + Retry-After</text>
+    <text x="155" y="170">x-pages · error-limit-remain</text>
     <text x="155" y="190">ETag / Expires / 304</text>
 
     <rect x="300" y="80" width="270" height="150" rx="8" fill="#d0ebff" stroke="#1e1e1e" stroke-width="2"/>
@@ -23,11 +23,11 @@
     <text x="435" y="190">backoff + resume Expires</text>
 
     <rect x="600" y="80" width="230" height="150" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
-    <text x="715" y="108" font-weight="bold">UpdateCoordinator</text>
-    <text x="715" y="130">region cycle tracker</text>
-    <text x="715" y="150">:updated / :not_modified</text>
-    <text x="715" y="170">:failed names pages</text>
-    <text x="715" y="190">sliding deadline</text>
+    <text x="715" y="108" font-weight="bold">Cycle barrier (Broadcaster)</text>
+    <text x="715" y="130">1 report per region</text>
+    <text x="715" y="150">broadcast when all report</text>
+    <text x="715" y="170">failed pages still ship</text>
+    <text x="715" y="190">starts with the pollers</text>
 
     <rect x="860" y="80" width="270" height="150" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
     <text x="995" y="108" font-weight="bold">SQLite (WAL) + ETS</text>
@@ -37,18 +37,18 @@
     <text x="995" y="190">systems / discord</text>
 
     <rect x="40" y="260" width="230" height="150" rx="8" fill="#ffecd2" stroke="#1e1e1e" stroke-width="2"/>
-    <text x="155" y="288" font-weight="bold">Name resolution (lazy)</text>
-    <text x="155" y="310">ESI.Names / SystemInfo</text>
-    <text x="155" y="330">backfill gaps then</text>
-    <text x="155" y="350">re-run query once</text>
-    <text x="155" y="370">no static dumps</text>
+    <text x="155" y="288" font-weight="bold">Names / systems (SDE)</text>
+    <text x="155" y="310">mix sde.import</text>
+    <text x="155" y="330">official JSONL SDE</text>
+    <text x="155" y="350">types + map* tables</text>
+    <text x="155" y="370">no ESI name fetch</text>
 
     <rect x="300" y="260" width="270" height="150" rx="8" fill="#e7f5ff" stroke="#1e1e1e" stroke-width="2"/>
     <text x="435" y="288" font-weight="bold">Queries (lib/*.sql)</text>
     <text x="435" y="310">getBestOrder.sql</text>
     <text x="435" y="330">getItemsLessThan.sql</text>
     <text x="435" y="350">getMarketItem.sql</text>
-    <text x="435" y="370">LEFT JOIN names/systems</text>
+    <text x="435" y="370">suggestItems.sql</text>
 
     <rect x="600" y="260" width="230" height="150" rx="8" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="2"/>
     <text x="715" y="288" font-weight="bold">Discord bot</text>
@@ -75,16 +75,16 @@
   </g>
   <g font-size="13">
     <text x="40" y="250" fill="#555">poll → persist → track</text>
-    <text x="40" y="430" fill="#555">backfill → query → broadcast • deploy via Castle</text>
+    <text x="40" y="430" fill="#555">SDE import → query → broadcast • deploy via Castle</text>
   </g>
 
   <rect x="40" y="440" width="1090" height="120" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="585" y="468" font-size="14" text-anchor="middle" font-weight="bold">Supervision: Marketmailer.Supervisor → Database, EtagCache, Registry, TaskSup, UpdateCoordinator, Broadcaster, Janice.Supervisor,</text>
+  <text x="585" y="468" font-size="14" text-anchor="middle" font-weight="bold">Supervision: Marketmailer.Supervisor → Database, EtagCache, Registry, TaskSup, Broadcaster, Janice.Supervisor,</text>
   <text x="585" y="488" font-size="14" text-anchor="middle">PageSup (DynamicSupervisor), RegionManagerSupervisor → RegionManager/region → PageWorker/page, BotSupervisor</text>
   <text x="585" y="508" font-size="14" text-anchor="middle">Log: JSON console (info+) + logs/errors.jsonl (warning+, 5×10MB). ETS: :market_cache, :esi_error_state.</text>
 
   <rect x="40" y="580" width="1090" height="110" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="585" y="608" font-size="14" text-anchor="middle" font-weight="bold">Ops: task live:start (mix --sname, ~/.erlang.cookie) + live:attach vs live:start:release + live:remote (release COOKIE)</text>
+  <text x="585" y="608" font-size="14" text-anchor="middle" font-weight="bold">Ops: task start | task stop | task live:update (Castle hot upgrade) | task dev | task release</text>
   <text x="585" y="628" font-size="14" text-anchor="middle">Docker: -v marketmailer-data:/data, MARKETMAILER_DB=/data/marketmailer.db</text>
   <text x="585" y="648" font-size="14" text-anchor="middle">test: MIX_ENV=test, priv/data/test.db, stubbed ESI</text>
 </svg>

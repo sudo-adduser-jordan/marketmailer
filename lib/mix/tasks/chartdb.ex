@@ -177,8 +177,8 @@ defmodule Mix.Tasks.Chartdb do
 		 ]}
 	end
 
-	defp meta("names", _schema), do: {"names (lazy cache)", nil, ["no timestamps", "POST /v2/universe/names"]}
-	defp meta("systems", _schema), do: {"systems (lazy cache)", nil, ["no timestamps"]}
+	defp meta("names", _schema), do: {"names", nil, ["no timestamps", "SDE-seeded (mix sde.import)"]}
+	defp meta("systems", _schema), do: {"systems", nil, ["no timestamps", "SDE-seeded (mix sde.import)"]}
 	defp meta("etags", _schema), do: {"etags", nil, []}
 	defp meta("discord", _schema), do: {"discord", nil, []}
 
@@ -305,7 +305,7 @@ defmodule Mix.Tasks.Chartdb do
 				y1 = s.y + div(s.h, 2)
 				y2 = min(max(y1, v.y + 60), v.y + v.h - 30)
 
-				~s[  <path d="M#{s.x + s.w},#{y1} H#{v.x - 2},#{y1} V#{y2} H#{v.x - 2}" marker-end="url(#arrow-gray)"/>\n]
+				~s[  <path d="M#{s.x + s.w},#{y1} H#{v.x - 2} V#{y2} H#{v.x}" marker-end="url(#arrow-gray)"/>\n]
 			end
 
 		m = by_name["market"]
@@ -335,7 +335,7 @@ defmodule Mix.Tasks.Chartdb do
 			~s(  <rect x="40" y="#{y}" width="#{@canvas_w - 80}" height="#{h}" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>\n),
 			~s[  <text x="#{cx}" y="#{y + 28}" font-size="13" text-anchor="middle">Indexes: market (#{schema.market_indexes} total, #{schema.market_partial} partial) • Jita-buy (system_id = 30000142) • sell scan (is_buy_order = 0)</text>\n],
 			~s[  <text x="#{cx}" y="#{y + 50}" font-size="13" text-anchor="middle">names/systems carry no timestamps; all other tables have inserted_at/updated_at. MarketView (lib/schema.ex) is a query struct, not a DB view.</text>\n],
-			~s[  <text x="#{cx}" y="#{y + 72}" font-size="13" text-anchor="middle">Queries LEFT JOIN the lazy caches and backfill gaps from ESI, then re-run once (Market.Database). Read-only sqlite3 on the live WAL file is safe; never write.</text>\n],
+			~s[  <text x="#{cx}" y="#{y + 72}" font-size="13" text-anchor="middle">Queries LEFT JOIN names/systems; unmatched ids render as Player Station or ?. Read-only sqlite3 on the live WAL file is safe; never write.</text>\n],
 			~s[  <text x="#{cx}" y="#{y + 94}" font-size="13" text-anchor="middle">* bool is_buy_order is stored 1/0 because insert_all skips Ecto casting (see Market.Database.upsert_orders).</text>\n]
 		]
 	end
