@@ -23,15 +23,7 @@ database =
 	System.get_env("MARKETMAILER_DEV_DB") ||
 		System.get_env("MARKETMAILER_DB", "priv/data/dev.db")
 
-config :marketmailer, Database,
-	database: database,
-	priv: "priv/repo",
-	journal_mode: :wal,
-	busy_timeout: 5000,
-	pool_size: 20,
-	queue_target: 2000,
-	queue_interval: 5000,
-	log: false
+config :marketmailer, Database, database: database
 
 config :marketmailer, MarketmailerWeb.Endpoint,
 	http: [ip: {127, 0, 0, 1}, port: port],

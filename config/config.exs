@@ -10,15 +10,9 @@ config :logger, :default_handler,
 	level: :info,
 	formatter: {Marketmailer.Log.Format, [pretty: true, color: true]}
 
-config :marketmailer, Database,
-	database: db_path,
-	priv: "priv/repo",
-	journal_mode: :wal,
-	busy_timeout: 5000,
-	pool_size: 20,
-	queue_target: 2000,
-	queue_interval: 5000,
-	log: false
+import_config "repo.exs"
+
+config :marketmailer, Database, database: db_path
 
 config :marketmailer, MarketmailerWeb.Endpoint,
 	url: [host: "localhost"],

@@ -13,16 +13,7 @@ if config_env() == :prod do
 			_ -> true
 		end
 
-	config :marketmailer, Database,
-		database: database,
-		priv: "priv/repo",
-		journal_mode: :wal,
-		busy_timeout: 5_000,
-		pool_size: 20,
-		queue_target: 2_000,
-		queue_interval: 5_000,
-		log: false
-
+	config :marketmailer, Database, database: database
 	config :marketmailer, :dashboard_enabled, dashboard_enabled
 	config :marketmailer, :start_pollers, true
 

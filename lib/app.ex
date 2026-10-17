@@ -115,7 +115,6 @@ defmodule Marketmailer.Application do
 
 	defp configure_file_logger do
 		path = error_log_path()
-		File.mkdir_p!(Path.dirname(path))
 		reset_error_log(path)
 		ensure_file_logger(path)
 	end
@@ -147,8 +146,7 @@ defmodule Marketmailer.Application do
 		:ok
 	end
 
-	def ensure_file_logger(path \\ nil, handler \\ @log_handler) do
-		path = path || error_log_path()
+	def ensure_file_logger(path \\ error_log_path(), handler \\ @log_handler) do
 		File.mkdir_p!(Path.dirname(path))
 
 		if handler_healthy?(handler, path) do
