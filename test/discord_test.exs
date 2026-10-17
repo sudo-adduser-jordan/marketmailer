@@ -47,6 +47,39 @@ defmodule Discord.BroadcasterTest do
 		assert second_payload == first_payload
 	end
 
+	test "broadcasts the list_market command's paginated message", %{task_supervisor: _task_supervisor} do
+		test_pid = self()
+		region = 97_000_020
+
+		items =
+			for i <- 1..25 do
+				%{item: "Item #{i}", margin: 1.0, system_name: "Jita", security_status: 0.9}
+			end
+
+		_broadcaster =
+			start_broadcaster([region], [400], items, fn channel, payload ->
+				send(test_pid, {:sent, channel, payload})
+				{:ok, :sent}
+			end)
+
+		complete_cycle(region, :updated)
+
+		assert_receive {:sent, 400, payload}
+		expected = Discord.Embeds.market_list_message(items)
+		assert [embed] = payload.embeds
+		assert [expected_embed] = expected.embeds
+
+		assert embed.title == "Items undercutting the Jita buy wall (1/3)"
+		assert embed.title == expected_embed.title
+		assert embed.description == expected_embed.description
+		assert embed.description |> String.split("\n") |> length() == 10
+
+		assert payload.components == expected.components
+		assert [%{components: [prev, next]}] = payload.components
+		assert prev.custom_id == "market_list:page:0" and prev.disabled
+		assert next.custom_id == "market_list:page:2" and not next.disabled
+	end
+
 	test "broadcasts an ESI-down warning when the refresh fails on ESI errors", %{
 		task_supervisor: _task_supervisor
 	} do
@@ -783,5 +816,51 @@ defmodule Discord.EmbedsTest do
 		single = Discord.Embeds.market_list_payload(Enum.take(items, 5), 1, 10)
 		assert hd(single.embeds).title == "Items undercutting the Jita buy wall"
 		assert single.components == []
+	end
+
+	test "market_list_message renders the command page, not one 100-row page" do
+		items =
+			for i <- 1..100 do
+				%{item: "Item #{i}", margin: 1.0, system_name: "Jita", security_status: 0.9}
+			end
+
+		message = Discord.Embeds.market_list_message(items)
+
+		assert [embed] = message.embeds
+		assert embed.title == "Items undercutting the Jita buy wall (1/10)"
+		assert embed.description |> String.split("\n") |> length() == 10
+		refute embed.description =~ "more"
+
+		command = Discord.Embeds.market_list_payload(items, 1, Discord.Embeds.list_per_page())
+		assert [command_embed] = command.embeds
+		assert embed.title == command_embed.title
+		assert embed.description == command_embed.description
+		assert message.components == command.components
+	end
+
+	test "a page too wide for the description limit reports the dropped rows" do
+		items =
+			for i <- 1..100 do
+				%{item: "VeryLongItemName#{i}", margin: 1_000_000.0, system_name: "Somewhere", security_status: 0.4}
+			end
+
+		embed = Discord.Embeds.market_list_embed(items, 1, 100)
+
+		assert [last_line | _] = embed.description |> String.split("\n") |> Enum.reverse()
+		assert last_line =~ ~r/^… \+\d+ more$/
+	end
+
+	test "market embeds use the Jita IV-4 station icon, not Squall" do
+		items = [%{item: "Tritanium", margin: 1.0, system_name: "Jita", security_status: 0.9}]
+
+		for embed <- [
+					Discord.Embeds.market_list_embed(items, 1, 10),
+					Discord.Embeds.round_status_embed(%{}, []),
+					Discord.Embeds.esi_down_embed(),
+					Discord.Embeds.no_update_embed()
+				] do
+			assert embed.thumbnail.url == "https://images.evetech.net/types/52678/icon?size=64"
+			refute embed.thumbnail.url =~ "81008"
+		end
 	end
 end

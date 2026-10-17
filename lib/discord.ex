@@ -138,7 +138,7 @@ defmodule Discord.Consumer do
 			"list_market" ->
 				case active_bot_name() do
 					nil ->
-						respond(interaction, Embeds.market_list_payload(safe_get_items(), 1, Embeds.list_per_page()))
+						respond(interaction, Embeds.market_list_message(safe_get_items()))
 
 					bot_name ->
 						response = %{
@@ -320,11 +320,11 @@ defmodule Discord.Consumer do
 	defp run_list_task(bot_name, interaction) do
 		payload =
 			try do
-				Embeds.market_list_payload(safe_get_items(), 1, Embeds.list_per_page())
+				Embeds.market_list_message(safe_get_items())
 			rescue
-				_ -> Embeds.market_list_payload([], 1, Embeds.list_per_page())
+				_ -> Embeds.market_list_message([])
 			catch
-				_, _ -> Embeds.market_list_payload([], 1, Embeds.list_per_page())
+				_, _ -> Embeds.market_list_message([])
 			end
 
 		edit_response(bot_name, interaction, payload)
@@ -336,7 +336,7 @@ defmodule Discord.Consumer do
 	end
 
 	defp try_edit_empty_list(bot_name, interaction) do
-		edit_response(bot_name, interaction, Embeds.market_list_payload([], 1, Embeds.list_per_page()))
+		edit_response(bot_name, interaction, Embeds.market_list_message([]))
 	rescue
 		error -> log_discord_warning("list_market_fallback_failed", Exception.message(error), interaction)
 	catch
@@ -347,7 +347,7 @@ defmodule Discord.Consumer do
 		log_discord_warning("list_market_defer_failed", reason, interaction)
 
 		try do
-			respond(interaction, Embeds.market_list_payload(safe_get_items(), 1, Embeds.list_per_page()))
+			respond(interaction, Embeds.market_list_message(safe_get_items()))
 		rescue
 			error -> log_discord_warning("list_market_defer_fallback_failed", Exception.message(error), interaction)
 		catch
@@ -699,7 +699,7 @@ defmodule Discord.Broadcaster do
 	defp log_delivery(_snapshot, _channels, _kind, _payload, {:error, _reason}), do: :ok
 
 	defp digest_payload(items, failures) do
-		base = Embeds.market_list_payload(items, 1, Embeds.list_broadcast_per_page())
+		base = Embeds.market_list_message(items)
 
 		if failures == %{} do
 			base

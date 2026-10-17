@@ -6,7 +6,9 @@ defmodule Discord.Embeds do
 	@color_info 0x7289DA
 	@color_warning 0xFAA61A
 
-	@icon_ "https://images.evetech.net/types/81008/icon?size=64"
+	# Jita IV - Moon 4 - Caldari Navy Assembly Plant (station 60003760, type 52678).
+	# ESI exposes no station-icon route, so the market embeds use the station's type icon.
+	@icon_ "https://images.evetech.net/types/52678/icon?size=64"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
 	@icon_database "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/database.png"
 
@@ -194,7 +196,9 @@ defmodule Discord.Embeds do
 	end
 
 	def list_per_page, do: 10
-	def list_broadcast_per_page, do: 100
+
+	# The slash command and the broadcaster render the exact same page.
+	def market_list_message(items), do: market_list_payload(items, 1, list_per_page())
 
 	def round_status_embed(failures, pending) do
 		description = truncate_lines(status_lines(failures, pending), "All regions reported.")
@@ -370,17 +374,31 @@ defmodule Discord.Embeds do
 
 	defp format_list_margin(_), do: "?"
 
-	defp truncate_lines([], acc), do: acc
+	@description_limit 4000
 
-	defp truncate_lines([line | rest], acc) do
-		next = if acc == "", do: line, else: acc <> "\n" <> line
-
-		if String.length(next) < 4000 do
-			truncate_lines(rest, next)
-		else
-			acc
+	defp truncate_lines(lines, empty) do
+		case collect_lines(lines, "") do
+			{"", 0} -> empty
+			{text, 0} -> text
+			{"", dropped} -> more_line(dropped)
+			{text, dropped} -> text <> "\n" <> more_line(dropped)
 		end
 	end
+
+	# Lines that do not fit are reported, never dropped silently.
+	defp collect_lines([], acc), do: {acc, 0}
+
+	defp collect_lines([line | rest], acc) do
+		next = if acc == "", do: line, else: acc <> "\n" <> line
+
+		if String.length(next) < @description_limit do
+			collect_lines(rest, next)
+		else
+			{acc, length([line | rest])}
+		end
+	end
+
+	defp more_line(dropped), do: "… +#{dropped} more"
 
 	defp format_isk(number) when is_number(number),
 		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)

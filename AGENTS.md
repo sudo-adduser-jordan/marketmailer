@@ -232,7 +232,15 @@ then pipe to jq:
   `Discord.Broadcaster` (starts only with the pollers; collects one report
   per configured region and broadcasts when every one has reported, logging
   `round_closed`, `broadcast_delivered`/`broadcast_no_channels` at info),
-  `Discord.BotSupervisor`
+  `Discord.BotSupervisor`. The broadcast ships the exact `/list_market`
+  message (`Discord.Embeds.market_list_message/1`: page 1 of `list_per_page`
+  = 10 rows plus Prev/Next buttons), so the command and the broadcast can
+  never drift apart; the pager re-queries the DB (page 2+ is live data, not
+  the broadcast snapshot) and Discord expires message-component interactions
+  15 minutes after the message is posted. Market embeds use the Jita IV -
+  Moon 4 station icon (`types/52678`, the station's type: ESI serves no
+  station-icon route). Rendered line lists are never dropped silently -
+  `Discord.Embeds` marks overflow with a trailing `… +N more`.
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
 - `lib/mix/tasks/` - `sde.import` (official JSONL SDE bulk seed),
   `chartdb` (schema diagram rebuild)
