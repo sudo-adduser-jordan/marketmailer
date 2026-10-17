@@ -229,10 +229,10 @@ defmodule Discord.Consumer do
 	end
 
 	defp reply_for_missing_item(interaction, item_name, candidates) do
-		if is_list(candidates) and candidates != [] do
-			respond(interaction, Embeds.market_disambiguation_embed(item_name, candidates))
-		else
+		if candidates == [] do
 			respond(interaction, Embeds.market_not_found_embed(item_name))
+		else
+			respond(interaction, Embeds.market_disambiguation_embed(item_name, candidates))
 		end
 	end
 

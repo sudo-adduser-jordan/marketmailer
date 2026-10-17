@@ -25,16 +25,12 @@ defmodule Discord.Embeds do
 		%{embed | footer: %Embed.Footer{text: "#{format_footer_date(ts)} • v#{app_version()}"}, timestamp: nil}
 	end
 
-	defp format_footer_date(%DateTime{} = dt), do: Calendar.strftime(dt, "%b %d, %Y %H:%M UTC")
-
 	defp format_footer_date(ts) when is_binary(ts) do
 		case DateTime.from_iso8601(String.trim(ts)) do
 			{:ok, dt, _} -> Calendar.strftime(dt, "%b %d, %Y %H:%M UTC")
 			_ -> Calendar.strftime(DateTime.utc_now(), "%b %d, %Y %H:%M UTC")
 		end
 	end
-
-	defp format_footer_date(_), do: Calendar.strftime(DateTime.utc_now(), "%b %d, %Y %H:%M UTC")
 
 	defp app_version do
 		case Application.spec(:marketmailer, :vsn) do
