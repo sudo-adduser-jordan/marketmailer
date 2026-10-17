@@ -124,12 +124,13 @@ defmodule Discord.Embeds do
 		|> with_version()
 	end
 
-	def candidate_name(%{item_name: name}) when is_binary(name), do: name
-	def candidate_name(%{item: name}) when is_binary(name), do: name
-	def candidate_name(%{name: name}) when is_binary(name), do: name
-	def candidate_name(%{"item_name" => name}) when is_binary(name), do: name
-	def candidate_name(%{"item" => name}) when is_binary(name), do: name
-	def candidate_name(%{"name" => name}) when is_binary(name), do: name
+	# Atoms take precedence over string keys, matching the original clause order.
+	def candidate_name(candidate) when is_map(candidate) do
+		[:item_name, :item, :name, "item_name", "item", "name"]
+		|> Enum.map(&Map.get(candidate, &1))
+		|> Enum.find(&is_binary/1)
+	end
+
 	def candidate_name(_), do: nil
 
 	@list_max 100
@@ -320,10 +321,10 @@ defmodule Discord.Embeds do
 		items |> Enum.drop((page - 1) * per_page) |> Enum.take(per_page)
 	end
 
-	defp list_field(item, atom_key, string_key) do
-		atom_val = if is_map(item), do: Map.get(item, atom_key)
-		if atom_val == nil, do: if(is_map(item), do: Map.get(item, string_key)), else: atom_val
-	end
+	defp list_field(item, atom_key, string_key) when is_map(item),
+		do: Map.get(item, atom_key) || Map.get(item, string_key)
+
+	defp list_field(_item, _atom_key, _string_key), do: nil
 
 	@list_item_width 18
 	@list_system_width 10
@@ -352,27 +353,22 @@ defmodule Discord.Embeds do
 
 	defp list_truncate(_, _), do: "?"
 
-	defp format_list_margin(nil), do: "?"
+	defp format_list_margin(margin) do
+		case to_number(margin) do
+			nil ->
+				"?"
 
-	defp format_list_margin(margin) when is_binary(margin) do
-		case Float.parse(String.trim(margin)) do
-			{number, _} -> format_list_margin(number)
-			:error -> "?"
+			number ->
+				sign = if number < 0, do: "-", else: "+"
+				abs_value = abs(number)
+
+				cond do
+					abs_value >= 1_000_000 -> "#{sign}#{Float.round(abs_value / 1_000_000, 1)}M"
+					abs_value >= 1_000 -> "#{sign}#{Float.round(abs_value / 1_000, 1)}k"
+					true -> "#{sign}#{:erlang.float_to_binary(Float.round(abs_value, 2), decimals: 2)}"
+				end
 		end
 	end
-
-	defp format_list_margin(margin) when is_number(margin) do
-		sign = if margin < 0, do: "-", else: "+"
-		abs_value = abs(margin * 1.0)
-
-		cond do
-			abs_value >= 1_000_000 -> "#{sign}#{Float.round(abs_value / 1_000_000, 1)}M"
-			abs_value >= 1_000 -> "#{sign}#{Float.round(abs_value / 1_000, 1)}k"
-			true -> "#{sign}#{:erlang.float_to_binary(Float.round(abs_value, 2), decimals: 2)}"
-		end
-	end
-
-	defp format_list_margin(_), do: "?"
 
 	@description_limit 4000
 
@@ -431,23 +427,18 @@ defmodule Discord.Embeds do
 		end
 	end
 
-	defp price_value(nil), do: "? ISK"
-
-	defp price_value(price) when is_number(price) do
-		abs_value = abs(price * 1.0)
-		formatted = if abs_value >= 1_000_000, do: millions_compact(abs_value), else: format_isk(abs_value)
-		prefix = if price < 0, do: "-", else: ""
-		"#{prefix}#{formatted} ISK"
-	end
-
-	defp price_value(price) when is_binary(price) do
+	defp price_value(price) do
 		case to_number(price) do
-			nil -> "? ISK"
-			number -> price_value(number)
+			nil ->
+				"? ISK"
+
+			number ->
+				abs_value = abs(number)
+				formatted = if abs_value >= 1_000_000, do: millions_compact(abs_value), else: format_isk(abs_value)
+				prefix = if number < 0, do: "-", else: ""
+				"#{prefix}#{formatted} ISK"
 		end
 	end
-
-	defp price_value(_), do: "? ISK"
 
 	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
 		janice_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
@@ -514,18 +505,12 @@ defmodule Discord.Embeds do
 	defp or_unknown(""), do: "?"
 	defp or_unknown(value), do: value
 
-	defp format_security(nil), do: "?"
-	defp format_security(""), do: "?"
-
-	defp format_security(security) when is_binary(security) do
-		case Float.parse(String.trim(security)) do
-			{number, _} -> format_security(number)
-			:error -> "?"
+	defp format_security(security) do
+		case to_number(security) do
+			nil -> "?"
+			number -> Float.round(number, 1)
 		end
 	end
-
-	defp format_security(security) when is_number(security), do: Float.round(security * 1.0, 1)
-	defp format_security(_), do: "?"
 
 	defp channel_embed(description, color) do
 		%Embed{

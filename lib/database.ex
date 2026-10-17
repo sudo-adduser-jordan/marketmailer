@@ -66,14 +66,14 @@ defmodule Etag.Database do
 	def get_etag(url) do
 		case :ets.lookup(:market_cache, url) do
 			[{^url, etag, _expires_at}] -> etag
-			_ -> fetch_etag(url)
+			_ -> fetch(url) |> elem(0)
 		end
 	end
 
 	def get_expiry(url) do
 		case :ets.lookup(:market_cache, url) do
 			[{^url, _etag, expires_at}] when is_integer(expires_at) -> expires_at
-			_ -> fetch_expiry(url)
+			_ -> fetch(url) |> elem(1)
 		end
 	end
 
@@ -168,25 +168,18 @@ defmodule Etag.Database do
 		_ -> :ok
 	end
 
-	defp fetch_etag(url) do
+	# One query for both readers: the cache is authoritative when present,
+	# otherwise the DB row is read and cached back.
+	defp fetch(url) do
 		query = from(tag in "etags", where: tag.url == ^url, select: {tag.etag, tag.expires_at})
 
 		case Database.one(query) do
 			nil ->
-				nil
+				{nil, nil}
 
-			{etag, expires_at} ->
+			{etag, expires_at} = row ->
 				:ets.insert(:market_cache, {url, etag, expires_at})
-				etag
-		end
-	end
-
-	defp fetch_expiry(url) do
-		query = from(tag in "etags", where: tag.url == ^url, select: tag.expires_at)
-
-		case Database.one(query) do
-			nil -> nil
-			expires_at -> expires_at
+				row
 		end
 	end
 
@@ -260,7 +253,7 @@ defmodule Market.Database do
 	import Ecto.Query
 
 	@fields ~w(order_id duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
-	@compare_fields ~w(duration is_buy_order issued location_id min_volume price range system_id type_id volume_remain volume_total)a
+	@compare_fields @fields -- [:order_id]
 	@table "market"
 
 	@upsert_chunk_size 1000
@@ -291,22 +284,11 @@ defmodule Market.Database do
 								 m.system_id, m.type_id, m.volume_remain, m.volume_total}
 						)
 						|> Database.all()
-						|> Map.new(fn {order_id, duration, is_buy, issued, location_id, min_volume, price, range, system_id,
-													 type_id, volume_remain, volume_total} ->
-							{order_id,
-							 %{
-								 duration: duration,
-								 is_buy_order: is_buy,
-								 issued: issued,
-								 location_id: location_id,
-								 min_volume: min_volume,
-								 price: price,
-								 range: range,
-								 system_id: system_id,
-								 type_id: type_id,
-								 volume_remain: volume_remain,
-								 volume_total: volume_total
-							 }}
+						|> Map.new(fn row ->
+							# The select list after order_id is exactly @compare_fields, in order.
+							[order_id | values] = Tuple.to_list(row)
+
+							{order_id, @compare_fields |> Enum.zip(values) |> Map.new()}
 						end)
 
 					changed =
@@ -317,7 +299,7 @@ defmodule Market.Database do
 
 								prev ->
 									Enum.any?(@compare_fields, fn field ->
-										normalize_field(field, Map.get(prev, field)) != Map.get(row, field)
+										normalize_field(field, prev[field]) != row[field]
 									end)
 							end
 						end)
@@ -362,37 +344,17 @@ defmodule Market.Database do
 	defp normalize_field(:is_buy_order, false), do: 0
 	defp normalize_field(_field, value), do: value
 
-	def get_best_order do
-		load_rows("getBestOrder.sql")
-	rescue
-		e ->
-			Marketmailer.Log.warning(
-				"query_failed",
-				%{file: "getBestOrder.sql", reason: Exception.message(e)},
-				"Market query failed for getBestOrder.sql"
-			)
-
-			[]
-	end
+	def get_best_order, do: load_rows("getBestOrder.sql")
 
 	def get_market_item(item_name) when is_binary(item_name) do
-		normalized = normalize_item_name(item_name)
+		case normalize_item_name(item_name) do
+			"" ->
+				nil
 
-		if normalized != "" do
-			try do
+			normalized ->
 				params = [normalized, "%#{escape_like(normalized)}%", normalized]
 
 				load_rows("getMarketItem.sql", params) |> List.first()
-			rescue
-				e ->
-					Marketmailer.Log.warning(
-						"query_failed",
-						%{file: "getMarketItem.sql", reason: Exception.message(e)},
-						"Market query failed for getMarketItem.sql"
-					)
-
-					nil
-			end
 		end
 	end
 
@@ -401,45 +363,33 @@ defmodule Market.Database do
 	def suggest_items(prefix, limit \\ 25)
 
 	def suggest_items(prefix, limit) when is_binary(prefix) and is_integer(limit) do
-		normalized = normalize_item_name(prefix)
+		case normalize_item_name(prefix) do
+			"" ->
+				[]
 
-		if normalized == "" do
-			[]
-		else
-			escaped = escape_like(normalized)
-			load_rows("suggestItems.sql", ["%#{escaped}%", "#{escaped}%", limit])
+			normalized ->
+				escaped = escape_like(normalized)
+
+				load_rows("suggestItems.sql", ["%#{escaped}%", "#{escaped}%", limit])
 		end
-	rescue
-		_ -> []
-	catch
-		_, _ -> []
 	end
 
 	def suggest_items(_prefix, _limit), do: []
 
-	def get_items_less_than_jita_buy do
-		load_rows("getItemsLessThan.sql")
-	rescue
-		e ->
-			Marketmailer.Log.warning(
-				"query_failed",
-				%{file: "getItemsLessThan.sql", reason: Exception.message(e)},
-				"Market query failed for getItemsLessThan.sql"
-			)
-
-			[]
-	end
+	def get_items_less_than_jita_buy, do: load_rows("getItemsLessThan.sql")
 
 	defp load_rows(file, params \\ []) do
+		structs? = file in ["getBestOrder.sql", "getMarketItem.sql"]
+
 		case Database.query(read_sql(file), params) do
 			{:ok, %{rows: rows, columns: cols}} ->
+				keys = Enum.map(cols, &String.to_atom/1)
+
 				Enum.map(rows, fn row ->
-					data = cols |> Enum.map(&String.to_atom/1) |> Enum.zip(row) |> Map.new()
+					data = keys |> Enum.zip(row) |> Map.new()
 
-					if file in ["getBestOrder.sql", "getMarketItem.sql"] do
-						struct = Ecto.Repo.Schema.load(Ecto.Adapters.SQLite3, MarketView, data)
-
-						struct
+					if structs? do
+						Ecto.Repo.Schema.load(Ecto.Adapters.SQLite3, MarketView, data)
 						|> Map.put(:instant_sell_profit, data[:instant_sell_profit])
 						|> Map.put(:buy_price, data[:buy_price])
 					else
