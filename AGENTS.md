@@ -193,6 +193,9 @@ queryable fields, no sensitive data in fields). Everything funnels through
   file and rotation archives are removed and recreated, never the whole
   `logs/` directory. `config/test.exs` points the sink at `logs/test.jsonl`,
   so `mix test` can never delete or append to the live `logs/errors.jsonl`.
+  `ERL_CRASH_DUMP=logs/erl_crash.dump` (`.env`, `Taskfile.yml`) now also
+  survives restarts instead of being wiped at boot: delete a dump by hand
+  once you have read it.
 
 Records on both sinks are back-to-back (no blank line) and share a stable
 field order: `level`, `commit`, `ts`, `pid`, `event`, then domain fields
