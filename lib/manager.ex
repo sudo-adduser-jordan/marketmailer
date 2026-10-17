@@ -213,8 +213,7 @@ defmodule Marketmailer.RegionManager do
 	defp check_cycle(%{expected_pages: nil} = state), do: {:pending, state}
 
 	defp check_cycle(%{expected_pages: expected_pages} = state) do
-		# expected_pages is nil or a positive integer, so the key range is exact.
-		if map_size(Map.take(state.results, 1..expected_pages)) == expected_pages do
+		if Enum.all?(1..expected_pages, &Map.has_key?(state.results, &1)) do
 			event = cycle_event(expected_pages, state)
 			{:completed, event, new_cycle(%{state | expected_pages: expected_pages})}
 		else
