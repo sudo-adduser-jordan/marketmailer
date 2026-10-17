@@ -678,7 +678,6 @@ defmodule Discord.Broadcaster do
 			{_region, {_cycle, :complete}}, counts -> %{counts | updated: counts.updated + 1}
 			{_region, {_cycle, :unchanged}}, counts -> %{counts | unchanged: counts.unchanged + 1}
 			{_region, {_cycle, {:failed, _reasons, _updated}}}, counts -> %{counts | failed: counts.failed + 1}
-			{_region, {_cycle, {:failed, _reasons}}}, counts -> %{counts | failed: counts.failed + 1}
 			_other, counts -> counts
 		end)
 	end
@@ -762,7 +761,6 @@ defmodule Discord.Broadcaster do
 		Enum.any?(reports, fn
 			{_region, {_cycle, :complete}} -> true
 			{_region, {_cycle, {:failed, _, updated}}} when is_list(updated) -> updated != []
-			{_region, {_cycle, {:failed, _}}} -> false
 			_ -> false
 		end)
 	end
@@ -776,7 +774,6 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
-	defp failed_reasons({:failed, reasons}), do: reasons
 	defp failed_reasons({:failed, reasons, _updated}), do: reasons
 	defp failed_reasons(_), do: nil
 

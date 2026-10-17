@@ -63,103 +63,90 @@ defmodule Marketmailer.PageWorker do
 		Marketmailer.RegionManager.page_started(id, page)
 
 		case ESI.fetch(id, page) do
-			{:ok, data, ctx} ->
-				Marketmailer.Log.info(
-					"page_fetch_ok",
-					%{
-						region: id,
-						page: page,
-						status: 200,
-						orders: length(data),
-						ttl_ms: ctx.ttl,
-						url: ctx.url
-					},
-					"200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
-				)
+			{:ok, data, ctx} -> handle_ok(data, ctx, state)
+			{:not_modified, ctx} -> handle_not_modified(ctx, state)
+			{:error, :service_unavailable, ctx} -> handle_unavailable(ctx, state)
+			{:error, :rate_limited, ctx} -> handle_rate_limited(ctx, state)
+			{:error, :not_found, _ctx} -> stop_gone(state)
+			{:error, reason} -> handle_error(reason, errs, state)
+		end
+	end
 
-				case persist_orders(data, ctx) do
-					:ok ->
-						Marketmailer.RegionManager.page_result(id, page, :updated, %{pages: ctx.pages})
+	defp handle_ok(data, ctx, state) do
+		%{id: id, page: page} = state
 
-					{:error, reason} ->
-						Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: reason})
-				end
+		Marketmailer.Log.info(
+			"page_fetch_ok",
+			%{region: id, page: page, status: 200, orders: length(data), ttl_ms: ctx.ttl, url: ctx.url},
+			"200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
+		)
 
-				new_state = notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})
-				{:noreply, new_state}
-
-			{:not_modified, ctx} ->
-				Marketmailer.Log.info(
-					"page_fetch_not_modified",
-					%{
-						region: id,
-						page: page,
-						status: 304,
-						ttl_ms: ctx.ttl,
-						url: ctx.url
-					},
-					"304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
-				)
-
-				:ok = safe_upsert_etag(ctx)
-				Marketmailer.RegionManager.page_result(id, page, :not_modified, %{pages: ctx.pages})
-				new_state = notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})
-				{:noreply, new_state}
-
-			{:error, :service_unavailable, ctx} ->
-				Marketmailer.Log.info(
-					"page_fetch_unavailable",
-					%{
-						region: id,
-						page: page,
-						status: 503,
-						url: ctx.url
-					},
-					"5xx #{id}     \t #{ctx.url}"
-				)
-
-				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :service_unavailable})
-				schedule_next(@ping_interval)
-				{:noreply, state}
-
-			{:error, :rate_limited, ctx} ->
-				Marketmailer.Log.warning(
-					"page_fetch_rate_limited",
-					%{
-						region: id,
-						page: page,
-						status: 429,
-						retry_after_ms: ctx.retry_after_ms,
-						url: ctx.url
-					},
-					"429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}"
-				)
-
-				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :rate_limited})
-				schedule_next(max(ctx.retry_after_ms, 1_000))
-				{:noreply, %{state | errors: 0}}
-
-			{:error, :not_found, _ctx} ->
-				stop_gone(state)
+		case persist_orders(data, ctx) do
+			:ok ->
+				Marketmailer.RegionManager.page_result(id, page, :updated, %{pages: ctx.pages})
 
 			{:error, reason} ->
-				delay = backoff_ms(errs)
-				schedule_next(delay)
-
-				Marketmailer.Log.warning(
-					"page_fetch_error",
-					%{
-						region: id,
-						page: page,
-						reason: inspect(reason),
-						retry_in_ms: delay
-					},
-					"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
-				)
-
-				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: failure_reason(reason)})
-				{:noreply, %{state | errors: errs + 1}}
+				Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: reason})
 		end
+
+		{:noreply, notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})}
+	end
+
+	defp handle_not_modified(ctx, state) do
+		%{id: id, page: page} = state
+
+		Marketmailer.Log.info(
+			"page_fetch_not_modified",
+			%{region: id, page: page, status: 304, ttl_ms: ctx.ttl, url: ctx.url},
+			"304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
+		)
+
+		:ok = safe_upsert_etag(ctx)
+		Marketmailer.RegionManager.page_result(id, page, :not_modified, %{pages: ctx.pages})
+		{:noreply, notify_and_reschedule(id, ctx.pages, ctx.ttl, %{state | errors: 0})}
+	end
+
+	defp handle_unavailable(ctx, state) do
+		%{id: id, page: page} = state
+
+		Marketmailer.Log.info(
+			"page_fetch_unavailable",
+			%{region: id, page: page, status: 503, url: ctx.url},
+			"5xx #{id}     \t #{ctx.url}"
+		)
+
+		Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :service_unavailable})
+		schedule_next(@ping_interval)
+		{:noreply, state}
+	end
+
+	defp handle_rate_limited(ctx, state) do
+		%{id: id, page: page} = state
+
+		Marketmailer.Log.warning(
+			"page_fetch_rate_limited",
+			%{region: id, page: page, status: 429, retry_after_ms: ctx.retry_after_ms, url: ctx.url},
+			"429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}"
+		)
+
+		Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :rate_limited})
+		schedule_next(max(ctx.retry_after_ms, 1_000))
+		{:noreply, %{state | errors: 0}}
+	end
+
+	defp handle_error(reason, errs, state) do
+		%{id: id, page: page} = state
+		delay = backoff_ms(errs)
+		schedule_next(delay)
+
+		Marketmailer.Log.warning(
+			"page_fetch_error",
+			%{region: id, page: page, reason: inspect(reason), retry_in_ms: delay},
+			"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
+		)
+
+		Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: failure_reason(reason)})
+		{:noreply, %{state | errors: errs + 1}}
 	end
 
 	defp persist_orders(data, ctx) do

@@ -47,6 +47,7 @@ defmodule Marketmailer.RegionManager do
 			 started: MapSet.new(),
 			 results: %{},
 			 expected_pages: nil,
+			 pages: MapSet.new(pages),
 			 listeners: listeners
 		 }}
 	end
@@ -171,11 +172,12 @@ defmodule Marketmailer.RegionManager do
 		state
 	end
 
+	# apply_count/2 runs on every page report, so this must not scan the
+	# registry: state.pages tracks the workers we have started or stopped.
 	defp reconcile_pages(count, state) do
-		live = live_pages(state.id)
 		wanted = MapSet.new(1..count)
-		missing = MapSet.difference(wanted, live)
-		extra = MapSet.difference(live, wanted)
+		missing = MapSet.difference(wanted, state.pages)
+		extra = MapSet.difference(state.pages, wanted)
 
 		Enum.each(missing, &start_page(state.id, &1))
 		Enum.each(extra, &stop_page(state.id, &1))
@@ -188,13 +190,7 @@ defmodule Marketmailer.RegionManager do
 			)
 		end
 
-		state
-	end
-
-	defp live_pages(id) do
-		Marketmailer.Registry
-		|> Registry.select([{{{:page, :"$1", :"$2"}, :_, :_}, [{:==, :"$1", id}], [:"$2"]}])
-		|> MapSet.new()
+		%{state | pages: wanted}
 	end
 
 	defp new_cycle(state) do
@@ -216,71 +212,43 @@ defmodule Marketmailer.RegionManager do
 
 	defp check_cycle(%{expected_pages: nil} = state), do: {:pending, state}
 
-	defp check_cycle(state) do
-		expected_pages = state.expected_pages
-
-		if complete?(expected_pages, state.results) do
-			statuses = Enum.map(state.results, fn {_page, result} -> result.status end)
-			failures = failures(state.results)
-
-			event =
-				cond do
-					failures != [] ->
-						failure = %{
-							region: state.id,
-							cycle_id: state.cycle_id,
-							pages: expected_pages,
-							failures: failures,
-							updated_pages: updated_pages(state.results)
-						}
-
-						log_failure(state.id, failure)
-						{:region_refresh_failed, failure}
-
-					:updated in statuses ->
-						summary = %{
-							region: state.id,
-							cycle_id: state.cycle_id,
-							pages: expected_pages,
-							updated_pages: updated_pages(state.results)
-						}
-
-						Marketmailer.Log.info(
-							"region_refresh_complete",
-							summary,
-							"Region #{state.id} refresh complete"
-						)
-
-						{:region_refresh_complete, summary}
-
-					true ->
-						summary = %{
-							region: state.id,
-							cycle_id: state.cycle_id,
-							pages: expected_pages,
-							updated_pages: []
-						}
-
-						Marketmailer.Log.info(
-							"region_refresh_unchanged",
-							summary,
-							"Region #{state.id} refresh unchanged"
-						)
-
-						{:region_refresh_unchanged, summary}
-				end
-
+	defp check_cycle(%{expected_pages: expected_pages} = state) do
+		# expected_pages is nil or a positive integer, so the key range is exact.
+		if map_size(Map.take(state.results, 1..expected_pages)) == expected_pages do
+			event = cycle_event(expected_pages, state)
 			{:completed, event, new_cycle(%{state | expected_pages: expected_pages})}
 		else
 			{:pending, state}
 		end
 	end
 
-	defp complete?(expected_pages, results) when is_integer(expected_pages) and expected_pages > 0 do
-		Enum.all?(1..expected_pages, &Map.has_key?(results, &1))
-	end
+	# One summary for every outcome; only the event name and level differ.
+	defp cycle_event(expected_pages, state) do
+		summary = %{
+			region: state.id,
+			cycle_id: state.cycle_id,
+			pages: expected_pages,
+			updated_pages: updated_pages(state.results)
+		}
 
-	defp complete?(_expected_pages, _results), do: false
+		failures = failures(state.results)
+		statuses = Enum.map(state.results, fn {_page, result} -> result.status end)
+
+		cond do
+			failures != [] ->
+				summary = Map.put(summary, :failures, failures)
+				log_failure(summary)
+				{:region_refresh_failed, summary}
+
+			:updated in statuses ->
+				Marketmailer.Log.info("region_refresh_complete", summary, "Region #{state.id} refresh complete")
+				{:region_refresh_complete, summary}
+
+			true ->
+				Marketmailer.Log.info("region_refresh_unchanged", summary, "Region #{state.id} refresh unchanged")
+				{:region_refresh_unchanged, summary}
+		end
+	end
 
 	defp failures(results) do
 		for {page, %{status: :failed, reason: reason}} <- results,
@@ -297,7 +265,7 @@ defmodule Marketmailer.RegionManager do
 		state
 	end
 
-	defp log_failure(region, %{pages: pages, failures: failures}) do
+	defp log_failure(%{region: region, pages: pages, failures: failures}) do
 		Marketmailer.Log.warning(
 			"region_refresh_failed",
 			%{region: region, pages: pages, failures: failures},
