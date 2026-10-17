@@ -38,7 +38,7 @@ defmodule Database.Writer do
 				)
 			end
 
-			raise e
+			reraise e, __STACKTRACE__
 	end
 
 	def disk_full?(%Exqlite.Error{} = e), do: String.contains?(Exception.message(e), "database or disk is full")

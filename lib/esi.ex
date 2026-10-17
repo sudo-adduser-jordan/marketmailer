@@ -72,50 +72,44 @@ defmodule ESI do
 				if etag, do: [{"If-None-Match", etag}], else: []
 
 		case http_fun.(url, headers: headers, pool_timeout: :infinity, retry_log_level: :info) do
-			{:ok, %{status: 200} = response} ->
-				clear_maintenance()
-				release(response.headers, url)
-				{:ok, response.body, meta(response, url)}
-
-			{:ok, %{status: 304} = response} ->
-				clear_maintenance()
-				release(response.headers, url)
-				{:not_modified, meta(response, url)}
-
-			{:ok, %{status: 429} = response} ->
-				release(response.headers, url)
-				{:error, :rate_limited, meta(response, url)}
-
-			{:ok, %{status: 503} = response} ->
-				activate_maintenance()
-				{:error, :service_unavailable, meta(response, url)}
-
-			{:ok, %{status: status} = response} when status in [420, 500, 502, 504] ->
-				activate_maintenance()
-				{:error, :service_unavailable, meta(response, url)}
-
-			{:ok, %{status: 404} = response} ->
-				release(response.headers, url)
-				{:error, :not_found, meta(response, url)}
-
 			{:ok, response} ->
+				# Refund the token once, for every status, including 5xx.
 				release(response.headers, url)
-				_ = meta(response, url)
-				{:error, response.status}
+				respond(response, url)
 
 			{:error, error} ->
 				Marketmailer.Log.error(
 					"esi_http_error",
-					%{
-						region: region,
-						page: page,
-						error: inspect(error)
-					},
+					%{region: region, page: page, error: inspect(error)},
 					"#{region}/#{page} HTTP error: #{inspect(error)}"
 				)
 
 				{:error, error}
 		end
+	end
+
+	defp respond(%{status: 200} = response, url) do
+		clear_maintenance()
+		{:ok, response.body, meta(response, url)}
+	end
+
+	defp respond(%{status: 304} = response, url) do
+		clear_maintenance()
+		{:not_modified, meta(response, url)}
+	end
+
+	defp respond(%{status: 429} = response, url), do: {:error, :rate_limited, meta(response, url)}
+
+	defp respond(%{status: status} = response, url) when status in [420, 500, 502, 503, 504] do
+		activate_maintenance()
+		{:error, :service_unavailable, meta(response, url)}
+	end
+
+	defp respond(%{status: 404} = response, url), do: {:error, :not_found, meta(response, url)}
+
+	defp respond(response, url) do
+		_ = meta(response, url)
+		{:error, response.status}
 	end
 
 	defp activate_maintenance, do: :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
@@ -140,13 +134,12 @@ defmodule ESI do
 			etag: first(response.headers, "etag"),
 			ttl: ttl,
 			expires_at: now + ttl,
-			pages: String.to_integer(first(response.headers, "x-pages") || "1"),
+			pages: parse_int(first(response.headers, "x-pages")) || 1,
 			retry_after_ms: retry_after_ms(response.headers)
 		}
 	end
 
-	defp remain(nil), do: 999
-	defp remain(value), do: value |> Integer.parse() |> elem(0)
+	defp remain(value), do: parse_int(value) || 999
 	defp first(val, key), do: val |> Map.get(key, []) |> List.first()
 
 	defp enforce_pause(ttl) do

@@ -142,9 +142,6 @@ defmodule Marketmailer.PageWorker do
 			{:error, :not_found, _ctx} ->
 				stop_gone(state)
 
-			{:error, 404} ->
-				stop_gone(state)
-
 			{:error, reason} ->
 				delay = backoff_ms(errs)
 				schedule_next(delay)
@@ -247,12 +244,12 @@ defmodule Marketmailer.PageWorker do
 	defp try_claim_ping do
 		now = System.system_time(:millisecond)
 
-		case :ets.lookup(:esi_error_state, :maintenance_mode) do
-			[{:maintenance_mode, time}] when time > now ->
+		case :ets.lookup(:esi_error_state, :maintenance_ping) do
+			[{:maintenance_ping, time}] when time > now ->
 				false
 
 			_ ->
-				:ets.insert(:esi_error_state, {:maintenance_mode, now + @ping_interval})
+				:ets.insert(:esi_error_state, {:maintenance_ping, now + @ping_interval})
 				true
 		end
 	end

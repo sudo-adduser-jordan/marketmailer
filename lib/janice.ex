@@ -304,8 +304,6 @@ defmodule Janice.Playwright do
 	end
 
 	defp cached_png(type_id) do
-		ensure_cache()
-
 		case :ets.lookup(@cache_table, type_id) do
 			[{^type_id, png, inserted_at}] ->
 				if System.monotonic_time(:millisecond) - inserted_at < @cache_ttl_ms do
@@ -347,16 +345,7 @@ defmodule Janice.Playwright do
 	end
 
 	defp store_png(type_id, png) do
-		ensure_cache()
 		:ets.insert(@cache_table, {type_id, png, System.monotonic_time(:millisecond)})
-		:ok
-	end
-
-	defp ensure_cache do
-		if :ets.whereis(@cache_table) == :undefined do
-			:ets.new(@cache_table, [:named_table, :set, :public])
-		end
-
 		:ok
 	end
 end
