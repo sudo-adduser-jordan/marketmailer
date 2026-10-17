@@ -62,6 +62,12 @@ defmodule Discord.Consumer do
 				description: "Items undercutting the Jita buy wall",
 				integration_types: @both_installs,
 				contexts: @any_context
+			},
+			%{
+				name: "database_stats",
+				description: "Show database and market cache statistics",
+				integration_types: @both_installs,
+				contexts: @any_context
 			}
 		]
 
@@ -155,6 +161,29 @@ defmodule Discord.Consumer do
 								list_defer_fallback(interaction, Exception.message(error))
 						catch
 							_, reason -> list_defer_fallback(interaction, reason)
+						end
+				end
+
+			"database_stats" ->
+				case active_bot_name() do
+					nil ->
+						respond(interaction, stats_payload(interaction))
+
+					bot_name ->
+						response = %{
+							type: InteractionCallbackType.deferred_channel_message_with_source()
+						}
+
+						try do
+							case Api.Interaction.create_response(interaction, response) do
+								:ok -> start_stats_task(bot_name, interaction)
+								{:error, reason} -> stats_defer_fallback(interaction, reason)
+							end
+						rescue
+							error ->
+								stats_defer_fallback(interaction, Exception.message(error))
+						catch
+							_, reason -> stats_defer_fallback(interaction, reason)
 						end
 				end
 		end
@@ -353,6 +382,68 @@ defmodule Discord.Consumer do
 		catch
 			_, fallback_reason -> log_discord_warning("list_market_defer_fallback_failed", fallback_reason, interaction)
 		end
+	end
+
+	defp start_stats_task(bot_name, interaction) do
+		task =
+			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
+				run_stats_task(bot_name, interaction)
+			end)
+
+		case task do
+			{:ok, _pid} ->
+				:ok
+
+			{:error, reason} ->
+				log_discord_warning("database_stats_task_failed", reason, interaction)
+				edit_response(bot_name, interaction, stats_payload(interaction))
+		end
+	rescue
+		error ->
+			log_discord_warning("database_stats_task_failed", Exception.message(error), interaction)
+			edit_response(bot_name, interaction, stats_payload(interaction))
+	catch
+		_, reason ->
+			log_discord_warning("database_stats_task_failed", reason, interaction)
+			edit_response(bot_name, interaction, stats_payload(interaction))
+	end
+
+	defp run_stats_task(bot_name, interaction) do
+		edit_response(bot_name, interaction, stats_payload(interaction))
+	rescue
+		_ -> edit_response(bot_name, interaction, Embeds.database_stats_error_embed())
+	catch
+		_, _ -> edit_response(bot_name, interaction, Embeds.database_stats_error_embed())
+	end
+
+	defp stats_defer_fallback(interaction, reason) do
+		log_discord_warning("database_stats_defer_failed", reason, interaction)
+
+		try do
+			respond(interaction, stats_payload(interaction))
+		rescue
+			error -> log_discord_warning("database_stats_defer_fallback_failed", Exception.message(error), interaction)
+		catch
+			_, fallback_reason -> log_discord_warning("database_stats_defer_fallback_failed", fallback_reason, interaction)
+		end
+	end
+
+	# The embed is the only response shape: an unavailable cache replies with the
+	# error embed instead of failing the interaction.
+	defp stats_payload(interaction) do
+		case Marketmailer.Stats.stats() do
+			{:ok, stats} -> Embeds.database_stats_embed(stats)
+			{:error, reason} -> stats_unavailable(reason, interaction)
+		end
+	rescue
+		error -> stats_unavailable(Exception.message(error), interaction)
+	catch
+		_, reason -> stats_unavailable(reason, interaction)
+	end
+
+	defp stats_unavailable(reason, interaction) do
+		log_discord_warning("database_stats_failed", reason, interaction)
+		Embeds.database_stats_error_embed()
 	end
 
 	defp list_page_from_custom_id(%{data: %{custom_id: "market_list:page:" <> page}}) do

@@ -480,6 +480,54 @@ defmodule Market.DatabaseTest do
 						 Database.query!("SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'marketListView'")
 	end
 
+	test "aggregates the cache, coverage and freshness for the stats command" do
+		insert_fixture()
+
+		assert {:ok, stats} = MarketDatabase.get_database_stats()
+
+		assert stats.order_count == 3
+		assert stats.sell_orders == 2
+		assert stats.buy_orders == 1
+		assert stats.tracked_types == 1
+		assert stats.tracked_systems == 2
+		assert stats.jita_buy_types == 1
+		assert stats.undercut_rows == 2
+		assert stats.known_names == 3
+		assert stats.known_systems == 2
+		assert stats.unnamed_locations == 0
+		assert stats.unknown_systems == 0
+		assert stats.alert_channels == 0
+		assert stats.page_size == 4096
+		assert stats.page_count > 0
+		assert stats.journal_mode == "wal"
+		assert stats.schema_version == newest_migration_version()
+		assert is_binary(stats.last_write_at)
+		assert stats.first_write_at == stats.last_write_at
+	end
+
+	test "stats aggregates render zeroes on an empty cache" do
+		assert {:ok, stats} = MarketDatabase.get_database_stats()
+
+		assert stats.order_count == 0
+		assert stats.sell_orders == 0
+		assert stats.buy_orders == 0
+		assert stats.undercut_rows == 0
+		assert stats.known_names == 0
+		assert stats.last_write_at == nil
+		assert stats.first_write_at == nil
+		assert stats.page_count > 0
+	end
+
+	defp newest_migration_version do
+		:marketmailer
+		|> :code.priv_dir()
+		|> Path.join("repo/migrations")
+		|> File.ls!()
+		|> Enum.filter(&String.ends_with?(&1, ".exs"))
+		|> Enum.map(&String.to_integer(String.slice(&1, 0, 14)))
+		|> Enum.max()
+	end
+
 	test "upsert_orders persists multi-chunk pages and replaces on conflict" do
 		size = MarketDatabase.upsert_chunk_size()
 		assert size > 0

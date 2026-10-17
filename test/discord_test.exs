@@ -827,10 +827,12 @@ defmodule Discord.EmbedsTest do
 			Discord.Embeds.list_channel(%{channel_id: 123}),
 			Discord.Embeds.list_channel(nil),
 			Discord.Embeds.esi_down_embed(),
-			Discord.Embeds.no_update_embed()
+			Discord.Embeds.no_update_embed(),
+			Discord.Embeds.database_stats_embed(%{}),
+			Discord.Embeds.database_stats_error_embed()
 		]
 
-		assert length(embeds) == 11
+		assert length(embeds) == 13
 
 		for embed <- embeds do
 			assert %Embed{footer: %Embed.Footer{text: text}, timestamp: nil} = embed
@@ -908,5 +910,111 @@ defmodule Discord.EmbedsTest do
 			assert embed.thumbnail.url == "https://images.evetech.net/types/52678/icon?size=64"
 			refute embed.thumbnail.url =~ "81008"
 		end
+	end
+
+	test "database stats embed renders every section" do
+		stats = %{
+			order_count: 1_868_361,
+			sell_orders: 1_378_574,
+			buy_orders: 489_787,
+			tracked_types: 19_544,
+			tracked_systems: 1_719,
+			jita_buy_types: 17_806,
+			undercut_rows: 47_231,
+			known_names: 31_800,
+			known_systems: 8_490,
+			etag_pages: 1_638,
+			alert_channels: 1,
+			unnamed_locations: 263_972,
+			unknown_systems: 0,
+			last_write_at: "2026-10-17T01:34:03",
+			first_write_at: "2026-10-01T03:19:12",
+			schema_version: 20_261_019_000_000,
+			page_count: 176_182,
+			page_size: 4_096,
+			journal_mode: "wal",
+			query_ms: 840,
+			page_workers: 42,
+			regions: 115,
+			uptime_seconds: 190_800,
+			sde_build: "3569502",
+			cache_entries: 1_638,
+			esi_error_entries: 0,
+			janice_cache_entries: 0
+		}
+
+		embed = Discord.Embeds.database_stats_embed(stats)
+		fields = Map.new(embed.fields, &{&1.name, &1.value})
+
+		assert embed.title == "Database Statistics"
+		assert embed.author.icon_url =~ "broadcast.png"
+		assert embed.thumbnail.url =~ "database.png"
+		assert embed.color == 0x7289DA
+
+		assert Map.keys(fields) |> Enum.sort() ==
+						 ["Coverage", "Freshness", "Order cache", "Poller", "Storage", "Undercut list"]
+
+		assert fields["Order cache"] =~ "Orders: **1,868,361**"
+		assert fields["Order cache"] =~ "Sell / buy: 1,378,574 / 489,787"
+		assert fields["Order cache"] =~ "Types: 19,544"
+		assert fields["Order cache"] =~ "Systems: 1,719"
+
+		assert fields["Storage"] =~ "Size: **688.2 MB**"
+		assert fields["Storage"] =~ "Journal: wal"
+		assert fields["Storage"] =~ "Schema: 20261019000000"
+		assert fields["Storage"] =~ "Oldest order: Oct 01, 2026 03:19 UTC"
+
+		assert fields["Freshness"] =~ "Last write: **"
+		assert fields["Freshness"] =~ "ago**"
+		assert fields["Freshness"] =~ "Query: 840 ms"
+
+		assert fields["Undercut list"] =~ "47,231 orders undercut the Jita buy wall"
+		assert fields["Undercut list"] =~ "`/list_market` shows the top 100"
+		assert fields["Undercut list"] =~ "Jita buy-wall types: 17,806"
+
+		assert fields["Coverage"] =~ "Names: 31,800 / systems: 8,490"
+		assert fields["Coverage"] =~ "Types with orders: 19,544 of 31,800 known names"
+		assert fields["Coverage"] =~ "Unnamed locations: 263,972 (14.1% of orders)"
+		assert fields["Coverage"] =~ "Unknown systems: 0"
+
+		assert fields["Poller"] =~ "Regions: 115 • page workers: 42"
+		assert fields["Poller"] =~ "Etag pages: 1,638 • ETS cache: 1,638"
+		assert fields["Poller"] =~ "Alert channels: 1 • VM uptime: 2d 5h"
+		assert fields["Poller"] =~ "SDE build: 3569502"
+
+		for {_name, value} <- fields, do: refute(value =~ "nil")
+	end
+
+	test "database stats embed survives nil, empty and unknown stats" do
+		for stats <- [nil, %{}, :boom, "oops"] do
+			embed = Discord.Embeds.database_stats_embed(stats)
+			fields = Map.new(embed.fields, &{&1.name, &1.value})
+
+			assert embed.title == "Database Statistics"
+			assert map_size(fields) == 6
+			assert fields["Order cache"] =~ "Orders: **0**"
+			assert fields["Storage"] =~ "Size: **?**"
+			assert fields["Freshness"] =~ "Last write: **never**"
+			assert fields["Undercut list"] =~ "0 orders undercut"
+			assert fields["Coverage"] =~ "Unknown systems: 0"
+			assert fields["Poller"] =~ "SDE build: ?"
+
+			for {_name, value} <- fields do
+				refute value =~ "nil"
+				assert is_binary(value) and value != ""
+			end
+		end
+	end
+
+	test "database stats error embed names the failed read" do
+		embed = Discord.Embeds.database_stats_error_embed()
+
+		assert embed.title == "Database Statistics"
+		assert embed.author.icon_url =~ "failure.png"
+		assert embed.thumbnail.url =~ "database.png"
+		assert embed.color == 0xF04747
+		assert embed.description =~ "could not be read"
+		assert %Embed.Footer{text: text} = embed.footer
+		assert text =~ ~r/ • v\d+\.\d+\.\d+$/
 	end
 end

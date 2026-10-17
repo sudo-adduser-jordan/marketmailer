@@ -542,4 +542,208 @@ defmodule Discord.Embeds do
 
 		channel_embed(description, @color_info)
 	end
+
+	def database_stats_embed(stats) do
+		stats = if is_map(stats), do: stats, else: %{}
+
+		%Embed{
+			author: branded_author(),
+			title: "Database Statistics",
+			description: "Local SQLite cache — no ESI calls.",
+			color: @color_info,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_database
+			},
+			fields: [
+				%Embed.Field{name: "Order cache", value: order_cache_value(stats), inline: true},
+				%Embed.Field{name: "Storage", value: storage_value(stats), inline: true},
+				%Embed.Field{name: "Freshness", value: freshness_value(stats), inline: true},
+				%Embed.Field{name: "Undercut list", value: undercut_value(stats), inline: false},
+				%Embed.Field{name: "Coverage", value: coverage_value(stats), inline: false},
+				%Embed.Field{name: "Poller", value: poller_value(stats), inline: false}
+			]
+		}
+		|> with_version()
+	end
+
+	def database_stats_error_embed do
+		%Embed{
+			author: error_author(),
+			title: "Database Statistics",
+			description: "The database statistics could not be read. The cache is unchanged and the command can be retried.",
+			color: @color_error,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_database
+			}
+		}
+		|> with_version()
+	end
+
+	defp order_cache_value(stats) do
+		"""
+		Orders: **#{format_count(stats[:order_count])}**
+		Sell / buy: #{format_count(stats[:sell_orders])} / #{format_count(stats[:buy_orders])}
+		Types: #{format_count(stats[:tracked_types])}
+		Systems: #{format_count(stats[:tracked_systems])}
+		"""
+		|> String.trim_trailing()
+	end
+
+	defp storage_value(stats) do
+		"""
+		Size: **#{format_bytes(stats[:page_count], stats[:page_size])}**
+		Journal: #{stats[:journal_mode] || "?"}
+		Schema: #{stats[:schema_version] || "?"}
+		Oldest order: #{format_timestamp(stats[:first_write_at])}
+		"""
+		|> String.trim_trailing()
+	end
+
+	defp freshness_value(stats) do
+		"""
+		Last write: **#{relative_age(stats[:last_write_at])}**
+		Query: #{format_milliseconds(stats[:query_ms])}
+		"""
+		|> String.trim_trailing()
+	end
+
+	defp undercut_value(stats) do
+		"#{format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.\n" <>
+			"Jita buy-wall types: #{count(stats[:jita_buy_types])}"
+	end
+
+	defp coverage_value(stats) do
+		types = count(stats[:tracked_types])
+		names = count(stats[:known_names])
+
+		"Names: #{names} / systems: #{count(stats[:known_systems])} in the SDE cache\n" <>
+			"Types with orders: #{types} of #{names} known names\n" <>
+			"Unnamed locations: #{count(stats[:unnamed_locations])} " <>
+			"(#{share(stats[:unnamed_locations], stats[:order_count])} of orders)\n" <>
+			"Unknown systems: #{count(stats[:unknown_systems])}"
+	end
+
+	defp poller_value(stats) do
+		"Regions: #{count(stats[:regions])} • page workers: #{count(stats[:page_workers])}\n" <>
+			"Etag pages: #{count(stats[:etag_pages])} • ETS cache: #{count(stats[:cache_entries])} " <>
+			"(#{count(stats[:esi_error_entries])} error-state, #{count(stats[:janice_cache_entries])} chart)\n" <>
+			"Alert channels: #{count(stats[:alert_channels])} • VM uptime: #{format_uptime(stats[:uptime_seconds])} • " <>
+			"SDE build: #{stats[:sde_build] || "?"}"
+	end
+
+	defp count(nil), do: "0"
+	defp count(value) when is_integer(value), do: format_count(value)
+	defp count(value) when is_binary(value), do: value
+	defp count(_), do: "0"
+
+	# 1234567 -> 1,234,567 (Discord renders thousands separators fine).
+	defp format_count(nil), do: "0"
+
+	defp format_count(value) when is_integer(value) do
+		value
+		|> Integer.to_string()
+		|> group_digits()
+	end
+
+	defp format_count(value) when is_float(value), do: format_count(round(value))
+	defp format_count(value) when is_binary(value), do: value
+	defp format_count(_), do: "?"
+
+	defp group_digits(digits) do
+		sign = if String.starts_with?(digits, "-"), do: "-", else: ""
+		digits = String.trim_leading(digits, "-")
+
+		digits
+		|> String.reverse()
+		|> String.replace(~r/(\d{3})(?=\d)/, "\\1,")
+		|> String.reverse()
+		|> then(&(sign <> &1))
+	end
+
+	defp format_bytes(nil, _page_size), do: "?"
+	defp format_bytes(_page_count, nil), do: "?"
+
+	defp format_bytes(page_count, page_size) when is_integer(page_count) and is_integer(page_size) do
+		bytes = page_count * page_size
+
+		cond do
+			bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
+			bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 1)} MB"
+			bytes >= 1_024 -> "#{Float.round(bytes / 1_024, 1)} KB"
+			true -> "#{bytes} B"
+		end
+	end
+
+	defp format_bytes(_page_count, _page_size), do: "?"
+
+	defp format_milliseconds(nil), do: "?"
+	defp format_milliseconds(ms) when is_integer(ms), do: "#{format_count(ms)} ms"
+	defp format_milliseconds(_), do: "?"
+
+	# SQLite stores NaiveDateTime UTC seconds; a missing/failed parse must not
+	# fall back to "now" the way the footer's DateTime helper does.
+	defp format_timestamp(nil), do: "?"
+	defp format_timestamp(""), do: "?"
+
+	defp format_timestamp(timestamp) when is_binary(timestamp) do
+		case NaiveDateTime.from_iso8601(String.trim(timestamp)) do
+			{:ok, at} -> Calendar.strftime(at, "%b %d, %Y %H:%M UTC")
+			{:error, _} -> "?"
+		end
+	end
+
+	defp format_timestamp(_), do: "?"
+
+	defp format_uptime(nil), do: "?"
+
+	defp format_uptime(seconds) when is_integer(seconds) and seconds >= 0 do
+		days = div(seconds, 86_400)
+		hours = div(rem(seconds, 86_400), 3_600)
+		minutes = div(rem(seconds, 3_600), 60)
+
+		cond do
+			days > 0 -> "#{days}d #{hours}h"
+			hours > 0 -> "#{hours}h #{minutes}m"
+			true -> "#{minutes}m"
+		end
+	end
+
+	defp format_uptime(_), do: "?"
+
+	# The market table stores NaiveDateTime UTC seconds ("2026-10-17T01:34:03").
+	defp relative_age(nil), do: "never"
+	defp relative_age(""), do: "never"
+
+	defp relative_age(timestamp) when is_binary(timestamp) do
+		case NaiveDateTime.from_iso8601(String.trim(timestamp)) do
+			{:ok, at} -> relative_age_seconds(NaiveDateTime.diff(NaiveDateTime.utc_now(), at, :second))
+			{:error, _} -> "?"
+		end
+	end
+
+	defp relative_age(%NaiveDateTime{} = at),
+		do: relative_age_seconds(NaiveDateTime.diff(NaiveDateTime.utc_now(), at, :second))
+
+	defp relative_age(_), do: "?"
+
+	defp relative_age_seconds(seconds) do
+		cond do
+			seconds < 60 -> "#{max(seconds, 0)}s ago"
+			seconds < 3_600 -> "#{div(seconds, 60)}m ago"
+			seconds < 86_400 -> "#{div(seconds, 3_600)}h ago"
+			true -> "#{div(seconds, 86_400)}d ago"
+		end
+	end
+
+	defp share(nil, _total), do: "?"
+	defp share(_part, nil), do: "?"
+	defp share(_part, 0), do: "?"
+
+	defp share(part, total) when is_integer(part) and is_integer(total) do
+		"#{Float.round(part / total * 100, 1)}%"
+	end
+
+	defp share(_part, _total), do: "?"
 end

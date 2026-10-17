@@ -448,6 +448,16 @@ defmodule Market.Database do
 
 	def get_items_less_than_jita_buy, do: load_rows("getItemsLessThan.sql")
 
+	# Read-only aggregates for /database_stats. A single row of scalar
+	# subqueries keeps it to one round trip; load_rows/2 already logs a
+	# failed statement as market_query_failed.
+	def get_database_stats do
+		case load_rows("databaseStats.sql") do
+			[stats | _] -> {:ok, stats}
+			[] -> {:error, :unavailable}
+		end
+	end
+
 	defp load_rows(file, params \\ []) do
 		structs? = file in ["getBestOrder.sql", "getMarketItem.sql"]
 
