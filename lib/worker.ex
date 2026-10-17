@@ -3,6 +3,8 @@ defmodule Marketmailer.PageWorker do
 
 	@ping_interval 10_000
 	@gate_recheck_ms 5_000
+	# Max spread, in ms, applied once per worker at start (see init/1).
+	@start_jitter 30_000
 
 	def start_link({manager, id, page}) do
 		GenServer.start_link(__MODULE__, {manager, id, page},
@@ -12,9 +14,19 @@ defmodule Marketmailer.PageWorker do
 
 	@impl true
 	def init({_manager, id, page}) do
-		delay = Etag.Database.resume_delay_ms(ESI.page_url(id, page))
+		# Offset each worker by a random start so the whole market does not
+		# fetch (and then persist) on the same ESI TTL boundary. The offset is
+		# applied once here, so it persists across cycles without drifting.
+		delay = Etag.Database.resume_delay_ms(ESI.page_url(id, page)) + start_jitter_ms()
 		Process.send_after(self(), :work, delay)
 		{:ok, %{id: id, page: page, errors: 0}}
+	end
+
+	defp start_jitter_ms do
+		case Application.get_env(:marketmailer, :poll_start_jitter_ms, @start_jitter) do
+			max when is_integer(max) and max > 0 -> :rand.uniform(max)
+			_ -> 0
+		end
 	end
 
 	@impl true
@@ -153,8 +165,21 @@ defmodule Marketmailer.PageWorker do
 				{:error, persist_failure_reason(e, ctx, length(data))}
 
 			_count ->
-				Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at))
-				:ok
+				# The orders are durable here; a failed etag write only costs a
+				# re-fetch next cycle, so it must never mask the persisted page.
+				case Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at)) do
+					:ok ->
+						:ok
+
+					{:error, e} ->
+						Marketmailer.Log.warning(
+							"etag_persist_failed",
+							%{region: ctx.url, reason: first_line(e)},
+							"Etag persist failed for #{ctx.url}"
+						)
+
+						:ok
+				end
 		end
 	rescue
 		e ->

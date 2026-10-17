@@ -619,7 +619,7 @@ defmodule Database.WriterTest do
 		assert Database.Writer.write(fn ->
 						 send(test_pid, {:ran, self()})
 						 :ok
-					 end) == :ok
+					 end) == {:ok, :ok}
 
 		assert_receive {:ran, _pid}
 	end

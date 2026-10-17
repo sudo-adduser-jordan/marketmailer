@@ -119,8 +119,11 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   `task docker:run` bind-mounts `./priv/data` for containers. WAL journal mode.
 - **Fetch -> write -> read.** ESI pollers write only to the single DB file.
   Broadcasts render from the same file via `Market.Database` (`lib/database.ex`),
-  which never touches the network. All writes go through `Database.Writer`
-  (direct pool writes; SQLite's `busy_timeout` absorbs writer contention).
+  which never touches the network. All writes go through `Database.Writer`,
+  which serializes them on `Database.Queue` (SQLite has a single writer) so
+  they never contend on the database lock or get dropped by the connection
+  pool, and retries a transient `Database busy`/pool error before surfacing
+  a real failure. Reads keep the full connection pool.
 - **Standard Ecto migrations** live in `priv/repo/migrations` and apply to the
   single DB. `Marketmailer.
   Application.start/2` runs pending migrations on every boot before the
@@ -213,7 +216,8 @@ then pipe to jq:
 
 - `lib/app.ex` - supervision tree + boot-time migration run (see policy above)
 - `priv/repo/migrations` - schema migrations
-- `lib/database.ex` - `Database` repo + `Database.Writer` (direct pool writes);
+- `lib/database.ex` - `Database` repo + `Database.Writer`/`Database.Queue`
+  (serialized, retrying writes on one process);
   `Etag.Database`, `Discord.Database`, `Market.Database` (reads + writes)
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
   (types, systems, composed NPC station names)

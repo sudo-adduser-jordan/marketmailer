@@ -4,21 +4,75 @@ defmodule Database do
 		adapter: Ecto.Adapters.SQLite3
 end
 
-defmodule Database.Writer do
+defmodule Database.Queue do
+	use GenServer
+
+	# SQLite has a single writer. Funneling every write through this one
+	# process means write statements never contend on the database lock and
+	# are never dropped by the connection pool: a caller blocks until its
+	# write is persisted (or a real error is returned). Reads keep using the
+	# full connection pool.
+	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
+
 	def write(fun) when is_function(fun, 0) do
-		fun.()
+		case Process.whereis(__MODULE__) do
+			nil -> Database.Writer.run(fun)
+			_ -> GenServer.call(__MODULE__, {:write, fun}, :infinity)
+		end
+	end
+
+	@impl true
+	def init(_), do: {:ok, %{}}
+
+	@impl true
+	def handle_call({:write, fun}, _from, state) do
+		{:reply, Database.Writer.run(fun), state}
+	end
+
+	# Absorb stray messages so a wayward send can never take the writer down.
+	@impl true
+	def handle_info(_message, state), do: {:noreply, state}
+end
+
+defmodule Database.Writer do
+	# Bounded backoff. Serialization absorbs contention; this is the last
+	# line of defence for a transient SQLite/DBConnection error.
+	@retry_delays [10, 25, 50, 100, 200, 400, 800, 1_600, 3_200]
+
+	def write(fun) when is_function(fun, 0), do: Database.Queue.write(fun)
+
+	# Runs a write closure, retrying transient contention, and returns
+	# {:ok, result} or {:error, exception}. Never raises, never drops
+	# silently: an exhausted retry surfaces the error to the caller.
+	def run(fun) when is_function(fun, 0), do: attempt(fun, @retry_delays)
+
+	defp attempt(fun, delays) do
+		{:ok, fun.()}
 	rescue
 		e ->
-			if disk_full?(e) do
-				Marketmailer.Log.error(
-					"disk_full",
-					%{reason: Exception.message(e)},
-					"Database or disk is full; skipping write"
-				)
-			end
+			cond do
+				disk_full?(e) ->
+					Marketmailer.Log.error(
+						"disk_full",
+						%{reason: Exception.message(e)},
+						"Database or disk is full; write failed"
+					)
 
-			reraise e, __STACKTRACE__
+					{:error, e}
+
+				retryable?(e) and delays != [] ->
+					[wait | rest] = delays
+					Process.sleep(wait + :rand.uniform(10))
+					attempt(fun, rest)
+
+				true ->
+					{:error, e}
+			end
 	end
+
+	def retryable?(%DBConnection.ConnectionError{}), do: true
+	def retryable?(%Exqlite.Error{} = e), do: String.starts_with?(Exception.message(e), "Database busy")
+	def retryable?(_), do: false
 
 	def disk_full?(%Exqlite.Error{} = e), do: String.contains?(Exception.message(e), "database or disk is full")
 
@@ -137,9 +191,19 @@ defmodule Etag.Database do
 				Enum.each(dead, &:ets.delete(:market_cache, &1))
 			end
 
-			Database.Writer.write(fn ->
-				Database.delete_all(from(tag in "etags", where: tag.url in ^dead))
-			end)
+			case Database.Writer.write(fn ->
+						 Database.delete_all(from(tag in "etags", where: tag.url in ^dead))
+					 end) do
+				{:ok, _} ->
+					:ok
+
+				{:error, e} ->
+					Marketmailer.Log.warning(
+						"etag_prune_failed",
+						%{region: region, reason: Exception.message(e)},
+						"Failed to prune etags above page #{max_page} for region #{region}"
+					)
+			end
 		end
 
 		:ok
@@ -165,16 +229,23 @@ defmodule Etag.Database do
 	def upsert_etag(url, etag, expires_at \\ nil) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Database.Writer.write(fn ->
-			Database.insert_all(
-				"etags",
-				[%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
-				on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
-				conflict_target: :url
-			)
-		end)
+		case Database.Writer.write(fn ->
+					 Database.insert_all(
+						 "etags",
+						 [%{url: url, etag: etag, expires_at: expires_at, inserted_at: now, updated_at: now}],
+						 on_conflict: {:replace, [:etag, :expires_at, :updated_at]},
+						 conflict_target: :url
+					 )
+				 end) do
+			# Only cache the etag once the row is durable, so a failed write can
+			# never mask a page the database has not seen.
+			{:ok, _} ->
+				:ets.insert(:market_cache, {url, etag, expires_at})
+				:ok
 
-		:ets.insert(:market_cache, {url, etag, expires_at})
+			{:error, e} ->
+				{:error, e}
+		end
 	end
 
 	def touch_cache(url, etag, expires_at) do
@@ -203,29 +274,36 @@ defmodule Discord.Database do
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
 
-		Database.Writer.write(fn ->
-			Database.insert_all(
-				@table,
-				[
-					%{
-						guild_id: guild_id,
-						channel_id: channel_id,
-						inserted_at: now,
-						updated_at: now
-					}
-				],
-				on_conflict: {:replace, [:channel_id, :updated_at]},
-				conflict_target: :guild_id
-			)
-		end)
+		raise_on_error(
+			Database.Writer.write(fn ->
+				Database.insert_all(
+					@table,
+					[
+						%{
+							guild_id: guild_id,
+							channel_id: channel_id,
+							inserted_at: now,
+							updated_at: now
+						}
+					],
+					on_conflict: {:replace, [:channel_id, :updated_at]},
+					conflict_target: :guild_id
+				)
+			end)
+		)
 	end
 
 	def delete(guild_id) do
 		case get(guild_id) do
 			nil -> :ok
-			record -> Database.Writer.write(fn -> Database.delete(record) end)
+			record -> raise_on_error(Database.Writer.write(fn -> Database.delete(record) end))
 		end
 	end
+
+	# Slash-command handlers respond only after this returns, so a failed
+	# write must raise (and be logged) rather than report false success.
+	defp raise_on_error({:ok, _}), do: :ok
+	defp raise_on_error({:error, e}), do: raise(e)
 end
 
 defmodule Market.Database do
@@ -252,69 +330,82 @@ defmodule Market.Database do
 				|> Map.merge(%{url: url, inserted_at: timestamp, updated_at: timestamp})
 			end)
 
-		Database.Writer.write(fn ->
-			{changed, seen_ids} =
-				if is_binary(url) do
-					existing =
-						from(m in "market",
-							where: m.url == ^url,
-							select:
-								{m.order_id, m.duration, m.is_buy_order, m.issued, m.location_id, m.min_volume, m.price, m.range,
-								 m.system_id, m.type_id, m.volume_remain, m.volume_total}
-						)
-						|> Database.all()
-						|> Map.new(fn row ->
-							# The select list after order_id is exactly @compare_fields, in order.
-							[order_id | values] = Tuple.to_list(row)
+		case Database.Writer.write(fn -> write_page(rows, url) end) do
+			{:ok, written} -> written
+			{:error, e} -> {:error, e}
+		end
+	end
 
-							{order_id, @compare_fields |> Enum.zip(values) |> Map.new()}
-						end)
+	# One transaction per page: the insert and the stale-id delete commit
+	# together, so a partial failure can never leave a page half-updated (or
+	# delete rows the insert did not replace).
+	defp write_page(rows, url) do
+		case Database.transaction(fn ->
+					 {changed, seen_ids} =
+						 if is_binary(url) do
+							 existing =
+								 from(m in "market",
+									 where: m.url == ^url,
+									 select:
+										 {m.order_id, m.duration, m.is_buy_order, m.issued, m.location_id, m.min_volume, m.price, m.range,
+											m.system_id, m.type_id, m.volume_remain, m.volume_total}
+								 )
+								 |> Database.all()
+								 |> Map.new(fn row ->
+									 # The select list after order_id is exactly @compare_fields, in order.
+									 [order_id | values] = Tuple.to_list(row)
 
-					changed =
-						Enum.filter(rows, fn row ->
-							case Map.get(existing, row.order_id) do
-								nil ->
-									true
+									 {order_id, @compare_fields |> Enum.zip(values) |> Map.new()}
+								 end)
 
-								prev ->
-									Enum.any?(@compare_fields, fn field ->
-										normalize_field(field, prev[field]) != row[field]
-									end)
-							end
-						end)
+							 changed =
+								 Enum.filter(rows, fn row ->
+									 case Map.get(existing, row.order_id) do
+										 nil ->
+											 true
 
-					{changed, MapSet.new(rows, & &1.order_id)}
-				else
-					{rows, MapSet.new(rows, & &1.order_id)}
-				end
+										 prev ->
+											 Enum.any?(@compare_fields, fn field ->
+												 normalize_field(field, prev[field]) != row[field]
+											 end)
+									 end
+								 end)
 
-			written =
-				changed
-				|> Enum.chunk_every(@upsert_chunk_size)
-				|> Enum.reduce(0, fn chunk, total ->
-					{count, _} =
-						Database.insert_all(@table, chunk,
-							on_conflict: {:replace, @fields ++ [:url, :updated_at]},
-							conflict_target: :order_id
-						)
+							 {changed, MapSet.new(rows, & &1.order_id)}
+						 else
+							 {rows, MapSet.new(rows, & &1.order_id)}
+						 end
 
-					total + count
-				end)
+					 written =
+						 changed
+						 |> Enum.chunk_every(@upsert_chunk_size)
+						 |> Enum.reduce(0, fn chunk, total ->
+							 {count, _} =
+								 Database.insert_all(@table, chunk,
+									 on_conflict: {:replace, @fields ++ [:url, :updated_at]},
+									 conflict_target: :order_id
+								 )
 
-			if is_binary(url) do
-				stale_ids =
-					from(m in "market", where: m.url == ^url, select: m.order_id)
-					|> Database.all()
-					|> Enum.reject(&MapSet.member?(seen_ids, &1))
+							 total + count
+						 end)
 
-				Enum.chunk_every(stale_ids, @upsert_chunk_size)
-				|> Enum.each(fn chunk ->
-					Database.delete_all(from m in "market", where: m.order_id in ^chunk)
-				end)
-			end
+					 if is_binary(url) do
+						 stale_ids =
+							 from(m in "market", where: m.url == ^url, select: m.order_id)
+							 |> Database.all()
+							 |> Enum.reject(&MapSet.member?(seen_ids, &1))
 
-			written
-		end)
+						 Enum.chunk_every(stale_ids, @upsert_chunk_size)
+						 |> Enum.each(fn chunk ->
+							 Database.delete_all(from m in "market", where: m.order_id in ^chunk)
+						 end)
+					 end
+
+					 written
+				 end) do
+			{:ok, written} -> written
+			{:error, reason} -> raise "market upsert transaction failed: #{inspect(reason)}"
+		end
 	end
 
 	def upsert_chunk_size, do: @upsert_chunk_size

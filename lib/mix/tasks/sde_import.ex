@@ -427,16 +427,22 @@ defmodule Mix.Tasks.Sde.Import do
 	end
 
 	defp record_build(build) do
-		Database.Writer.write(fn ->
-			Database.query!("CREATE TABLE IF NOT EXISTS sde_imports (build TEXT PRIMARY KEY, imported_at TEXT NOT NULL)", [])
+		case Database.Writer.write(fn ->
+					 Database.query!(
+						 "CREATE TABLE IF NOT EXISTS sde_imports (build TEXT PRIMARY KEY, imported_at TEXT NOT NULL)",
+						 []
+					 )
 
-			Database.query!(
-				"INSERT INTO sde_imports (build, imported_at) VALUES (?, ?) ON CONFLICT(build) DO UPDATE SET imported_at = excluded.imported_at",
-				[
-					to_string(build),
-					NaiveDateTime.utc_now(:second) |> NaiveDateTime.to_string()
-				]
-			)
-		end)
+					 Database.query!(
+						 "INSERT INTO sde_imports (build, imported_at) VALUES (?, ?) ON CONFLICT(build) DO UPDATE SET imported_at = excluded.imported_at",
+						 [
+							 to_string(build),
+							 NaiveDateTime.utc_now(:second) |> NaiveDateTime.to_string()
+						 ]
+					 )
+				 end) do
+			{:ok, _} -> :ok
+			{:error, e} -> raise(e)
+		end
 	end
 end
