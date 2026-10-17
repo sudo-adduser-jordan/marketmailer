@@ -1,6 +1,66 @@
 {
-  ~c"0.1.26",
+  ~c"0.1.27",
   [
+    {~c"0.1.26",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Marketmailer.Stats: added by this transition.
+       {:add_module, Marketmailer.Stats},
+       # Database.Queue: behaviour GenServer. The update suspends the process and calls
+       # code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Database.Queue, {:advanced, []}},
+       # Database.Writer: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Database.Writer},
+       # Discord.Broadcaster: behaviour GenServer. The update suspends the process and
+       # calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Discord.Broadcaster, {:advanced, []}},
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Discord.Database: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Database},
+       # Discord.Embeds: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Discord.Embeds},
+       # ESI: no behaviour. The code is replaced without suspending anything.
+       {:load_module, ESI},
+       # Etag.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Etag.Database},
+       # Janice.Playwright: behaviour Janice.Capture. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Janice.Playwright},
+       # Market.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Market.Database},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.PageWorker, {:advanced, []}},
+       # Marketmailer.RegionManager: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.RegionManager, {:advanced, []}},
+       # Mix.Tasks.Chartdb: behaviour Mix.Task. release_handler migrates no state for it,
+       # so the code is replaced without suspending anything. If the module holds state
+       # that changes shape, load_module is not enough.
+       {:load_module, Mix.Tasks.Chartdb},
+       # Mix.Tasks.Sde.Import: behaviour Mix.Task. release_handler migrates no state for
+       # it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Mix.Tasks.Sde.Import}
+     ]},
     {~c"0.1.25",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
@@ -168,6 +228,67 @@
      ]},
   ],
   [
+    {~c"0.1.26",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Database.Queue: behaviour GenServer. The update suspends the process and calls
+       # code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Database.Queue, {:advanced, []}},
+       # Database.Writer: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Database.Writer},
+       # Discord.Broadcaster: behaviour GenServer. The update suspends the process and
+       # calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Discord.Broadcaster, {:advanced, []}},
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Discord.Database: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Discord.Database},
+       # Discord.Embeds: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Discord.Embeds},
+       # ESI: no behaviour. The code is replaced without suspending anything.
+       {:load_module, ESI},
+       # Etag.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Etag.Database},
+       # Janice.Playwright: behaviour Janice.Capture. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Janice.Playwright},
+       # Market.Database: no behaviour. The code is replaced without suspending anything.
+       {:load_module, Market.Database},
+       # Marketmailer.Application: behaviour Application. release_handler migrates no
+       # state for it, so the code is replaced without suspending anything. If the module
+       # holds state that changes shape, load_module is not enough.
+       {:load_module, Marketmailer.Application},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format},
+       # Marketmailer.PageWorker: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.PageWorker, {:advanced, []}},
+       # Marketmailer.RegionManager: behaviour GenServer. The update suspends the process
+       # and calls code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Marketmailer.RegionManager, {:advanced, []}},
+       # Mix.Tasks.Chartdb: behaviour Mix.Task. release_handler migrates no state for it,
+       # so the code is replaced without suspending anything. If the module holds state
+       # that changes shape, load_module is not enough.
+       {:load_module, Mix.Tasks.Chartdb},
+       # Mix.Tasks.Sde.Import: behaviour Mix.Task. release_handler migrates no state for
+       # it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Mix.Tasks.Sde.Import},
+       # Marketmailer.Stats: removed by this transition. delete_module purges the module
+       # and loads nothing, so never use it for a module the target build still has.
+       {:delete_module, Marketmailer.Stats}
+     ]},
     {~c"0.1.25",
      [
        # Discord.Messages was extracted into Discord.Embeds, so this transition
