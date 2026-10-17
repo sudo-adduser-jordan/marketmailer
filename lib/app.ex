@@ -18,7 +18,6 @@ defmodule Marketmailer.Application do
 		children =
 			[
 				Database,
-				Database.Queue,
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
 				{Task.Supervisor, name: Marketmailer.TaskSup}

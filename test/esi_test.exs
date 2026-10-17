@@ -74,4 +74,26 @@ defmodule ESI.ClientTest do
 
 				assert {:error, 400} = ESI.fetch(98_001_003, 1, http_fun: http_fun)
 		end
+
+		test "429 maps to :rate_limited and surfaces Retry-After" do
+				http_fun = fn _url, _opts ->
+						{:ok, %{status: 429, headers: %{"retry-after" => ["30"], "x-pages" => ["1"]}, body: ""}}
+				end
+
+				assert {:error, :rate_limited, ctx} = ESI.fetch(98_001_004, 1, http_fun: http_fun)
+				assert ctx.retry_after_ms == 30_000
+		end
+
+		test "a low ESI error limit trips the global pause" do
+				:ets.delete(:esi_error_state, :blocked_until)
+
+				http_fun = fn _url, _opts ->
+						{:ok, %{status: 200, headers: %{"x-esi-error-limit-remain" => ["5"]}, body: "[]"}}
+				end
+
+				assert {:ok, _body, ctx} = ESI.fetch(98_001_005, 1, http_fun: http_fun)
+				assert ctx.ttl >= 61_000
+				assert [{:blocked_until, blocked_until}] = :ets.lookup(:esi_error_state, :blocked_until)
+				assert blocked_until > System.system_time(:millisecond)
+		end
 end

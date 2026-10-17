@@ -120,7 +120,7 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
 - **Fetch -> write -> read.** ESI pollers write only to the single DB file.
   Broadcasts render from the same file via `Market.Database` (`lib/database.ex`),
   which never touches the network. All writes go through `Database.Writer`
-  (direct pool writes with contention retry).
+  (direct pool writes; SQLite's `busy_timeout` absorbs writer contention).
 - **Standard Ecto migrations** live in `priv/repo/migrations` and apply to the
   single DB. `Marketmailer.
   Application.start/2` runs pending migrations on every boot before the

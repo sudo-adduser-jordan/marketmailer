@@ -457,6 +457,52 @@ defmodule Discord.BroadcasterTest do
 	end
 
 	@tag :capture_log
+	test "logs partial delivery with the delivered count", %{task_supervisor: _task_supervisor} do
+		region = 97_000_053
+
+		_broadcaster =
+			start_broadcaster([region], [1_300, 1_301], market_list(), fn
+				1_300, _payload -> {:ok, :sent}
+				_other, _payload -> {:error, {:discord_error, 500}}
+			end)
+
+		log =
+			capture_log(fn ->
+				complete_cycle(region, :updated)
+				Process.sleep(100)
+			end)
+
+		assert log =~ "broadcast_delivered"
+		assert log =~ "channels: 1"
+		assert log =~ "channel_send_failed"
+	end
+
+	@tag :capture_log
+	test "counts a partially updated region as updated", %{task_supervisor: _task_supervisor} do
+		test_pid = self()
+		region = 97_000_054
+
+		_broadcaster =
+			start_broadcaster([region], [1_400], market_list(), fn channel, payload ->
+				send(test_pid, {:sent, channel, payload})
+				{:ok, :sent}
+			end)
+
+		log =
+			capture_log(fn ->
+				Marketmailer.RegionManager.page_started(region, 1)
+				Marketmailer.RegionManager.page_started(region, 2)
+				Marketmailer.RegionManager.page_result(region, 1, :updated, %{pages: 2})
+				Marketmailer.RegionManager.page_result(region, 2, :failed, %{reason: :service_unavailable})
+				assert_receive {:sent, 1_400, _payload}
+				Process.sleep(50)
+			end)
+
+		assert log =~ "updated: 1"
+		assert log =~ "failed: 0"
+	end
+
+	@tag :capture_log
 	test "warns when a region has no manager to subscribe to" do
 		region = 97_000_052
 		name = :"broadcaster_#{System.unique_integer([:positive])}"

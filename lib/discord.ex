@@ -515,7 +515,6 @@ defmodule Discord.Broadcaster do
 
 	def handle_info({:broadcast_done, _key, result}, state) do
 		case result do
-			:ok -> :ok
 			{:ok, _value} -> :ok
 			{:error, reason} -> log_broadcast_failure("broadcast_failed", reason)
 		end
@@ -575,7 +574,6 @@ defmodule Discord.Broadcaster do
 			start_async_digest(state, snapshot)
 		else
 			case safely_process_digest(snapshot, state) do
-				:ok -> :ok
 				{:ok, _value} -> :ok
 				{:error, reason} -> log_broadcast_failure("broadcast_failed", reason)
 			end
@@ -648,7 +646,7 @@ defmodule Discord.Broadcaster do
 					end
 
 				result = deliver_all(channels, payload, state)
-				log_delivery(snapshot, channels, kind, payload, result)
+				log_delivery(snapshot, kind, payload, result)
 				result
 
 			{:error, reason} ->
@@ -673,29 +671,33 @@ defmodule Discord.Broadcaster do
 		)
 	end
 
+	defp outcome_kind({_region, {_cycle, :complete}}), do: :updated
+	defp outcome_kind({_region, {_cycle, :unchanged}}), do: :unchanged
+	defp outcome_kind({_region, {_cycle, {:failed, _reasons, [_ | _]}}}), do: :updated
+	defp outcome_kind({_region, {_cycle, {:failed, _reasons, _updated}}}), do: :failed
+	defp outcome_kind(_report), do: :ignored
+
 	defp round_outcomes(reports) do
-		Enum.reduce(reports, %{updated: 0, unchanged: 0, failed: 0}, fn
-			{_region, {_cycle, :complete}}, counts -> %{counts | updated: counts.updated + 1}
-			{_region, {_cycle, :unchanged}}, counts -> %{counts | unchanged: counts.unchanged + 1}
-			{_region, {_cycle, {:failed, _reasons, _updated}}}, counts -> %{counts | failed: counts.failed + 1}
-			_other, counts -> counts
-		end)
+		counts = reports |> Enum.map(&outcome_kind/1) |> Enum.frequencies()
+
+		Map.merge(
+			%{updated: 0, unchanged: 0, failed: 0},
+			Map.take(counts, [:updated, :unchanged, :failed])
+		)
 	end
 
-	defp log_delivery(snapshot, channels, kind, payload, :ok) do
+	defp log_delivery(snapshot, kind, payload, {:ok, delivered}) do
 		Marketmailer.Log.info(
 			"broadcast_delivered",
 			%{
 				round: snapshot.round,
 				kind: kind,
-				channels: length(channels),
+				channels: delivered,
 				embeds: length(Map.get(payload, :embeds, []))
 			},
-			"Round #{snapshot.round} broadcast #{kind} to #{length(channels)} channel(s)"
+			"Round #{snapshot.round} broadcast #{kind} to #{delivered} channel(s)"
 		)
 	end
-
-	defp log_delivery(_snapshot, _channels, _kind, _payload, {:error, _reason}), do: :ok
 
 	defp digest_payload(items, failures) do
 		base = Embeds.market_list_message(items)
@@ -757,13 +759,7 @@ defmodule Discord.Broadcaster do
 	defp down_reason?(status) when status in [420, 500, 502, 503, 504], do: true
 	defp down_reason?(_), do: false
 
-	defp any_updated?(reports) do
-		Enum.any?(reports, fn
-			{_region, {_cycle, :complete}} -> true
-			{_region, {_cycle, {:failed, _, updated}}} when is_list(updated) -> updated != []
-			_ -> false
-		end)
-	end
+	defp any_updated?(reports), do: Enum.any?(reports, &(outcome_kind(&1) == :updated))
 
 	defp digest_failures(reports) do
 		for {region, {_cycle_id, outcome}} <- reports,
@@ -821,13 +817,10 @@ defmodule Discord.Broadcaster do
 	defp deliver_all(channels, payload, state) do
 		message = Map.put(payload, :allowed_mentions, :none)
 
-		Enum.reduce(channels, :ok, fn channel, result ->
+		Enum.reduce(channels, {:ok, 0}, fn channel, {:ok, delivered} ->
 			case invoke_resolve(state, :deliver_fun, {__MODULE__, :deliver, [channel, message]}) do
-				{:ok, {:ok, _response}} ->
-					result
-
-				{:ok, _other} ->
-					result
+				{:ok, _response} ->
+					{:ok, delivered + 1}
 
 				{:error, reason} ->
 					if unknown_channel?(reason) do
@@ -836,7 +829,7 @@ defmodule Discord.Broadcaster do
 						log_broadcast_failure("channel_send_failed", reason)
 					end
 
-					{:error, reason}
+					{:ok, delivered}
 			end
 		end)
 	end

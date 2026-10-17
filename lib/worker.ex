@@ -19,8 +19,6 @@ defmodule Marketmailer.PageWorker do
 
 	@impl true
 	def handle_info(:work, state) do
-		ensure_error_log()
-
 		case fetch_gate(state.id, state.page) do
 			:wait ->
 				schedule_next(@gate_recheck_ms)
@@ -245,16 +243,6 @@ defmodule Marketmailer.PageWorker do
 		Marketmailer.RegionManager.page_count(id, count)
 		schedule_next(ttl)
 		state
-	end
-
-	defp ensure_error_log do
-		if Application.get_env(:marketmailer, :start_pollers, true) do
-			Marketmailer.Application.ensure_file_logger()
-		else
-			:ok
-		end
-	rescue
-		_ -> :ok
 	end
 
 	defp schedule_next(ms), do: Process.send_after(self(), :work, ms)

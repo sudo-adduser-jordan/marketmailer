@@ -7,13 +7,6 @@ defmodule ESI do
 	@table :esi_error_state
 	@key :blocked_until
 
-	@token_cost 2
-	@unknown_group :unknown
-	@default_limit 12_000
-	@default_window_ms 15 * 60_000
-	@margin_ms 1_500
-	@min_block_ms 1_000
-
 	def wait_for_error_window do
 		now = System.system_time(:millisecond)
 
@@ -34,37 +27,11 @@ defmodule ESI do
 		end
 	end
 
-	def acquire(url, cost \\ @token_cost) do
-		group = group_for(url)
-		wait_blocked(group)
-		acquire_bucket(group, cost)
-	end
-
-	def release(headers, url) do
-		case rate_meta(headers) do
-			nil ->
-				:ok
-
-			rate ->
-				group = rate.group || group_for(url)
-				retry = retry_after_ms(headers)
-
-				if retry > 0 do
-					now = System.system_time(:millisecond)
-					:ets.insert(@table, {{:blocked, group}, now + max(retry, @min_block_ms) + @margin_ms})
-					:ok
-				else
-					record_bucket(group, url, rate)
-				end
-		end
-	end
-
 	def page_url(region, page \\ 1), do: "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
 
 	def fetch(region, page \\ 1, opts \\ []) do
 		url = page_url(region, page)
 		http_fun = Keyword.get(opts, :http_fun, &Req.get/2)
-		acquire(url)
 		etag = Etag.Database.get_etag(url)
 
 		headers =
@@ -73,8 +40,6 @@ defmodule ESI do
 
 		case http_fun.(url, headers: headers, pool_timeout: :infinity, retry_log_level: :info) do
 			{:ok, response} ->
-				# Refund the token once, for every status, including 5xx.
-				release(response.headers, url)
 				respond(response, url)
 
 			{:error, error} ->
@@ -158,100 +123,6 @@ defmodule ESI do
 
 			_ ->
 				60_000
-		end
-	end
-
-	defp group_for(url) do
-		case :ets.lookup(@table, {:url_group, url}) do
-			[{_, group}] -> group
-			_ -> @unknown_group
-		end
-	end
-
-	defp wait_blocked(group) do
-		now = System.system_time(:millisecond)
-
-		case :ets.lookup(@table, {:blocked, group}) do
-			[{_, t}] when t > now ->
-				sleep = t - now
-
-				Marketmailer.Log.warning(
-					"esi_rate_limit_wait",
-					%{sleep_ms: sleep},
-					"ESI rate-limited, waiting #{div(sleep, 1000)}s"
-				)
-
-				Process.sleep(sleep)
-				wait_blocked(group)
-
-			_ ->
-				:ok
-		end
-	end
-
-	defp acquire_bucket(group, cost) do
-		now = System.system_time(:millisecond)
-
-		case :ets.lookup(@table, {:bucket, group}) do
-			[] ->
-				:ets.insert(@table, {{:bucket, group}, max(@default_limit - cost, 0), now, @default_limit, @default_window_ms})
-				:ok
-
-			[{{:bucket, ^group}, tokens, last, limit, window}] ->
-				refill_rate = limit / window
-				available = min(limit, tokens + (now - last) * refill_rate)
-
-				if available >= cost do
-					:ets.insert(@table, {{:bucket, group}, available - cost, now, limit, window})
-					:ok
-				else
-					needed = cost - available
-					sleep = if(refill_rate > 0, do: round(needed / refill_rate), else: @pause_ms) + @margin_ms
-					Process.sleep(min(sleep, 5_000))
-					acquire_bucket(group, cost)
-				end
-		end
-	end
-
-	defp record_bucket(group, url, %{remaining: remaining, limit: limit, window_ms: window})
-			 when is_integer(remaining) and is_integer(limit) and limit > 0 and window > 0 do
-		now = System.system_time(:millisecond)
-		:ets.insert(@table, {{:bucket, group}, min(remaining, limit), now, limit, window})
-		:ets.insert(@table, {{:url_group, url}, group})
-		:ok
-	end
-
-	defp record_bucket(_group, _url, _rate), do: :ok
-
-	defp rate_meta(headers) do
-		case first(headers, "x-ratelimit-limit") do
-			nil ->
-				nil
-
-			limit ->
-				{tokens, window} = parse_limit(limit)
-
-				%{
-					group: first(headers, "x-ratelimit-group"),
-					remaining: parse_int(first(headers, "x-ratelimit-remaining")),
-					used: parse_int(first(headers, "x-ratelimit-used")),
-					limit: tokens,
-					window_ms: window
-				}
-		end
-	end
-
-	defp parse_limit(limit) do
-		case String.split(to_string(limit), "/") do
-			[tokens, unit] ->
-				case Regex.run(~r/(\d+)([mh])/, unit) do
-					[_, n, "m"] -> {parse_int(tokens) || @default_limit, String.to_integer(n) * 60_000}
-					[_, n, "h"] -> {parse_int(tokens) || @default_limit, String.to_integer(n) * 3_600_000}
-					_ -> {@default_limit, @default_window_ms}
-				end
-
-			_ ->
-				{parse_int(limit) || @default_limit, @default_window_ms}
 		end
 	end
 

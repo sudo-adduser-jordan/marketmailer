@@ -4,30 +4,9 @@ defmodule Database do
 		adapter: Ecto.Adapters.SQLite3
 end
 
-defmodule Database.Queue do
-	use GenServer
-
-	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
-
-	def write(fun) when is_function(fun, 0) do
-		case Process.whereis(__MODULE__) do
-			nil -> fun.()
-			_ -> GenServer.call(__MODULE__, {:write, fun}, :infinity)
-		end
-	end
-
-	@impl true
-	def init(_), do: {:ok, %{}}
-
-	@impl true
-	def handle_call({:write, fun}, _from, state) do
-		{:reply, fun.(), state}
-	end
-end
-
 defmodule Database.Writer do
 	def write(fun) when is_function(fun, 0) do
-		Database.Queue.write(fun)
+		fun.()
 	rescue
 		e ->
 			if disk_full?(e) do
