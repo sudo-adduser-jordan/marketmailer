@@ -4,8 +4,11 @@ defmodule Marketmailer.Stats do
 	# Database + market cache statistics for the /database_stats slash command.
 	#
 	# The aggregate is a full scan of the market table (~1s on a multi-million
-	# row file), so it runs off the caller's process and its result is reused
-	# for @cache_ttl_ms. The cache lives in :persistent_term on purpose: a new
+	# row file). :timer.tc/1 runs it in the caller, so it only stays off the
+	# gateway consumer when the caller is the deferred Task (run_stats_task);
+	# the two fallback paths — the defer failed, or no bot is registered — run it
+	# inline on the consumer and block it for that ~1s. The result is reused for
+	# @cache_ttl_ms. The cache lives in :persistent_term on purpose: a new
 	# supervised process or a new ETS table would not exist after a hot
 	# upgrade (the supervisor keeps its old child list and Application.start/2
 	# does not re-run), while a persistent_term key survives the upgrade with

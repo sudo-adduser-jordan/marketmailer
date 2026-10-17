@@ -898,6 +898,33 @@ defmodule Discord.EmbedsTest do
 		assert last_line =~ ~r/^… \+\d+ more$/
 	end
 
+	# A bare %Embed{} reaches Discord as {"type": "rich", ...} with no embeds key,
+	# which the API rejects with 400 50006 "Cannot send an empty message" — the
+	# deferred /database_stats reply then stays on "Bot is thinking..." forever.
+	test "payload wraps a bare embed and passes map payloads through" do
+		stats = Discord.Embeds.database_stats_embed(%{})
+		assert %{embeds: [^stats]} = Discord.Embeds.payload(stats)
+
+		error = Discord.Embeds.database_stats_error_embed()
+		assert %{embeds: [^error]} = Discord.Embeds.payload(error)
+
+		message = Discord.Embeds.market_list_message([])
+		assert Discord.Embeds.payload(message) == message
+
+		chart = %{embeds: [stats], files: [%{name: "chart.png", body: "png"}]}
+		assert Discord.Embeds.payload(chart) == chart
+	end
+
+	test "a wrapped embed survives Nostrum's request body builder" do
+		embed = Discord.Embeds.database_stats_embed(%{})
+		payload = Discord.Embeds.payload(embed)
+
+		# combine_embeds/1 only knows the singular :embed key, so an unwrapped
+		# %Embed{} would fall through untouched and ship as the whole body.
+		assert %{embeds: [^embed]} = Nostrum.Api.Helpers.combine_embeds(payload)
+		refute Nostrum.Api.Helpers.combine_embeds(embed) |> Map.has_key?(:embeds)
+	end
+
 	test "market embeds use the Jita IV-4 station icon, not Squall" do
 		items = [%{item: "Tritanium", margin: 1.0, system_name: "Jita", security_status: 0.9}]
 

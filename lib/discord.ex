@@ -478,17 +478,21 @@ defmodule Discord.Consumer do
 	end
 
 	defp edit_response(bot_name, interaction, payload) do
+		# A bare embed must be wrapped or Discord rejects the PATCH with 400 50006
+		# and the deferred reply stays on "Bot is thinking..." (see Embeds.payload/1).
+		payload = Embeds.payload(payload)
+
 		Bot.with_bot(bot_name, fn -> Api.Interaction.edit_response(interaction, payload) end)
 		|> case do
 			:ok -> :ok
 			{:ok, _message} -> :ok
-			{:error, reason} -> log_discord_warning("check_market_edit_failed", reason, interaction)
-			other -> log_discord_warning("check_market_edit_failed", other, interaction)
+			{:error, reason} -> log_discord_warning("interaction_edit_failed", reason, interaction)
+			other -> log_discord_warning("interaction_edit_failed", other, interaction)
 		end
 	rescue
-		error -> log_discord_warning("check_market_edit_failed", Exception.message(error), interaction)
+		error -> log_discord_warning("interaction_edit_failed", Exception.message(error), interaction)
 	catch
-		_, reason -> log_discord_warning("check_market_edit_failed", reason, interaction)
+		_, reason -> log_discord_warning("interaction_edit_failed", reason, interaction)
 	end
 
 	defp active_bot_name do
@@ -501,23 +505,24 @@ defmodule Discord.Consumer do
 	defp log_discord_warning(event, reason, interaction) do
 		Marketmailer.Log.warning(
 			event,
-			%{interaction_id: interaction.id, reason: inspect(reason)},
+			%{
+				interaction_id: interaction.id,
+				command: interaction_command(interaction),
+				reason: inspect(reason)
+			},
 			"Discord market response failed"
 		)
 	end
 
-	defp respond(intr, %Nostrum.Struct.Embed{} = embed) do
-		respond(intr, %{embeds: [embed]})
-	end
+	# Application commands carry a name; component interactions (the pager buttons)
+	# do not, and log as nil.
+	defp interaction_command(%{data: %{name: name}}) when is_binary(name), do: name
+	defp interaction_command(_interaction), do: nil
 
-	defp respond(intr, %{embeds: embeds} = payload) do
-		data =
-			case Map.fetch(payload, :components) do
-				{:ok, components} -> %{embeds: embeds, components: components}
-				:error -> %{embeds: embeds}
-			end
+	defp respond(intr, payload) do
+		payload = Embeds.payload(payload)
 
-		case Api.Interaction.create_response(intr, %{type: 4, data: data}) do
+		case Api.Interaction.create_response(intr, %{type: 4, data: payload}) do
 			:ok -> :ok
 			{:error, reason} -> log_discord_warning("discord_respond_failed", reason, intr)
 		end

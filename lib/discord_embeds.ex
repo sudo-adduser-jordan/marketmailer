@@ -192,6 +192,16 @@ defmodule Discord.Embeds do
 		%{embeds: [market_list_embed(list, page, per_page)], components: list_components(page, total_pages, length(list))}
 	end
 
+	# Normalizes an embed or a ready payload into something Discord accepts as a
+	# response body. Nostrum's Helpers.combine_embeds/1 only understands the
+	# singular `:embed` key, so a bare %Embed{} struct would reach the wire as a
+	# top-level {"type": "rich", ...} body with no content/embeds/components and
+	# Discord answers 400 50006 "Cannot send an empty message" — which leaves a
+	# deferred interaction stuck on "Bot is thinking..." forever. Map payloads
+	# (mounting :components, :files, ...) pass through untouched.
+	def payload(%Embed{} = embed), do: %{embeds: [embed]}
+	def payload(payload), do: payload
+
 	def list_per_page, do: 10
 
 	# The slash command and the broadcaster render the exact same page.
