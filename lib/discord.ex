@@ -127,18 +127,10 @@ defmodule Discord.Consumer do
 
 			"check_market" ->
 				item_name = option_value(interaction, "item")
-				candidates = safe_suggest_items(item_name, 10)
 
-				case safe_get_market_item(item_name) do
-					nil ->
-						reply_for_missing_item(interaction, item_name, candidates)
-
-					item ->
-						if exact_item_match?(item_name, item, candidates) or length(candidates) <= 1 do
-							reply_with_detail(interaction, item)
-						else
-							respond(interaction, Embeds.market_disambiguation_embed(item_name, candidates))
-						end
+				case safe_get_capital_item(item_name) do
+					nil -> reply_with_market_item(interaction, item_name)
+					capital -> respond(interaction, Embeds.capital_ship_embed(capital.item_name))
 				end
 
 			"list_market" ->
@@ -231,6 +223,28 @@ defmodule Discord.Consumer do
 			nil
 	end
 
+	defp safe_get_capital_item(item_name) do
+		Market.Database.get_capital_item(item_name)
+	rescue
+		error ->
+			Marketmailer.Log.warning(
+				"check_market_lookup_failed",
+				%{reason: Exception.message(error)},
+				"check_market capital lookup failed; replying not-found"
+			)
+
+			nil
+	catch
+		_, reason ->
+			Marketmailer.Log.warning(
+				"check_market_lookup_failed",
+				%{reason: inspect(reason)},
+				"check_market capital lookup failed; replying not-found"
+			)
+
+			nil
+	end
+
 	defp safe_suggest_items(item_name, limit) when is_binary(item_name) and is_integer(limit) do
 		Market.Database.suggest_items(item_name, limit)
 	rescue
@@ -240,6 +254,22 @@ defmodule Discord.Consumer do
 	end
 
 	defp safe_suggest_items(_item_name, _limit), do: []
+
+	defp reply_with_market_item(interaction, item_name) do
+		candidates = safe_suggest_items(item_name, 10)
+
+		case safe_get_market_item(item_name) do
+			nil ->
+				reply_for_missing_item(interaction, item_name, candidates)
+
+			item ->
+				if exact_item_match?(item_name, item, candidates) or length(candidates) <= 1 do
+					reply_with_detail(interaction, item)
+				else
+					respond(interaction, Embeds.market_disambiguation_embed(item_name, candidates))
+				end
+		end
+	end
 
 	defp reply_with_detail(interaction, item) do
 		respond(interaction, Embeds.market_embed(item))

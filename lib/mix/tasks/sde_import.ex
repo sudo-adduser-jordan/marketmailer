@@ -17,6 +17,12 @@ defmodule Mix.Tasks.Sde.Import do
 		"mapStars.jsonl"
 	]
 
+	# Capital hulls that cannot enter high sec. Their Jita buy orders can never be
+	# filled there, so every Jita buy-wall query filters these types out through
+	# names.is_capital_ship. Freighters (513) and jump freighters (902) can gate
+	# into Jita and stay in the list, as do capital modules and components.
+	@capital_ship_groups [30, 485, 547, 659, 883, 1538, 4594, 5120]
+
 	@impl true
 	def run(args) do
 		{:ok, _} = Application.ensure_all_started(:ecto_sqlite3)
@@ -190,7 +196,10 @@ defmodule Mix.Tasks.Sde.Import do
 
 	defp insert_names(chunk) do
 		with_write_retry(fn ->
-			Database.insert_all("names", chunk, on_conflict: {:replace, [:name]}, conflict_target: :id)
+			Database.insert_all("names", chunk,
+				on_conflict: {:replace, [:name, :is_capital_ship]},
+				conflict_target: :id
+			)
 		end)
 	end
 
@@ -203,27 +212,36 @@ defmodule Mix.Tasks.Sde.Import do
 		end)
 	end
 
+	def capital_ship_group?(group_id), do: group_id in @capital_ship_groups
+
 	defp import_types(path) do
-		{count, ids} =
+		{count, capital_count, ids} =
 			stream_entries(path)
 			|> Stream.map(fn
-				%{"_key" => id, "name" => %{"en" => name}, "published" => true}
+				%{"_key" => id, "name" => %{"en" => name}, "published" => true} = entry
 				when is_integer(id) and is_binary(name) ->
-					%{id: id, name: name}
+					%{
+						id: id,
+						name: name,
+						is_capital_ship: if(capital_ship_group?(entry["groupID"]), do: 1, else: 0)
+					}
 
 				_ ->
 					nil
 			end)
 			|> Stream.reject(&is_nil/1)
 			|> Enum.chunk_every(500)
-			|> Enum.reduce({0, []}, fn chunk, {acc, ids} ->
+			|> Enum.reduce({0, 0, []}, fn chunk, {acc, capital, ids} ->
 				insert_names(chunk)
-				{acc + length(chunk), [Enum.map(chunk, & &1.id) | ids]}
+				{acc + length(chunk), capital + Enum.count(chunk, &(&1.is_capital_ship == 1)), [Enum.map(chunk, & &1.id) | ids]}
 			end)
 
 		ids = List.flatten(ids)
 		verify_present!("names", "id", ids)
-		Mix.shell().info("imported #{count} published type names (verified #{length(ids)} present)")
+
+		Mix.shell().info(
+			"imported #{count} published type names (#{capital_count} capital hulls, verified #{length(ids)} present)"
+		)
 	end
 
 	defp import_systems(path, constellations) do
@@ -294,6 +312,7 @@ defmodule Mix.Tasks.Sde.Import do
 
 		{count, ids} =
 			composed
+			|> Enum.map(&Map.put(&1, :is_capital_ship, 0))
 			|> Enum.chunk_every(500)
 			|> Enum.reduce({0, []}, fn chunk, {acc, ids} ->
 				insert_names(chunk)

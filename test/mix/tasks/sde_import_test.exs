@@ -1,6 +1,19 @@
 defmodule Mix.Tasks.Sde.ImportTest do
 		use ExUnit.Case, async: true
 
+		test "classifies high-sec-blocked capital hull groups" do
+				alias Mix.Tasks.Sde.Import, as: SdeImport
+
+				for group_id <- [30, 485, 547, 659, 883, 1538, 4594, 5120] do
+						assert SdeImport.capital_ship_group?(group_id)
+				end
+
+				refute SdeImport.capital_ship_group?(513)
+				refute SdeImport.capital_ship_group?(902)
+				refute SdeImport.capital_ship_group?(60_003_760)
+				refute SdeImport.capital_ship_group?(nil)
+		end
+
 		test "composes NPC station names from SDE reference maps" do
 				alias Mix.Tasks.Sde.Import, as: SdeImport
 

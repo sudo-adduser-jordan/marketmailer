@@ -30,27 +30,28 @@
   <text x="56" y="466" font-size="12" fill="#555">8 indexes (3 partial)</text>
   <text x="56" y="482" font-size="12" fill="#555">bool stored 1/0 (see</text>
   <text x="56" y="498" font-size="12" fill="#555">Market.Database)</text>
-  <rect x="350" y="90" width="260" height="130" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
+  <rect x="350" y="90" width="260" height="152" rx="8" fill="#fff3bf" stroke="#1e1e1e" stroke-width="2"/>
   <text x="480" y="118" font-size="15" font-weight="bold" text-anchor="middle">names</text>
   <text x="366" y="130" font-size="13" font-family="monospace" font-weight="bold">id PK</text>
   <text x="366" y="152" font-size="13" font-family="monospace">name *</text>
-  <text x="366" y="180" font-size="12" fill="#555">no timestamps</text>
-  <text x="366" y="196" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
-  <rect x="350" y="240" width="260" height="174" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="480" y="268" font-size="15" font-weight="bold" text-anchor="middle">systems</text>
-  <text x="366" y="280" font-size="13" font-family="monospace" font-weight="bold">system_id PK</text>
-  <text x="366" y="302" font-size="13" font-family="monospace">name *</text>
-  <text x="366" y="324" font-size="13" font-family="monospace">security_status</text>
-  <text x="366" y="346" font-size="13" font-family="monospace">region_name *</text>
-  <text x="366" y="374" font-size="12" fill="#555">no timestamps</text>
-  <text x="366" y="390" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
-  <rect x="350" y="434" width="260" height="164" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="480" y="462" font-size="15" font-weight="bold" text-anchor="middle">etags</text>
-  <text x="366" y="474" font-size="13" font-family="monospace" font-weight="bold">url PK</text>
-  <text x="366" y="496" font-size="13" font-family="monospace">etag</text>
-  <text x="366" y="518" font-size="13" font-family="monospace">expires_at</text>
-  <text x="366" y="540" font-size="13" font-family="monospace">inserted_at *</text>
-  <text x="366" y="562" font-size="13" font-family="monospace">updated_at *</text>
+  <text x="366" y="174" font-size="13" font-family="monospace">is_capital_ship *</text>
+  <text x="366" y="202" font-size="12" fill="#555">no timestamps</text>
+  <text x="366" y="218" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
+  <rect x="350" y="262" width="260" height="174" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="480" y="290" font-size="15" font-weight="bold" text-anchor="middle">systems</text>
+  <text x="366" y="302" font-size="13" font-family="monospace" font-weight="bold">system_id PK</text>
+  <text x="366" y="324" font-size="13" font-family="monospace">name *</text>
+  <text x="366" y="346" font-size="13" font-family="monospace">security_status</text>
+  <text x="366" y="368" font-size="13" font-family="monospace">region_name *</text>
+  <text x="366" y="396" font-size="12" fill="#555">no timestamps</text>
+  <text x="366" y="412" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
+  <rect x="350" y="456" width="260" height="164" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="480" y="484" font-size="15" font-weight="bold" text-anchor="middle">etags</text>
+  <text x="366" y="496" font-size="13" font-family="monospace" font-weight="bold">url PK</text>
+  <text x="366" y="518" font-size="13" font-family="monospace">etag</text>
+  <text x="366" y="540" font-size="13" font-family="monospace">expires_at</text>
+  <text x="366" y="562" font-size="13" font-family="monospace">inserted_at *</text>
+  <text x="366" y="584" font-size="13" font-family="monospace">updated_at *</text>
   <rect x="640" y="90" width="260" height="142" rx="8" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="2"/>
   <text x="770" y="118" font-size="15" font-weight="bold" text-anchor="middle">discord</text>
   <text x="656" y="130" font-size="13" font-family="monospace" font-weight="bold">guild_id PK</text>
@@ -97,11 +98,11 @@
   <g stroke="#1e1e1e" stroke-width="2" fill="none">
   <path d="M320,324 C336,324 336,126 350,126" marker-end="url(#arrow)"/>
   <path d="M320,214 C336,214 336,126 350,126" marker-end="url(#arrow)"/>
-  <path d="M320,302 C336,302 336,276 350,276" marker-end="url(#arrow)"/>
+  <path d="M320,302 C336,302 336,298 350,298" marker-end="url(#arrow)"/>
   </g>
   <g stroke="#868e96" stroke-width="2" stroke-dasharray="6 4" fill="none">
-  <path d="M610,155 H638 V312 H640" marker-end="url(#arrow-gray)"/>
-  <path d="M610,327 H638 V327 H640" marker-end="url(#arrow-gray)"/>
+  <path d="M610,166 H638 V312 H640" marker-end="url(#arrow-gray)"/>
+  <path d="M610,349 H638 V349 H640" marker-end="url(#arrow-gray)"/>
   <path d="M180,522 V733 H770 V709" marker-end="url(#arrow-gray)"/>
   </g>
   <text x="475" y="727" font-size="12" fill="#868e96" text-anchor="middle">VIEW reads market + caches</text>

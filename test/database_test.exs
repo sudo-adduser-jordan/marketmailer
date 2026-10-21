@@ -447,6 +447,40 @@ defmodule Market.DatabaseTest do
 		assert [%{location_name: "?"}] = MarketDatabase.get_best_order()
 	end
 
+	test "hides capital hulls from every Jita buy-wall read" do
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("names", [
+			%{id: 1_001, name: "Tritanium", is_capital_ship: 0},
+			%{id: 28_352, name: "Rorqual", is_capital_ship: 1}
+		])
+
+		Database.insert_all("systems", [
+			%{system_id: 30_000_142, name: "Jita", security_status: 0.9, region_name: "The Forge"},
+			%{system_id: 30_000_143, name: "Rens", security_status: 0.7, region_name: "Heimatar"}
+		])
+
+		Database.insert_all("market", [
+			market_row(601, 30_000_143, 1_001, 10.0, 0, now),
+			market_row(602, 30_000_142, 1_001, 110.0, 1, now),
+			market_row(603, 30_000_143, 28_352, 1_000_000_000.0, 0, now),
+			market_row(604, 30_000_142, 28_352, 4_000_000_000.0, 1, now),
+			market_row(605, 30_000_142, 28_352, 3_000_000_000.0, 0, now)
+		])
+
+		assert [%{item: "Tritanium", type_id: 1_001}] = MarketDatabase.get_items_less_than_jita_buy()
+
+		assert [%MarketView{item_name: "Tritanium"}] = MarketDatabase.get_best_order()
+		assert %MarketView{item_name: "Tritanium"} = MarketDatabase.get_market_item("Tritanium")
+		assert MarketDatabase.get_market_item("Rorqual") == nil
+
+		assert [%{item_name: "Tritanium"}] = MarketDatabase.suggest_items("tri")
+		assert MarketDatabase.suggest_items("ror") == []
+
+		assert %{type_id: 28_352, item_name: "Rorqual"} = MarketDatabase.get_capital_item(" rOrQuAl ")
+		assert MarketDatabase.get_capital_item("Tritanium") == nil
+	end
+
 	test "reads persist idempotently in the single database" do
 		insert_fixture()
 		assert Database.aggregate("market", :count) == 3

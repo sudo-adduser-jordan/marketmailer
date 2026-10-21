@@ -37,6 +37,7 @@ LEFT JOIN systems sy ON sy.system_id = m.system_id
 WHERE m.is_buy_order = 0
   AND m.location_id = 60003760
   AND tn.name IS NOT NULL
+  AND COALESCE(tn.is_capital_ship, 0) = 0
   AND (LOWER(TRIM(tn.name)) = ? OR LOWER(tn.name) LIKE ? ESCAPE '\')
 ORDER BY
   CASE WHEN LOWER(TRIM(tn.name)) = ? THEN 0 ELSE 1 END,

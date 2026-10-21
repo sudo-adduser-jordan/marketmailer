@@ -166,6 +166,17 @@ anything else unmatched renders as `?` (an SDE import gap). Any new
 query must still SELECT the raw id columns (`system_id`, `location_id`,
 `type_id`) so gaps stay visible instead of silently wrong.
 
+Capital hulls that cannot enter high sec carry `names.is_capital_ship`,
+set by `mix sde.import` from the SDE groupIDs 30 (Titan), 485 (Dreadnought),
+547 (Carrier), 659 (Supercarrier), 883 (Capital Industrial Ship), 1538
+(Force Auxiliary), 4594 (Lancer Dreadnought) and 5120 (Command Carrier), and
+every Jita buy-wall query (`getBestOrder.sql`, `getMarketItem.sql`,
+`suggestItems.sql`, the `marketListView` view) filters them out — they can
+never be delivered or sold in Jita. Freighters and jump freighters can gate
+into high sec and stay, as do capital modules, components, fighters and
+blueprints. A fresh import defaults the flag to 0, so the filter only takes
+effect after `mix sde.import` has run against the database.
+
 Raw SQL files live in `lib/*.sql` and are loaded relative to `__DIR__`
 (CWD-safe).
 

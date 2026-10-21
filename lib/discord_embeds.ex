@@ -83,6 +83,24 @@ defmodule Discord.Embeds do
 		|> with_version()
 	end
 
+	def capital_ship_embed(item_name) do
+		item_name = if is_binary(item_name), do: String.trim(item_name), else: ""
+		item_name = if item_name == "", do: "that item", else: item_name
+
+		%Embed{
+			title: "Not tradable in high sec",
+			description:
+				"**#{item_name}** is a capital hull that cannot enter high security space, so it cannot be sold or delivered in Jita. It is excluded from the Jita buy-wall checks.",
+			color: @color_warning,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: branded_author(),
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_market
+			}
+		}
+		|> with_version()
+	end
+
 	def market_disambiguation_embed(item_name, candidates) do
 		searched = if is_binary(item_name), do: String.trim(item_name), else: ""
 		searched = if searched == "", do: "that item", else: searched

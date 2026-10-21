@@ -35,6 +35,7 @@ LEFT JOIN names ln ON ln.id = m.location_id
 LEFT JOIN systems sy ON sy.system_id = m.system_id
 WHERE m.is_buy_order = 0 
   AND sy.name IS NOT 'Jita'
+  AND COALESCE(tn.is_capital_ship, 0) = 0
   AND m.price < jb.jita_buy_price
 ORDER BY instant_sell_profit DESC
 LIMIT 1;

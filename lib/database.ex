@@ -430,6 +430,17 @@ defmodule Market.Database do
 
 	def get_market_item(_item_name), do: nil
 
+	# Capital hulls are filtered out of every Jita buy-wall query, so the lookup
+	# needs its own exact-name probe to explain why they cannot be in high sec.
+	def get_capital_item(item_name) when is_binary(item_name) do
+		case normalize_item_name(item_name) do
+			"" -> nil
+			normalized -> load_rows("getCapitalItem.sql", [normalized]) |> List.first()
+		end
+	end
+
+	def get_capital_item(_item_name), do: nil
+
 	def suggest_items(prefix, limit \\ 25)
 
 	def suggest_items(prefix, limit) when is_binary(prefix) and is_integer(limit) do

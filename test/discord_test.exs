@@ -599,6 +599,15 @@ defmodule Discord.EmbedsTest do
 		assert embed.description == "No cached market order was found for **Rifter**."
 	end
 
+	test "explains why a capital hull is excluded from the buy wall" do
+		embed = Discord.Embeds.capital_ship_embed("  Rorqual  ")
+
+		assert %Embed{title: "Not tradable in high sec"} = embed
+		assert embed.description =~ "**Rorqual**"
+		assert embed.description =~ "cannot enter high security space"
+		assert embed.color == 0xFAA61A
+	end
+
 	test "uses location, sell, buy and margin fields for a market embed" do
 		item = %MarketView{
 			type_id: 1_001,
