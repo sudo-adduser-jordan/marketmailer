@@ -28,9 +28,15 @@ tasks:
     cmds:
       - |
         DEV_DB="{{.DEV_DB}}"
-        PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
+        PROD_DB="${MARKETMAILER_DB:-$DEV_DB}"
         EFF_DB="$DEV_DB"
         if [ -f "$PROD_DB" ]; then EFF_DB="$PROD_DB"; fi
+        if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
+          if ! mkdir -p "$(dirname "$PROD_DB")" 2>/dev/null || [ ! -w "$(dirname "$PROD_DB")" ]; then
+            echo "start: cannot write prod DB dir $(dirname "$PROD_DB") — unset MARKETMAILER_DB to use $DEV_DB, or point it at a writable path"
+            exit 1
+          fi
+        fi
         if ! command -v sqlite3 >/dev/null 2>&1; then
           echo "start: sqlite3 CLI not found — cannot verify SDE load"
           exit 1
@@ -59,12 +65,8 @@ tasks:
       - MIX_ENV=prod mix release --overwrite
       - |
         DEV_DB="{{.DEV_DB}}"
-        PROD_DB="${MARKETMAILER_DB:-/data/marketmailer.db}"
+        PROD_DB="${MARKETMAILER_DB:-$DEV_DB}"
         if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
-          if ! mkdir -p "$(dirname "$PROD_DB")" 2>/dev/null || [ ! -w "$(dirname "$PROD_DB")" ]; then
-            echo "start: cannot write prod DB dir $(dirname "$PROD_DB") — set MARKETMAILER_DB to a writable path in .env (e.g. priv/data/marketmailer.db)"
-            exit 1
-          fi
           for suffix in "" "-wal" "-shm"; do
             if [ -f "$DEV_DB$suffix" ]; then
               cp "$DEV_DB$suffix" "$PROD_DB$suffix"
@@ -73,10 +75,11 @@ tasks:
           echo "start: seeded $PROD_DB from $DEV_DB"
         fi
       - |
+        PROD_DB="$(realpath -m "${MARKETMAILER_DB:-{{.DEV_DB}}}")"
         rm -f priv/data/marketmailer.pid
         mkdir -p logs
-        ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" {{.BIN}} daemon
-        echo "started prod release (daemon)"
+        MARKETMAILER_DB="$PROD_DB" ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" {{.BIN}} daemon
+        echo "started prod release (daemon, database $PROD_DB)"
 
   stop:
     desc: Kill every marketmailer process on this host

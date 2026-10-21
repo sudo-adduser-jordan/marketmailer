@@ -3,7 +3,7 @@ import Config
 if config_env() == :prod do
 	database =
 		case System.get_env("MARKETMAILER_DB") do
-			path when path in [nil, ""] -> "/data/marketmailer.db"
+			path when path in [nil, ""] -> "priv/data/marketmailer.db"
 			path -> path
 		end
 
