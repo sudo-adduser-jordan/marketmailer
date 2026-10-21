@@ -7,6 +7,8 @@ to flip into the Jita buy wall). A Discord bot broadcasts market updates.
 ## Prerequisites
 
 - Elixir (see `mix.exs` for the version) with Mix
+- Playwright CLI on `PATH` for Janice chart captures (`task setup` runs
+  `task playwright:install` to fetch the matching Chromium build)
 - Optional: Docker, for running containerized
 - Optional: a Discord bot token, for bot features
 

@@ -194,6 +194,14 @@ Both formerly-disabled features are now uncommented in `lib/app.ex`:
 
 `.example.env` documents the env vars.
 
+Janice chart capture shells out to the `playwright` CLI on `$PATH`, so the
+Chromium build in `~/.cache/ms-playwright` must match that CLI.
+`task playwright:install` (a dep of `task setup`) installs the matching build
+and is a no-op when already current — re-run it after any Playwright upgrade.
+A stale build makes every chart request fall back to `janice-failed.png` and
+logs `janice_browser_missing` with the expected path. The Docker image bundles
+its own matched build under `/ms-playwright`.
+
 ## Logging
 
 Structured JSON logs (logging-sucks style: stable `event` names, flat

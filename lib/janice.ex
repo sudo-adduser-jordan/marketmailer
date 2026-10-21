@@ -294,6 +294,8 @@ defmodule Janice.Playwright do
 				:miss -> pooled_capture(type_id, timeout)
 			end
 
+		log_browser_missing(result)
+
 		Marketmailer.Log.info(
 			"janice_capture",
 			%{type_id: type_id, elapsed_ms: System.monotonic_time(:millisecond) - started},
@@ -302,6 +304,38 @@ defmodule Janice.Playwright do
 
 		result
 	end
+
+	@browser_missing_marker "Executable doesn't exist at "
+
+	def classify_launch_error(%{error: %{message: message}}) when is_binary(message) do
+		case browser_missing_path(message) do
+			path when is_binary(path) and path != "" -> {:browser_missing, path}
+			_ -> {:playwright_error, first_line(message)}
+		end
+	end
+
+	def classify_launch_error(reason), do: {:playwright_error, reason |> inspect() |> first_line()}
+
+	defp browser_missing_path(message) do
+		case String.split(message, @browser_missing_marker, parts: 2) do
+			[_before, rest] -> rest |> String.split("\n", parts: 2) |> hd() |> String.trim()
+			_ -> nil
+		end
+	end
+
+	defp first_line(message) do
+		message |> String.split("\n", parts: 2) |> hd() |> String.trim()
+	end
+
+	defp log_browser_missing({:error, {:browser_missing, path}}) do
+		Marketmailer.Log.warning(
+			"janice_browser_missing",
+			%{expected_path: path, install_hint: "playwright install chromium"},
+			"Playwright browser missing; run `playwright install chromium`"
+		)
+	end
+
+	defp log_browser_missing(_result), do: :ok
 
 	defp cached_png(type_id) do
 		case :ets.lookup(@cache_table, type_id) do
@@ -415,7 +449,7 @@ defmodule Janice.ChartPool do
 		if Process.whereis(PlaywrightEx.Supervisor) do
 			case PlaywrightEx.launch_browser(:chromium, timeout: timeout) do
 				{:ok, browser} -> {:ok, browser}
-				{:error, reason} -> {:error, reason}
+				{:error, reason} -> {:error, Janice.Playwright.classify_launch_error(reason)}
 			end
 		else
 			{:error, :playwright_unavailable}

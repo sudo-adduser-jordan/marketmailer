@@ -17,11 +17,17 @@ tasks:
 
   setup:
     desc: Install deps, migrate the DB and load the SDE name/system caches (idempotent; SDE_BUILD overrides the pinned build)
+    deps: [playwright:install]
     cmds:
       - |
         SDE_DB="${MARKETMAILER_DB:-{{.DEV_DB}}}"
         MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix setup
         MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import "${SDE_BUILD:-3569502}"
+
+  playwright:install:
+    desc: Install the Chromium build matching the `playwright` CLI on PATH (no-op when current)
+    cmds:
+      - playwright install chromium
 
   start:
     desc: Kill every marketmailer process, rebuild the current tree, and start it detached

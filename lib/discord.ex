@@ -329,6 +329,9 @@ defmodule Discord.Consumer do
 				embed = Embeds.market_embed(item, nil, "attachment://#{filename}")
 				edit_response(bot_name, interaction, %{embeds: [embed], files: [%{name: filename, body: png}]})
 
+			{:error, {:browser_missing, _path}} ->
+				edit_fallback_response(bot_name, interaction, item)
+
 			{:error, reason} ->
 				Marketmailer.Log.warning(
 					"janice_capture_failed",

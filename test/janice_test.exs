@@ -79,6 +79,29 @@ defmodule Janice.CaptureTest do
 		assert {:error, :playwright_unavailable} = Janice.Playwright.capture(1_001, timeout: 10)
 	end
 
+	test "classifies a missing Playwright browser binary" do
+		message =
+			"Executable doesn't exist at /home/u/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell\n" <>
+				"╔════════════════════════════════════════════════════════════╗\n" <>
+				"║ Please run the following command to download new browsers: ║\n" <>
+				"╚════════════════════════════════════════════════════════════╝\n" <>
+				"    at executablePathOrDie (playwright/lib/coreBundle.js:1:1)"
+
+		assert {:browser_missing, path} = Janice.Playwright.classify_launch_error(%{error: %{message: message}})
+
+		assert path ==
+						 "/home/u/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell"
+	end
+
+	test "classifies other Playwright errors by their first line" do
+		assert {:playwright_error, "Target page, context or browser has been closed"} =
+						 Janice.Playwright.classify_launch_error(%{
+							 error: %{message: "Target page, context or browser has been closed\n    at foo"}
+						 })
+
+		assert {:playwright_error, ":timeout"} = Janice.Playwright.classify_launch_error(:timeout)
+	end
+
 	defp ensure_cache_table do
 		if :ets.whereis(:janice_chart_cache) == :undefined do
 			:ets.new(:janice_chart_cache, [:named_table, :set, :public])
