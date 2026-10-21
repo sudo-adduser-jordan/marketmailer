@@ -235,12 +235,12 @@ then pipe to jq:
   `Etag.Database`, `Discord.Database`, `Market.Database` (reads + writes)
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
   (types, regions, systems, composed NPC station names)
-- `lib/regions.ex` - SDE region cache (`regions` table) read once at boot by
-  the region supervisor; the started set is cached in `:persistent_term` so
-  the Discord broadcast barrier always matches the running managers
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
 - `lib/manager.ex`, `lib/supervisor.ex`, `lib/worker.ex` - per-region fan-out
-  and refresh cycles (one `RegionManager` per SDE region, one `PageWorker` per
+  and refresh cycles (one `RegionManager` per SDE region, i.e. per `regions`
+  row read at boot; the started set is cached in `:persistent_term` so the
+  Discord broadcast barrier always matches the running managers; one
+  `PageWorker` per
   page; page 1 reports `X-Pages` and every report reconciles the worker set
   to exactly `1..count` — missing pages are started, pages above the count
   are stopped, so a stale/sparse `etags` table can never wedge a region;

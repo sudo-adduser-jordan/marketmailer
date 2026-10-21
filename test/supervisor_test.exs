@@ -1,4 +1,4 @@
-defmodule Marketmailer.RegionsTest do
+defmodule Marketmailer.RegionManagerSupervisorTest do
 	use ExUnit.Case, async: false
 
 	setup do
@@ -13,10 +13,10 @@ defmodule Marketmailer.RegionsTest do
 			%{region_id: 10_000_002, name: "The Forge"}
 		])
 
-		assert Marketmailer.Regions.ids() == [10_000_002, 10_001_004]
+		assert Marketmailer.RegionManagerSupervisor.sde_region_ids() == [10_000_002, 10_001_004]
 	end
 
-	test "returns no regions before the SDE import" do
-		assert Marketmailer.Regions.ids() == []
+	test "returns no region ids before the SDE import" do
+		assert Marketmailer.RegionManagerSupervisor.sde_region_ids() == []
 	end
 end
