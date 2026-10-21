@@ -164,12 +164,8 @@ defmodule Discord.Embeds do
 	def market_list_embed(items, page, per_page) when is_list(items) do
 		{capped, page, per_page} = paginate(items, page, per_page)
 		page_items = list_page_slice(capped, page, per_page)
-		offset = (page - 1) * per_page
 
-		lines =
-			page_items
-			|> Enum.with_index(offset + 1)
-			|> Enum.map(fn {item, i} -> list_line(item, i) end)
+		lines = Enum.map(page_items, &list_line/1)
 
 		description =
 			if page_items == [] do
@@ -353,13 +349,13 @@ defmodule Discord.Embeds do
 	@list_item_width 18
 	@list_system_width 10
 
-	defp list_line(item, i) do
+	defp list_line(item) do
 		name = list_truncate(list_field(item, :item, "item") || list_field(item, :item_name, "item_name"), @list_item_width)
 		margin = format_list_margin(list_field(item, :margin, "margin"))
 		system = list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
 		security = format_security(list_field(item, :security_status, "security_status")) |> to_string()
 
-		"#{i}. **#{name}** — #{margin} • #{system} (#{security})"
+		"**#{name}** • #{margin} • #{system} • #{security}"
 	end
 
 	defp list_truncate(nil, _max), do: "?"
@@ -424,7 +420,7 @@ defmodule Discord.Embeds do
 		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
 
 	defp location_value(item) do
-		"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} (#{format_security(item.security_status)})"
+		"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} • #{format_security(item.security_status)}"
 	end
 
 	defp millions_compact(abs_value),

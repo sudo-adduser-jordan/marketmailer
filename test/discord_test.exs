@@ -626,7 +626,7 @@ defmodule Discord.EmbedsTest do
 		assert %Embed{title: "Tritanium"} = embed
 		assert %Embed.Author{name: "\u200B", icon_url: broadcast} = embed.author
 		assert broadcast =~ "broadcast.png"
-		assert fields["Location"] == "Jita IV - Moon 4 - Jita - The Forge (0.9)"
+		assert fields["Location"] == "Jita IV - Moon 4 - Jita - The Forge • 0.9"
 		assert fields["Sell"] == "10.00 ISK"
 		assert fields["Buy"] == "110.00 ISK"
 		assert fields["Margin"] == "+100.00 ISK"
@@ -670,7 +670,7 @@ defmodule Discord.EmbedsTest do
 
 		assert unknown_fields["Buy"] == "? ISK"
 		assert unknown_fields["Margin"] == "? ISK"
-		assert unknown_fields["Location"] == "? - ? - ? (?)"
+		assert unknown_fields["Location"] == "? - ? - ? • ?"
 		assert unknown_embed.color == 0x7289DA
 	end
 
@@ -760,11 +760,8 @@ defmodule Discord.EmbedsTest do
 
 		rows = description |> String.split("\n") |> Enum.reject(&(&1 == ""))
 		assert length(rows) == 2
-		assert hd(rows) =~ "Tritanium"
-		assert hd(rows) =~ "+1.3k"
-		assert hd(rows) =~ "(0.9)"
-		assert List.last(rows) =~ "?"
-		assert List.last(rows) =~ "(?)"
+		assert hd(rows) == "**Tritanium** • +1.3k • Jita • 0.9"
+		assert List.last(rows) == "**Plex** • ? • ? • ?"
 	end
 
 	test "disambiguation embed lists candidates with a re-run hint" do
@@ -805,13 +802,13 @@ defmodule Discord.EmbedsTest do
 		fields = fn embed -> Map.new(embed.fields, &{&1.name, &1.value}) end
 
 		assert fields.(high)["Location"] ==
-						 "Jita IV - Moon 4 - Jita - The Forge (0.9)"
+						 "Jita IV - Moon 4 - Jita - The Forge • 0.9"
 
 		assert fields.(low)["Location"] ==
-						 "Jita IV - Moon 4 - Jita - The Forge (0.3)"
+						 "Jita IV - Moon 4 - Jita - The Forge • 0.3"
 
 		assert fields.(null)["Location"] ==
-						 "Jita IV - Moon 4 - Jita - The Forge (-0.5)"
+						 "Jita IV - Moon 4 - Jita - The Forge • -0.5"
 	end
 
 	test "all embeds carry a SemVer version badge in the footer" do
