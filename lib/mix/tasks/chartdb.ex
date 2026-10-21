@@ -11,7 +11,7 @@ defmodule Mix.Tasks.Chartdb do
 
 	@slots [
 		{40, 280, ["market"]},
-		{350, 260, ["names", "systems", "etags"]},
+		{350, 260, ["names", "regions", "systems", "etags"]},
 		{640, 260, ["discord", "marketListView"]},
 		{930, 270, ["schema_migrations", :legend]}
 	]
@@ -178,6 +178,7 @@ defmodule Mix.Tasks.Chartdb do
 	end
 
 	defp meta("names", _schema), do: {"names", nil, ["no timestamps", "SDE-seeded (mix sde.import)"]}
+	defp meta("regions", _schema), do: {"regions", nil, ["no timestamps", "SDE-seeded (mix sde.import)"]}
 	defp meta("systems", _schema), do: {"systems", nil, ["no timestamps", "SDE-seeded (mix sde.import)"]}
 	defp meta("etags", _schema), do: {"etags", nil, []}
 	defp meta("discord", _schema), do: {"discord", nil, []}
@@ -240,6 +241,7 @@ defmodule Mix.Tasks.Chartdb do
 			%{
 				"market" => "#d0ebff",
 				"names" => "#fff3bf",
+				"regions" => "#c5f6fa",
 				"systems" => "#d3f9d8",
 				"etags" => "#e5dbff",
 				"discord" => "#f3d9fa",
@@ -334,7 +336,7 @@ defmodule Mix.Tasks.Chartdb do
 		[
 			~s(  <rect x="40" y="#{y}" width="#{@canvas_w - 80}" height="#{h}" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>\n),
 			~s[  <text x="#{cx}" y="#{y + 28}" font-size="13" text-anchor="middle">Indexes: market (#{schema.market_indexes} total, #{schema.market_partial} partial) • Jita-buy (system_id = 30000142) • sell scan (is_buy_order = 0)</text>\n],
-			~s[  <text x="#{cx}" y="#{y + 50}" font-size="13" text-anchor="middle">names/systems carry no timestamps; all other tables have inserted_at/updated_at. MarketView (lib/schema.ex) is a query struct, not a DB view.</text>\n],
+			~s[  <text x="#{cx}" y="#{y + 50}" font-size="13" text-anchor="middle">names/systems/regions carry no timestamps; all other tables have inserted_at/updated_at. MarketView (lib/schema.ex) is a query struct, not a DB view.</text>\n],
 			~s[  <text x="#{cx}" y="#{y + 72}" font-size="13" text-anchor="middle">Queries LEFT JOIN names/systems; unmatched ids render as Player Station or ?. Read-only sqlite3 on the live WAL file is safe; never write.</text>\n],
 			~s[  <text x="#{cx}" y="#{y + 94}" font-size="13" text-anchor="middle">* bool is_buy_order is stored 1/0 because insert_all skips Ecto casting (see Market.Database.upsert_orders).</text>\n]
 		]

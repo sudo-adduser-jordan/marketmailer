@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="921" viewBox="0 0 1240 921" font-family="sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="982" viewBox="0 0 1240 982" font-family="sans-serif">
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
       <path d="M0,0 L10,4 L0,8 z" fill="#1e1e1e"/>
@@ -7,9 +7,9 @@
       <path d="M0,0 L10,4 L0,8 z" fill="#868e96"/>
     </marker>
   </defs>
-  <rect width="1240" height="921" fill="#ffffff"/>
+  <rect width="1240" height="982" fill="#ffffff"/>
   <text x="40" y="48" font-size="28" fill="#1e1e1e">Marketmailer — database schema</text>
-  <text x="40" y="70" font-size="13" fill="#555">priv/data/marketmailer.db (WAL, gitignored) • tables: discord / etags / market / names / systems • VIEW: marketListView</text>
+  <text x="40" y="70" font-size="13" fill="#555">priv/data/marketmailer.db (WAL, gitignored) • tables: discord / etags / market / names / regions / systems • VIEW: marketListView</text>
   <rect x="40" y="90" width="280" height="432" rx="8" fill="#d0ebff" stroke="#1e1e1e" stroke-width="2"/>
   <text x="180" y="118" font-size="15" font-weight="bold" text-anchor="middle">market</text>
   <text x="56" y="130" font-size="13" font-family="monospace" font-weight="bold">order_id PK</text>
@@ -37,21 +37,27 @@
   <text x="366" y="174" font-size="13" font-family="monospace">is_capital_ship *</text>
   <text x="366" y="202" font-size="12" fill="#555">no timestamps</text>
   <text x="366" y="218" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
-  <rect x="350" y="262" width="260" height="174" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="480" y="290" font-size="15" font-weight="bold" text-anchor="middle">systems</text>
-  <text x="366" y="302" font-size="13" font-family="monospace" font-weight="bold">system_id PK</text>
+  <rect x="350" y="262" width="260" height="130" rx="8" fill="#c5f6fa" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="480" y="290" font-size="15" font-weight="bold" text-anchor="middle">regions</text>
+  <text x="366" y="302" font-size="13" font-family="monospace" font-weight="bold">region_id PK</text>
   <text x="366" y="324" font-size="13" font-family="monospace">name *</text>
-  <text x="366" y="346" font-size="13" font-family="monospace">security_status</text>
-  <text x="366" y="368" font-size="13" font-family="monospace">region_name *</text>
-  <text x="366" y="396" font-size="12" fill="#555">no timestamps</text>
-  <text x="366" y="412" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
-  <rect x="350" y="456" width="260" height="164" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="480" y="484" font-size="15" font-weight="bold" text-anchor="middle">etags</text>
-  <text x="366" y="496" font-size="13" font-family="monospace" font-weight="bold">url PK</text>
-  <text x="366" y="518" font-size="13" font-family="monospace">etag</text>
-  <text x="366" y="540" font-size="13" font-family="monospace">expires_at</text>
-  <text x="366" y="562" font-size="13" font-family="monospace">inserted_at *</text>
-  <text x="366" y="584" font-size="13" font-family="monospace">updated_at *</text>
+  <text x="366" y="352" font-size="12" fill="#555">no timestamps</text>
+  <text x="366" y="368" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
+  <rect x="350" y="412" width="260" height="174" rx="8" fill="#d3f9d8" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="480" y="440" font-size="15" font-weight="bold" text-anchor="middle">systems</text>
+  <text x="366" y="452" font-size="13" font-family="monospace" font-weight="bold">system_id PK</text>
+  <text x="366" y="474" font-size="13" font-family="monospace">name *</text>
+  <text x="366" y="496" font-size="13" font-family="monospace">security_status</text>
+  <text x="366" y="518" font-size="13" font-family="monospace">region_name *</text>
+  <text x="366" y="546" font-size="12" fill="#555">no timestamps</text>
+  <text x="366" y="562" font-size="12" fill="#555">SDE-seeded (mix sde.import)</text>
+  <rect x="350" y="606" width="260" height="164" rx="8" fill="#e5dbff" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="480" y="634" font-size="15" font-weight="bold" text-anchor="middle">etags</text>
+  <text x="366" y="646" font-size="13" font-family="monospace" font-weight="bold">url PK</text>
+  <text x="366" y="668" font-size="13" font-family="monospace">etag</text>
+  <text x="366" y="690" font-size="13" font-family="monospace">expires_at</text>
+  <text x="366" y="712" font-size="13" font-family="monospace">inserted_at *</text>
+  <text x="366" y="734" font-size="13" font-family="monospace">updated_at *</text>
   <rect x="640" y="90" width="260" height="142" rx="8" fill="#f3d9fa" stroke="#1e1e1e" stroke-width="2"/>
   <text x="770" y="118" font-size="15" font-weight="bold" text-anchor="middle">discord</text>
   <text x="656" y="130" font-size="13" font-family="monospace" font-weight="bold">guild_id PK</text>
@@ -98,17 +104,17 @@
   <g stroke="#1e1e1e" stroke-width="2" fill="none">
   <path d="M320,324 C336,324 336,126 350,126" marker-end="url(#arrow)"/>
   <path d="M320,214 C336,214 336,126 350,126" marker-end="url(#arrow)"/>
-  <path d="M320,302 C336,302 336,298 350,298" marker-end="url(#arrow)"/>
+  <path d="M320,302 C336,302 336,448 350,448" marker-end="url(#arrow)"/>
   </g>
   <g stroke="#868e96" stroke-width="2" stroke-dasharray="6 4" fill="none">
   <path d="M610,166 H638 V312 H640" marker-end="url(#arrow-gray)"/>
-  <path d="M610,349 H638 V349 H640" marker-end="url(#arrow-gray)"/>
-  <path d="M180,522 V733 H770 V709" marker-end="url(#arrow-gray)"/>
+  <path d="M610,499 H638 V499 H640" marker-end="url(#arrow-gray)"/>
+  <path d="M180,522 V794 H770 V709" marker-end="url(#arrow-gray)"/>
   </g>
-  <text x="475" y="727" font-size="12" fill="#868e96" text-anchor="middle">VIEW reads market + caches</text>
-  <rect x="40" y="761" width="1160" height="120" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
-  <text x="620" y="789" font-size="13" text-anchor="middle">Indexes: market (8 total, 3 partial) • Jita-buy (system_id = 30000142) • sell scan (is_buy_order = 0)</text>
-  <text x="620" y="811" font-size="13" text-anchor="middle">names/systems carry no timestamps; all other tables have inserted_at/updated_at. MarketView (lib/schema.ex) is a query struct, not a DB view.</text>
-  <text x="620" y="833" font-size="13" text-anchor="middle">Queries LEFT JOIN names/systems; unmatched ids render as Player Station or ?. Read-only sqlite3 on the live WAL file is safe; never write.</text>
-  <text x="620" y="855" font-size="13" text-anchor="middle">* bool is_buy_order is stored 1/0 because insert_all skips Ecto casting (see Market.Database.upsert_orders).</text>
+  <text x="475" y="788" font-size="12" fill="#868e96" text-anchor="middle">VIEW reads market + caches</text>
+  <rect x="40" y="822" width="1160" height="120" rx="8" fill="#f1f3f5" stroke="#1e1e1e" stroke-width="2"/>
+  <text x="620" y="850" font-size="13" text-anchor="middle">Indexes: market (8 total, 3 partial) • Jita-buy (system_id = 30000142) • sell scan (is_buy_order = 0)</text>
+  <text x="620" y="872" font-size="13" text-anchor="middle">names/systems/regions carry no timestamps; all other tables have inserted_at/updated_at. MarketView (lib/schema.ex) is a query struct, not a DB view.</text>
+  <text x="620" y="894" font-size="13" text-anchor="middle">Queries LEFT JOIN names/systems; unmatched ids render as Player Station or ?. Read-only sqlite3 on the live WAL file is safe; never write.</text>
+  <text x="620" y="916" font-size="13" text-anchor="middle">* bool is_buy_order is stored 1/0 because insert_all skips Ecto casting (see Market.Database.upsert_orders).</text>
 </svg>

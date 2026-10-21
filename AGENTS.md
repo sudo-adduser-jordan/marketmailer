@@ -137,8 +137,11 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   into `priv/data/sde/<build>/` (gitignored), extracts only
   `types`/`mapSolarSystems`/`mapConstellations`/`mapRegions`/`npcStations`/
   `stationOperations`/`npcCorporations`/`mapPlanets`/`mapMoons`/`mapStars`,
-  and streams them into the `names`/`systems` tables (station names are
-  composed, see EVE name resolution).
+  and streams them into the `names`/`systems`/`regions` tables (station names
+  are composed, see EVE name resolution). `regions` holds `region_id` + name
+  from `mapRegions.jsonl`; the poller list is derived from it at boot, so a
+  region missing from a hardcoded id range can never be skipped silently
+  (Exordium 10001004 was missed that way).
 - Gotcha: `insert_all/3` with a bare table name skips ecto type casting.
   Booleans must be coerced to `1`/`0` (see `Market.Database.upsert_orders`),
   and `on_conflict: :replace_all` is unavailable - list fields explicitly.
@@ -186,7 +189,7 @@ Both formerly-disabled features are now uncommented in `lib/app.ex`:
 
 | Feature | Child in `lib/app.ex` | Needs |
 | --- | --- | --- |
-| Region pollers | `Marketmailer.RegionManagerSupervisor` | nothing |
+| Region pollers | `Marketmailer.RegionManagerSupervisor` | SDE seeded — one manager per `regions` row (`mix sde.import`); an empty table starts none and logs `regions_missing` |
 | Discord bot | `{Discord.BotSupervisor, ...}` (owns `Nostrum.Bot`) | `DISCORD_TOKEN` — if missing/invalid the bot is skipped with a warning, the rest of the app keeps running |
 
 `.example.env` documents the env vars.
@@ -231,10 +234,13 @@ then pipe to jq:
   (serialized, retrying writes on one process);
   `Etag.Database`, `Discord.Database`, `Market.Database` (reads + writes)
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
-  (types, systems, composed NPC station names)
+  (types, regions, systems, composed NPC station names)
+- `lib/regions.ex` - SDE region cache (`regions` table) read once at boot by
+  the region supervisor; the started set is cached in `:persistent_term` so
+  the Discord broadcast barrier always matches the running managers
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
 - `lib/manager.ex`, `lib/supervisor.ex`, `lib/worker.ex` - per-region fan-out
-  and refresh cycles (one `RegionManager` per region, one `PageWorker` per
+  and refresh cycles (one `RegionManager` per SDE region, one `PageWorker` per
   page; page 1 reports `X-Pages` and every report reconciles the worker set
   to exactly `1..count` — missing pages are started, pages above the count
   are stopped, so a stale/sparse `etags` table can never wedge a region;

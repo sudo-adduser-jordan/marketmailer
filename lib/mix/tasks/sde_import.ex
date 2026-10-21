@@ -54,6 +54,7 @@ defmodule Mix.Tasks.Sde.Import do
 		regions = load_keyed_map(paths["mapRegions.jsonl"], ["name"])
 		constellations = load_keyed_map(paths["mapConstellations.jsonl"], ["regionID", "region_id"], regions)
 
+		import_regions(regions)
 		import_types(paths["types.jsonl"])
 		import_systems(paths["mapSolarSystems.jsonl"], constellations)
 		import_stations(paths)
@@ -213,6 +214,35 @@ defmodule Mix.Tasks.Sde.Import do
 	end
 
 	def capital_ship_group?(group_id), do: group_id in @capital_ship_groups
+
+	# Pure mapping so the region seed can be tested without the SDE files.
+	def region_rows(regions) do
+		regions
+		|> Enum.map(fn {id, name} -> %{region_id: id, name: name} end)
+		|> Enum.sort_by(& &1.region_id)
+	end
+
+	# The table is authoritative, not additive: a region removed from the SDE
+	# must stop being polled. One transaction keeps the cache from ever being
+	# seen empty (which would boot the supervisor with no region managers).
+	defp import_regions(regions) do
+		rows = region_rows(regions)
+
+		with_write_retry(fn ->
+			{:ok, _} =
+				Database.transaction(fn ->
+					Database.delete_all("regions")
+
+					rows
+					|> Enum.chunk_every(500)
+					|> Enum.each(&Database.insert_all("regions", &1))
+				end)
+		end)
+
+		ids = Enum.map(rows, & &1.region_id)
+		verify_present!("regions", "region_id", ids)
+		Mix.shell().info("imported #{length(rows)} regions (verified #{length(ids)} present)")
+	end
 
 	defp import_types(path) do
 		{count, capital_count, ids} =

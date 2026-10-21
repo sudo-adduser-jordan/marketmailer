@@ -46,12 +46,12 @@ tasks:
           exit 1
         fi
         SDE_OK=1
-        for q in "SELECT COUNT(*) FROM sde_imports" "SELECT COUNT(*) FROM names" "SELECT COUNT(*) FROM systems"; do
+        for q in "SELECT COUNT(*) FROM sde_imports" "SELECT COUNT(*) FROM names" "SELECT COUNT(*) FROM systems" "SELECT COUNT(*) FROM regions"; do
           n=$(sqlite3 "$EFF_DB" "$q" 2>/dev/null) || SDE_OK=0
           if [ -z "$n" ] || [ "$n" = "0" ]; then SDE_OK=0; fi
         done
         if [ "$SDE_OK" != "1" ]; then
-          echo "start: SDE not loaded in $EFF_DB (sde_imports/names/systems empty or missing) — run task setup first"
+          echo "start: SDE not loaded in $EFF_DB (sde_imports/names/systems/regions empty or missing) — run task setup first"
           if [ "$EFF_DB" = "$PROD_DB" ] && [ "$PROD_DB" != "$DEV_DB" ]; then
             echo "start: note: setup loads $DEV_DB; a stale prod file keeps failing — load it directly: MARKETMAILER_DB=\"$PROD_DB\" mix sde.import \"${SDE_BUILD:-3569502}\""
           fi

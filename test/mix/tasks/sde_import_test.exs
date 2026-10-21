@@ -14,6 +14,15 @@ defmodule Mix.Tasks.Sde.ImportTest do
 				refute SdeImport.capital_ship_group?(nil)
 		end
 
+		test "maps SDE regions to sorted table rows" do
+				alias Mix.Tasks.Sde.Import, as: SdeImport
+
+				assert SdeImport.region_rows(%{10_001_004 => "Exordium", 10_000_002 => "The Forge"}) == [
+													%{region_id: 10_000_002, name: "The Forge"},
+													%{region_id: 10_001_004, name: "Exordium"}
+											]
+		end
+
 		test "composes NPC station names from SDE reference maps" do
 				alias Mix.Tasks.Sde.Import, as: SdeImport
 
