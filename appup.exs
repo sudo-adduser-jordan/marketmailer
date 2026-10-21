@@ -1,6 +1,30 @@
 {
-  ~c"0.1.27",
+  ~c"0.1.28",
   [
+    {~c"0.1.27",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Janice.ChartPool: behaviour GenServer. The update suspends the process and calls
+       # code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Janice.ChartPool, {:advanced, []}},
+       # Janice.Playwright: behaviour Janice.Capture. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Janice.Playwright},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format}
+     ]},
     {~c"0.1.26",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
@@ -228,6 +252,30 @@
      ]},
   ],
   [
+    {~c"0.1.27",
+     [
+       # An update only reaches processes in the supervision tree. An unsupervised
+       # process keeps running the old code.
+       #
+       # add_module comes first and delete_module last, but changed modules are not
+       # ordered by dependency. Reorder them, or add DepMods, where one depends on
+       # another.
+       #
+       # Discord.Consumer: behaviour Nostrum.Consumer. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Discord.Consumer},
+       # Janice.ChartPool: behaviour GenServer. The update suspends the process and calls
+       # code_change/3 with Extra = []. Replace [] if the migration needs data.
+       {:update, Janice.ChartPool, {:advanced, []}},
+       # Janice.Playwright: behaviour Janice.Capture. release_handler migrates no state
+       # for it, so the code is replaced without suspending anything. If the module holds
+       # state that changes shape, load_module is not enough.
+       {:load_module, Janice.Playwright},
+       # Marketmailer.Log.Format: no behaviour. The code is replaced without suspending
+       # anything.
+       {:load_module, Marketmailer.Log.Format}
+     ]},
     {~c"0.1.26",
      [
        # An update only reaches processes in the supervision tree. An unsupervised
