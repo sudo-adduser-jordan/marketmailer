@@ -764,6 +764,20 @@ defmodule Discord.EmbedsTest do
 		assert List.last(rows) == "**Plex** • ? • ? • ?"
 	end
 
+	test "labels an unnamed item with its type id instead of a bare question mark" do
+		embed =
+			Discord.Embeds.market_list_embed([
+				%{
+					type_id: 97_265,
+					margin: 111_300_000.0,
+					system_name: "Larryn",
+					security_status: 0.6
+				}
+			])
+
+		assert embed.description == "**Type 97265** • +111.3M • Larryn • 0.6"
+	end
+
 	test "disambiguation embed lists candidates with a re-run hint" do
 		embed =
 			Discord.Embeds.market_disambiguation_embed("trit", [

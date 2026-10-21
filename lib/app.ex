@@ -31,7 +31,33 @@ defmodule Marketmailer.Application do
 
 		{:ok, pid} = Supervisor.start_link(children, opts)
 
+		log_missing_sde_names()
+
 		{:ok, pid}
+	end
+
+	# Names come only from the SDE import, so a stale snapshot silently turns
+	# item labels into "Type <id>" in the undercut list. Surface the drift at
+	# boot, scoped to the rows users actually see.
+	defp log_missing_sde_names do
+		case Market.Database.count_unnamed_undercut_types() do
+			0 ->
+				:ok
+
+			count ->
+				Marketmailer.Log.warning(
+					"sde_names_missing",
+					%{count: count},
+					"#{count} unnamed type(s) in the top of the undercut list; run mix sde.import to refresh the name cache"
+				)
+		end
+	rescue
+		error ->
+			Marketmailer.Log.warning(
+				"sde_names_missing_check_failed",
+				%{reason: Exception.message(error)},
+				"could not check SDE name coverage"
+			)
 	end
 
 	defp poller_core_children do

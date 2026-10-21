@@ -350,12 +350,31 @@ defmodule Discord.Embeds do
 	@list_system_width 10
 
 	defp list_line(item) do
-		name = list_truncate(list_field(item, :item, "item") || list_field(item, :item_name, "item_name"), @list_item_width)
+		name = list_name(item)
 		margin = format_list_margin(list_field(item, :margin, "margin"))
 		system = list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
 		security = format_security(list_field(item, :security_status, "security_status")) |> to_string()
 
 		"**#{name}** • #{margin} • #{system} • #{security}"
+	end
+
+	# A type with no `names` row is an SDE import gap. Show the id so the gap
+	# is traceable instead of rendering a bare "?".
+	defp list_name(item) do
+		name = list_field(item, :item, "item") || list_field(item, :item_name, "item_name")
+
+		if is_binary(name) and String.trim(name) != "" do
+			list_truncate(name, @list_item_width)
+		else
+			type_label(item)
+		end
+	end
+
+	defp type_label(item) do
+		case list_field(item, :type_id, "type_id") do
+			id when is_integer(id) and id > 0 -> "Type #{id}"
+			_ -> "?"
+		end
 	end
 
 	defp list_truncate(nil, _max), do: "?"

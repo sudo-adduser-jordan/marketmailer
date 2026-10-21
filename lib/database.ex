@@ -459,6 +459,24 @@ defmodule Market.Database do
 
 	def get_items_less_than_jita_buy, do: load_rows("getItemsLessThan.sql")
 
+	# Item names come only from the SDE (`mix sde.import`), so a stale snapshot
+	# turns visible labels into the "Type <id>" fallback. Count what users
+	# actually see — unnamed types inside the top of the undercut list — so the
+	# check stays quiet for SDE entries that are unpublished and never listed.
+	def count_unnamed_undercut_types do
+		top =
+			from v in "marketListView",
+				order_by: [desc: v.margin],
+				limit: 100,
+				select: %{type_id: v.type_id, item: v.item}
+
+		Database.one(
+			from t in subquery(top),
+				where: is_nil(t.item),
+				select: count(t.type_id, :distinct)
+		) || 0
+	end
+
 	# Read-only aggregates for /database_stats. A single row of scalar
 	# subqueries keeps it to one round trip; load_rows/2 already logs a
 	# failed statement as market_query_failed.

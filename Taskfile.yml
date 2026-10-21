@@ -16,13 +16,17 @@ tasks:
       - task --list
 
   setup:
-    desc: Install deps, migrate the DB and load the SDE name/system caches (idempotent; SDE_BUILD overrides the pinned build)
+    desc: Install deps, migrate the DB and load the SDE name/system caches (idempotent; SDE_BUILD pins a build, default is the latest published)
     deps: [playwright:install]
     cmds:
       - |
         SDE_DB="${MARKETMAILER_DB:-{{.DEV_DB}}}"
         MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix setup
-        MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import "${SDE_BUILD:-3569502}"
+        if [ -n "${SDE_BUILD:-}" ]; then
+          MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import "$SDE_BUILD"
+        else
+          MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import
+        fi
 
   playwright:install:
     desc: Install the Chromium build matching the `playwright` CLI on PATH (no-op when current)
@@ -59,7 +63,7 @@ tasks:
         if [ "$SDE_OK" != "1" ]; then
           echo "start: SDE not loaded in $EFF_DB (sde_imports/names/systems/regions empty or missing) — run task setup first"
           if [ "$EFF_DB" = "$PROD_DB" ] && [ "$PROD_DB" != "$DEV_DB" ]; then
-            echo "start: note: setup loads $DEV_DB; a stale prod file keeps failing — load it directly: MARKETMAILER_DB=\"$PROD_DB\" mix sde.import \"${SDE_BUILD:-3569502}\""
+            echo "start: note: setup loads $DEV_DB; a stale prod file keeps failing — load it directly: MARKETMAILER_DB=\"$PROD_DB\" mix sde.import${SDE_BUILD:+ \"$SDE_BUILD\"}"
           fi
           exit 1
         fi

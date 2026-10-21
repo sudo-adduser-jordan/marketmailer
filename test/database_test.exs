@@ -514,6 +514,20 @@ defmodule Market.DatabaseTest do
 						 Database.query!("SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'marketListView'")
 	end
 
+	test "counts unnamed types in the visible undercut list" do
+		insert_fixture()
+		assert MarketDatabase.count_unnamed_undercut_types() == 0
+
+		now = NaiveDateTime.utc_now(:second)
+
+		Database.insert_all("market", [
+			market_row(104, 30_000_143, 9_999, 5.0, 0, now),
+			market_row(105, 30_000_142, 9_999, 110.0, 1, now)
+		])
+
+		assert MarketDatabase.count_unnamed_undercut_types() == 1
+	end
+
 	test "aggregates the cache, coverage and freshness for the stats command" do
 		insert_fixture()
 

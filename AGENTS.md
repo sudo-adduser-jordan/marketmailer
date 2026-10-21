@@ -141,7 +141,13 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   are composed, see EVE name resolution). `regions` holds `region_id` + name
   from `mapRegions.jsonl`; the poller list is derived from it at boot, so a
   region missing from a hardcoded id range can never be skipped silently
-  (Exordium 10001004 was missed that way).
+  (Exordium 10001004 was missed that way). Builds are dated: event items land
+  in builds published after the event starts, so a stale import surfaces as
+  `?`/`Type <id>` labels. `task setup` defaults to the latest build
+  (`SDE_BUILD` pins one); refresh a live DB with
+  `MARKETMAILER_DB=<db> MARKETMAILER_DEV_DB=<db> mix sde.import` (no build arg
+  = latest) — in dev a bare `mix sde.import` targets `priv/data/dev.db`. A boot
+  `sde_names_missing` warning reports unnamed types inside the top 100.
 - Gotcha: `insert_all/3` with a bare table name skips ecto type casting.
   Booleans must be coerced to `1`/`0` (see `Market.Database.upsert_orders`),
   and `on_conflict: :replace_all` is unavailable - list fields explicitly.
