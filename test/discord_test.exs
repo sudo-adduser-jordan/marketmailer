@@ -998,6 +998,7 @@ defmodule Discord.EmbedsTest do
 			sde_build: "3569502",
 			cache_entries: 1_638,
 			esi_error_entries: 0,
+			esi_rate_entries: 2,
 			janice_cache_entries: 0
 		}
 
@@ -1042,6 +1043,7 @@ defmodule Discord.EmbedsTest do
 
 		assert fields["Poller"] =~ "Regions: 115 • page workers: 42"
 		assert fields["Poller"] =~ "Etag pages: 1,638 • ETS cache: 1,638"
+		assert fields["Poller"] =~ "0 error-state, 2 rate-state, 0 chart"
 		assert fields["Poller"] =~ "Alert channels: 1 • VM uptime: 2d 5h"
 		assert fields["Poller"] =~ "SDE build: 3569502"
 

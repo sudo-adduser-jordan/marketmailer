@@ -682,7 +682,8 @@ defmodule Discord.Embeds do
 	defp poller_value(stats) do
 		"Regions: #{count(stats[:regions])} • page workers: #{count(stats[:page_workers])}\n" <>
 			"Etag pages: #{count(stats[:etag_pages])} • ETS cache: #{count(stats[:cache_entries])} " <>
-			"(#{count(stats[:esi_error_entries])} error-state, #{count(stats[:janice_cache_entries])} chart)\n" <>
+			"(#{count(stats[:esi_error_entries])} error-state, " <>
+			"#{count(stats[:esi_rate_entries])} rate-state, #{count(stats[:janice_cache_entries])} chart)\n" <>
 			"Alert channels: #{count(stats[:alert_channels])} • VM uptime: #{format_uptime(stats[:uptime_seconds])} • " <>
 			"SDE build: #{stats[:sde_build] || "?"}"
 	end

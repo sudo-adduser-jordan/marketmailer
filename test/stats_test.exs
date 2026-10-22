@@ -38,6 +38,7 @@ defmodule Marketmailer.StatsTest do
 		assert is_integer(runtime.uptime_seconds) and runtime.uptime_seconds >= 0
 		assert is_integer(runtime.cache_entries) and runtime.cache_entries >= 0
 		assert is_integer(runtime.esi_error_entries)
+		assert is_integer(runtime.esi_rate_entries)
 		assert is_integer(runtime.janice_cache_entries)
 		assert is_nil(runtime.sde_build) or is_binary(runtime.sde_build)
 		assert is_integer(runtime.contract_page_workers) and runtime.contract_page_workers >= 0

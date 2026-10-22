@@ -264,6 +264,19 @@ defmodule Contracts.Database do
 		end)
 	end
 
+	# A rate-limited item is not a failed attempt: push the next attempt out by
+	# Retry-After and leave items_attempts alone so the backoff does not grow.
+	def defer_item(contract_id, delay_ms) do
+		next_attempt = Contracts.now_ms() + max(delay_ms, 0)
+
+		Database.Writer.write(fn ->
+			Database.query!(
+				"UPDATE contracts SET items_next_attempt_at = ?, items_claim_round = 0 WHERE contract_id = ?",
+				[next_attempt, contract_id]
+			)
+		end)
+	end
+
 	def drop_contract(contract_id) do
 		Database.Writer.write(fn ->
 			transaction!(fn ->
@@ -608,7 +621,7 @@ defmodule Contracts.PageWorker do
 				{:failed, %{reason: :not_found}}
 
 			{:error, :rate_limited, ctx} ->
-				{:failed, %{reason: :rate_limited, retry_after_ms: ctx.retry_after_ms}}
+				{:rate_limited, %{reason: :rate_limited, retry_after_ms: ctx.retry_after_ms}}
 
 			{:error, :service_unavailable, _ctx} ->
 				{:failed, %{reason: :service_unavailable}}
@@ -736,6 +749,10 @@ defmodule Contracts.PageWorker do
 				Contracts.Database.drop_contract(contract_id)
 				:dropped
 
+			{:error, :rate_limited, ctx} ->
+				Contracts.Database.defer_item(contract_id, max(ctx.retry_after_ms, 1_000))
+				{:failed, :rate_limited}
+
 			{:error, reason, _ctx} ->
 				Contracts.Database.mark_item_failed(contract_id, attempts, config)
 				{:failed, reason}
@@ -788,6 +805,9 @@ defmodule Contracts.RegionManager do
 	@moduledoc false
 	use GenServer, restart: :permanent
 
+	@max_page_retries 3
+	@retry_margin_ms 30_000
+
 	def start_link(id) when is_integer(id) do
 		GenServer.start_link(__MODULE__, id, name: via(id))
 	end
@@ -818,6 +838,7 @@ defmodule Contracts.RegionManager do
 			 expected_pages: Enum.max(pages),
 			 results: %{},
 			 pages: MapSet.new(pages),
+			 retries: %{},
 			 timer: nil,
 			 item_fetches: 0,
 			 item_failures: 0,
@@ -828,7 +849,7 @@ defmodule Contracts.RegionManager do
 	@impl true
 	def handle_cast({:start_round, round}, state) do
 		cancel_timer(state.timer)
-		state = %{state | round: round, results: %{}, item_fetches: 0, item_failures: 0, dropped: 0}
+		state = %{state | round: round, results: %{}, retries: %{}, item_fetches: 0, item_failures: 0, dropped: 0}
 		timeout = Contracts.config() |> Keyword.fetch!(:region_timeout_ms)
 		timer = Process.send_after(self(), {:round_timeout, round}, timeout)
 
@@ -849,6 +870,21 @@ defmodule Contracts.RegionManager do
 		state = shrink_gone(state, page)
 		state = check_cycle(state, round)
 		{:noreply, state}
+	end
+
+	@impl true
+	def handle_cast({:page_result, round, page, :rate_limited, context}, state) do
+		retries = Map.get(state.retries, page, 0)
+		budget = remaining_ms(state.timer) - @retry_margin_ms
+
+		if retries < @max_page_retries and budget > 0 do
+			delay = context |> Map.get(:retry_after_ms, 0) |> max(1_000) |> min(budget)
+			Process.send_after(self(), {:retry_page, round, page}, delay)
+			{:noreply, %{state | retries: Map.put(state.retries, page, retries + 1)}}
+		else
+			state = put_result(state, page, :failed, %{reason: :rate_limited})
+			{:noreply, check_cycle(state, round)}
+		end
 	end
 
 	@impl true
@@ -874,6 +910,16 @@ defmodule Contracts.RegionManager do
 	end
 
 	def handle_info({:round_timeout, _round}, state), do: {:noreply, state}
+
+	def handle_info({:retry_page, round, page}, %{round: round, pages: pages} = state) do
+		if MapSet.member?(pages, page) and not Map.has_key?(state.results, page) do
+			Contracts.PageWorker.run_round(state.id, page, round)
+		end
+
+		{:noreply, state}
+	end
+
+	def handle_info({:retry_page, _round, _page}, state), do: {:noreply, state}
 	def handle_info(_message, state), do: {:noreply, state}
 
 	defp maybe_apply_pages(state, %{pages: pages}) when is_integer(pages) and pages > 0 do
@@ -995,7 +1041,7 @@ defmodule Contracts.RegionManager do
 
 		Contracts.Manager.region_complete(round, summary)
 
-		%{state | round: nil, results: %{}, timer: nil}
+		%{state | round: nil, results: %{}, retries: %{}, timer: nil}
 	end
 
 	defp finish_round(state, _round, _reason), do: state
@@ -1046,6 +1092,15 @@ defmodule Contracts.RegionManager do
 
 	defp cancel_timer(nil), do: :ok
 	defp cancel_timer(ref), do: Process.cancel_timer(ref)
+
+	defp remaining_ms(nil), do: 0
+
+	defp remaining_ms(ref) do
+		case Process.read_timer(ref) do
+			ms when is_integer(ms) -> ms
+			_ -> 0
+		end
+	end
 end
 
 defmodule Contracts.RegionManagerSupervisor do

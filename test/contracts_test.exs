@@ -23,6 +23,10 @@ defmodule ContractsTest do
 			:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 		end
 
+		if :ets.whereis(:esi_rate_state) == :undefined do
+			:ets.new(:esi_rate_state, [:named_table, :set, :public, read_concurrency: true])
+		end
+
 		:ok
 	end
 
@@ -369,6 +373,53 @@ defmodule ContractsTest do
 
 		:persistent_term.put(key, old)
 		:persistent_term.erase({Contracts, :active_round})
+	end
+
+	test "defers a rate-limited item without counting an attempt" do
+		contract = %{
+			contract_id: 20,
+			region_id: 91_000_007,
+			page: 1,
+			type: "item_exchange",
+			title: "Deferred",
+			price: 1_000_000.0,
+			buyout: nil,
+			reward: nil,
+			collateral: nil,
+			volume: 1.0,
+			expires_at: @future,
+			issued_at: @now,
+			days_to_complete: nil,
+			start_location_id: nil,
+			end_location_id: nil,
+			issuer_id: 1,
+			issuer_corporation_id: 2
+		}
+
+		assert :ok = Contracts.Database.upsert_page([contract], 91_000_007, 1, @round)
+		_ = Contracts.Database.defer_item(20, 5_000)
+
+		assert %{rows: [[0, next_attempt, 0]]} =
+						 Database.query!(
+							 "SELECT items_attempts, items_next_attempt_at, items_claim_round FROM contracts WHERE contract_id = 20",
+							 []
+						 )
+
+		assert next_attempt >= Contracts.now_ms() + 4_000
+	end
+
+	test "a rate-limited page is retried within the round" do
+		region = 91_000_008
+		{:ok, _} = Registry.register(Marketmailer.Registry, {:contract_page, region, 1}, nil)
+		{:ok, manager} = Contracts.RegionManager.start_link(region)
+
+		Contracts.RegionManager.start_round(region, @round)
+		assert_receive {:"$gen_cast", {:run_round, @round}}, 1_000
+
+		Contracts.RegionManager.page_result(region, @round, 1, :rate_limited, %{retry_after_ms: 1_000})
+		assert_receive {:"$gen_cast", {:run_round, @round}}, 2_000
+
+		GenServer.stop(manager)
 	end
 
 	defp collect_starts(count), do: Enum.map(1..count, fn _ -> assert_receive({:started, _id, _round}, 1_000) end)

@@ -10,6 +10,13 @@ defmodule ESI.ClientTest do
 						:ets.new(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 				end
 
+				if :ets.whereis(:esi_rate_state) == :undefined do
+						:ets.new(:esi_rate_state, [:named_table, :set, :public, read_concurrency: true])
+				end
+
+				:ets.match_delete(:esi_rate_state, {{:rate_block, :_}, :_})
+				:ets.match_delete(:esi_rate_state, {{:rate_group, :_}, :_})
+
 				:ok
 		end
 
@@ -95,5 +102,78 @@ defmodule ESI.ClientTest do
 				assert ctx.ttl >= 61_000
 				assert [{:blocked_until, blocked_until}] = :ets.lookup(:esi_error_state, :blocked_until)
 				assert blocked_until > System.system_time(:millisecond)
+		end
+
+		test "carries bucket headers into the response meta" do
+				http_fun = fn _url, _opts ->
+						{:ok,
+							%{
+									status: 200,
+									headers: %{
+											"x-ratelimit-group" => ["market-order"],
+											"x-ratelimit-limit" => ["12000/15m"],
+											"x-ratelimit-remaining" => ["4562"],
+											"x-ratelimit-used" => ["2"]
+									},
+									body: "[]"
+							}}
+				end
+
+				assert {:ok, _body, ctx} = ESI.fetch(98_002_001, 1, http_fun: http_fun)
+				assert ctx.group == "market-order"
+				assert ctx.rate_limit.max == 12_000
+				assert ctx.rate_limit.window_ms == 900_000
+				assert ctx.rate_limit.remaining == 4_562
+				assert ctx.rate_limit.used == 2
+		end
+
+		test "a 429 pauses the whole rate-limit group" do
+				previous = Application.get_env(:marketmailer, :esi_rate_limit)
+				Application.put_env(:marketmailer, :esi_rate_limit, enabled: true, max_block_ms: 120, jitter_ms: 0)
+
+				on_exit(fn ->
+						if previous do
+								Application.put_env(:marketmailer, :esi_rate_limit, previous)
+						else
+								Application.delete_env(:marketmailer, :esi_rate_limit)
+						end
+				end)
+
+				limited = fn _url, _opts ->
+						{:ok,
+							%{
+									status: 429,
+									headers: %{
+											"retry-after" => ["0.2"],
+											"x-ratelimit-group" => ["market-order"],
+											"x-ratelimit-limit" => ["12000/15m"],
+											"x-ratelimit-remaining" => ["0"]
+									},
+									body: ""
+							}}
+				end
+
+				assert {:error, :rate_limited, ctx} = ESI.fetch(98_002_002, 1, http_fun: limited)
+				assert ctx.retry_after_ms == 200
+
+				assert [{{:rate_block, "market-order"}, %{until: until}}] =
+													:ets.lookup(:esi_rate_state, {:rate_block, "market-order"})
+
+				assert until > System.system_time(:millisecond)
+
+				ok = fn _url, _opts -> {:ok, %{status: 200, headers: %{}, body: "[]"}} end
+				started = System.monotonic_time(:millisecond)
+				assert {:ok, _body, _ctx} = ESI.fetch(98_002_003, 1, http_fun: ok)
+				assert System.monotonic_time(:millisecond) - started >= 100
+		end
+
+		test "an ungrouped 429 leaves the bucket gate alone" do
+				http_fun = fn _url, _opts ->
+						{:ok, %{status: 429, headers: %{"retry-after" => ["5"]}, body: ""}}
+				end
+
+				assert {:error, :rate_limited, ctx} = ESI.fetch(98_002_004, 1, http_fun: http_fun)
+				assert ctx.retry_after_ms == 5_000
+				assert :ets.match(:esi_rate_state, {{:rate_block, :_}, :_}) == []
 		end
 end

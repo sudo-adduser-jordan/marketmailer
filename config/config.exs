@@ -36,6 +36,14 @@ config :marketmailer, :contracts,
 config :marketmailer, :dashboard_enabled, true
 config :marketmailer, :dashboard_password, nil
 config :marketmailer, :dashboard_user, nil
+
+# ESI bucket limiting: a 429 pauses the whole rate-limit group for Retry-After
+# (capped at max_block_ms); every request in the group waits it out.
+config :marketmailer, :esi_rate_limit,
+	enabled: true,
+	max_block_ms: 900_000,
+	jitter_ms: 500
+
 config :marketmailer, ecto_repos: [Database]
 
 config :phoenix, :json_library, Jason
