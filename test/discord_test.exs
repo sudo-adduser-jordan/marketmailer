@@ -974,6 +974,17 @@ defmodule Discord.EmbedsTest do
 			alert_channels: 1,
 			unnamed_locations: 263_972,
 			unknown_systems: 0,
+			contract_count: 12_345,
+			contract_items_count: 1_234_567,
+			contract_regions: 70,
+			contracts_resolved: 11_900,
+			contracts_pending: 445,
+			contracts_failed: 120,
+			contract_last_seen_round: 4_242,
+			contract_page_workers: 42,
+			contract_active_round: 4_243,
+			contract_top_round: 4_242,
+			contract_last_desired: 87,
 			last_write_at: "2026-10-17T01:34:03",
 			first_write_at: "2026-10-01T03:19:12",
 			schema_version: 20_261_019_000_000,
@@ -999,7 +1010,7 @@ defmodule Discord.EmbedsTest do
 		assert embed.color == 0x7289DA
 
 		assert Map.keys(fields) |> Enum.sort() ==
-						 ["Coverage", "Freshness", "Order cache", "Poller", "Storage", "Undercut list"]
+						 ["Contracts", "Coverage", "Freshness", "Order cache", "Poller", "Storage", "Undercut list"]
 
 		assert fields["Order cache"] =~ "Orders: **1,868,361**"
 		assert fields["Order cache"] =~ "Sell / buy: 1,378,574 / 489,787"
@@ -1014,6 +1025,11 @@ defmodule Discord.EmbedsTest do
 		assert fields["Freshness"] =~ "Last write: **"
 		assert fields["Freshness"] =~ "ago**"
 		assert fields["Freshness"] =~ "Query: 840 ms"
+
+		assert fields["Contracts"] =~ "Cached: **12,345** across 70 regions • 1,234,567 item rows"
+		assert fields["Contracts"] =~ "Items: resolved 11,900 • pending 445 • failed 120"
+		assert fields["Contracts"] =~ "Workers: 42 • round: running"
+		assert fields["Contracts"] =~ "last complete #4,242 • desired 87 • seen #4,242"
 
 		assert fields["Undercut list"] =~ "47,231 orders undercut the Jita buy wall"
 		assert fields["Undercut list"] =~ "`/list_market` shows the top 100"
@@ -1038,10 +1054,12 @@ defmodule Discord.EmbedsTest do
 			fields = Map.new(embed.fields, &{&1.name, &1.value})
 
 			assert embed.title == "Database Statistics"
-			assert map_size(fields) == 6
+			assert map_size(fields) == 7
 			assert fields["Order cache"] =~ "Orders: **0**"
 			assert fields["Storage"] =~ "Size: **?**"
 			assert fields["Freshness"] =~ "Last write: **never**"
+			assert fields["Contracts"] =~ "Cached: **0** across 0 regions • 0 item rows"
+			assert fields["Contracts"] =~ "round: idle • last complete none • desired 0 • seen none"
 			assert fields["Undercut list"] =~ "0 orders undercut"
 			assert fields["Coverage"] =~ "Unknown systems: 0"
 			assert fields["Poller"] =~ "SDE build: ?"

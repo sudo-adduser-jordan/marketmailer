@@ -125,6 +125,8 @@ defmodule Market.DatabaseTest do
 		Database.delete_all("names")
 		Database.delete_all("systems")
 		Database.delete_all("discord")
+		Database.delete_all("contract_items")
+		Database.delete_all("contracts")
 		:ok
 	end
 
@@ -545,6 +547,13 @@ defmodule Market.DatabaseTest do
 		assert stats.unnamed_locations == 0
 		assert stats.unknown_systems == 0
 		assert stats.alert_channels == 0
+		assert stats.contract_count == 0
+		assert stats.contract_items_count == 0
+		assert stats.contract_regions == 0
+		assert stats.contracts_resolved == 0
+		assert stats.contracts_pending == 0
+		assert stats.contracts_failed == 0
+		assert stats.contract_last_seen_round == nil
 		assert stats.page_size == 4096
 		assert stats.page_count > 0
 		assert stats.journal_mode == "wal"
@@ -561,9 +570,69 @@ defmodule Market.DatabaseTest do
 		assert stats.buy_orders == 0
 		assert stats.undercut_rows == 0
 		assert stats.known_names == 0
+		assert stats.contract_count == 0
+		assert stats.contract_items_count == 0
+		assert stats.contract_last_seen_round == nil
 		assert stats.last_write_at == nil
 		assert stats.first_write_at == nil
 		assert stats.page_count > 0
+	end
+
+	test "stats aggregate the contract cache and item progress" do
+		now = NaiveDateTime.utc_now(:second)
+
+		base = %{
+			page: 1,
+			type: "item_exchange",
+			title: "Stats contract",
+			price: 1_000.0,
+			expires_at: System.system_time(:millisecond) + 3_600_000,
+			inserted_at: now,
+			updated_at: now
+		}
+
+		Database.insert_all("contracts", [
+			Map.merge(base, %{
+				contract_id: 1,
+				region_id: 90_001,
+				items_fetched: 1,
+				items_attempts: 0,
+				items_claim_round: 0,
+				last_seen_round: 5
+			}),
+			Map.merge(base, %{
+				contract_id: 2,
+				region_id: 90_001,
+				items_fetched: 0,
+				items_attempts: 0,
+				items_claim_round: 0,
+				last_seen_round: 5
+			}),
+			Map.merge(base, %{
+				contract_id: 3,
+				region_id: 90_002,
+				items_fetched: 0,
+				items_attempts: 3,
+				items_claim_round: 0,
+				last_seen_round: 4
+			})
+		])
+
+		Database.insert_all("contract_items", [
+			%{record_id: 11, contract_id: 1, type_id: 34, quantity: 1, is_included: 1, is_blueprint_copy: 0},
+			%{record_id: 12, contract_id: 1, type_id: 35, quantity: 2, is_included: 1, is_blueprint_copy: 0},
+			%{record_id: 21, contract_id: 2, type_id: 36, quantity: 1, is_included: 1, is_blueprint_copy: 0}
+		])
+
+		assert {:ok, stats} = MarketDatabase.get_database_stats()
+
+		assert stats.contract_count == 3
+		assert stats.contract_items_count == 3
+		assert stats.contract_regions == 2
+		assert stats.contracts_resolved == 1
+		assert stats.contracts_pending == 2
+		assert stats.contracts_failed == 1
+		assert stats.contract_last_seen_round == 5
 	end
 
 	defp newest_migration_version do

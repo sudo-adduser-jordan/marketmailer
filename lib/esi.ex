@@ -29,10 +29,19 @@ defmodule ESI do
 
 	def page_url(region, page \\ 1), do: "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
 
+	def contracts_page_url(region, page \\ 1), do: "https://esi.evetech.net/v1/contracts/public/#{region}/?page=#{page}"
+
+	def contract_items_url(contract_id), do: "https://esi.evetech.net/v1/contracts/public/items/#{contract_id}/"
+
 	def fetch(region, page \\ 1, opts \\ []) do
-		url = page_url(region, page)
+		get(page_url(region, page), Keyword.put(opts, :context, %{region: region, page: page}))
+	end
+
+	def get(url, opts \\ []) do
 		http_fun = Keyword.get(opts, :http_fun, &Req.get/2)
-		etag = Etag.Database.get_etag(url)
+		conditional = Keyword.get(opts, :conditional, true)
+		etag = if conditional, do: Etag.Database.get_etag(url)
+		context = Keyword.get(opts, :context, %{})
 
 		headers =
 			[{"User-Agent", @user_agent}] ++
@@ -45,8 +54,8 @@ defmodule ESI do
 			{:error, error} ->
 				Marketmailer.Log.error(
 					"esi_http_error",
-					%{region: region, page: page, error: inspect(error)},
-					"#{region}/#{page} HTTP error: #{inspect(error)}"
+					Map.merge(context, %{url: url, error: inspect(error)}),
+					"#{url} HTTP error: #{inspect(error)}"
 				)
 
 				{:error, error}

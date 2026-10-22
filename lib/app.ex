@@ -64,9 +64,25 @@ defmodule Marketmailer.Application do
 		if pollers_enabled?() do
 			[
 				{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
-				Marketmailer.RegionManagerSupervisor,
-				# The broadcaster only exists to deliver what the pollers report.
-				Discord.Broadcaster
+				Marketmailer.RegionManagerSupervisor
+			] ++
+				contracts_children() ++
+				[
+					# The broadcaster only exists to deliver what the pollers report.
+					Discord.Broadcaster
+				]
+		else
+			[]
+		end
+	end
+
+	defp contracts_children do
+		if Contracts.enabled?() do
+			[
+				{DynamicSupervisor, strategy: :one_for_one, name: Contracts.PageSup},
+				Contracts.RegionManagerSupervisor,
+				Contracts.ItemGate,
+				Contracts.Manager
 			]
 		else
 			[]

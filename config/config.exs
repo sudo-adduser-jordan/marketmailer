@@ -27,6 +27,12 @@ config :marketmailer, :bot_options, %{
 	wrapped_token: &Discord.BotSupervisor.token!/0
 }
 
+# Public-contract pollers; contracts with an item value minus price at or above
+# `min_margin` (100m ISK) are surfaced. See `Contracts` for the full defaults.
+config :marketmailer, :contracts,
+	enabled: true,
+	excluded_types: ["courier", "auction", "loan", "unknown"]
+
 config :marketmailer, :dashboard_enabled, true
 config :marketmailer, :dashboard_password, nil
 config :marketmailer, :dashboard_user, nil

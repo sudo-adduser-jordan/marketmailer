@@ -64,6 +64,12 @@ defmodule Discord.Consumer do
 				contexts: @any_context
 			},
 			%{
+				name: "list_contracts",
+				description: "Profitable public contracts",
+				integration_types: @both_installs,
+				contexts: @any_context
+			},
+			%{
 				name: "database_stats",
 				description: "Show database and market cache statistics",
 				integration_types: @both_installs,
@@ -92,6 +98,18 @@ defmodule Discord.Consumer do
 			) do
 		page = list_page_from_custom_id(interaction)
 		payload = Embeds.market_list_payload(safe_get_items(), page, Embeds.list_per_page())
+
+		Api.Interaction.create_response(interaction, %{
+			type: InteractionCallbackType.update_message(),
+			data: payload
+		})
+	end
+
+	def handle_event(
+				{:INTERACTION_CREATE, %Interaction{type: 3, data: %{custom_id: "contract_list:page:" <> _}} = interaction, _}
+			) do
+		page = contract_page_from_custom_id(interaction)
+		payload = Contracts.Broadcast.page_payload(page)
 
 		Api.Interaction.create_response(interaction, %{
 			type: InteractionCallbackType.update_message(),
@@ -155,6 +173,9 @@ defmodule Discord.Consumer do
 							_, reason -> list_defer_fallback(interaction, reason)
 						end
 				end
+
+			"list_contracts" ->
+				respond_with_contracts(interaction)
 
 			"database_stats" ->
 				case active_bot_name() do
@@ -487,6 +508,35 @@ defmodule Discord.Consumer do
 	end
 
 	defp list_page_from_custom_id(_), do: 1
+
+	defp contract_page_from_custom_id(%{data: %{custom_id: "contract_list:page:" <> page}}) do
+		case Integer.parse(String.trim(page)) do
+			{number, _} -> max(number, 1)
+			:error -> 1
+		end
+	end
+
+	defp contract_page_from_custom_id(_), do: 1
+
+	defp respond_with_contracts(interaction) do
+		payload =
+			try do
+				Contracts.Broadcast.command_payload()
+			rescue
+				_ -> Contracts.Embeds.error_payload()
+			catch
+				_, _ -> Contracts.Embeds.error_payload()
+			end
+
+		case Api.Interaction.create_response(interaction, %{type: 4, data: payload}) do
+			:ok -> :ok
+			{:error, reason} -> log_discord_warning("contracts_respond_failed", reason, interaction)
+		end
+	rescue
+		error -> log_discord_warning("contracts_respond_failed", Exception.message(error), interaction)
+	catch
+		_, reason -> log_discord_warning("contracts_respond_failed", reason, interaction)
+	end
 
 	defp safe_get_items do
 		Market.Database.get_items_less_than_jita_buy()

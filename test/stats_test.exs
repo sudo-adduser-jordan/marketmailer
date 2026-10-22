@@ -40,6 +40,10 @@ defmodule Marketmailer.StatsTest do
 		assert is_integer(runtime.esi_error_entries)
 		assert is_integer(runtime.janice_cache_entries)
 		assert is_nil(runtime.sde_build) or is_binary(runtime.sde_build)
+		assert is_integer(runtime.contract_page_workers) and runtime.contract_page_workers >= 0
+		assert is_nil(runtime.contract_active_round) or is_integer(runtime.contract_active_round)
+		assert is_nil(runtime.contract_top_round) or is_integer(runtime.contract_top_round)
+		assert is_nil(runtime.contract_last_desired) or is_integer(runtime.contract_last_desired)
 	end
 
 	test "a missing ETS table degrades to zero instead of raising" do

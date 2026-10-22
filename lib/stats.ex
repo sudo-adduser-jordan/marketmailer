@@ -41,6 +41,7 @@ defmodule Marketmailer.Stats do
 			esi_error_entries: ets_size(:esi_error_state),
 			janice_cache_entries: ets_size(:janice_chart_cache)
 		}
+		|> Map.merge(Contracts.runtime())
 	end
 
 	defp collect do

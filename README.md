@@ -88,7 +88,9 @@ open in excalidraw.com or the VSCode Excalidraw extension, export SVG to
 
 SQLite at `priv/data/marketmailer.db` (WAL, gitignored): `market` order
 cache, `etags` per-page ETag/Expires, `names`/`systems` EVE caches (SDE-seeded),
-`discord` channel routing, plus the `marketListView` undercut view serving all
+`discord` channel routing, `contracts`/`contract_items` public-contract cache
+(item lists fetched once per contract; an item 404 drops the contract row),
+plus the `marketListView` undercut view serving all
 user-facing queries; see `AGENTS.md` for the fetch -> write -> read policy.
 `MarketView` (`lib/schema.ex`) is a query struct, not a DB view. Arrows
 are logical FKs joined by the app, not DB constraints.

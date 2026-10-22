@@ -602,6 +602,7 @@ defmodule Discord.Embeds do
 				%Embed.Field{name: "Order cache", value: order_cache_value(stats), inline: true},
 				%Embed.Field{name: "Storage", value: storage_value(stats), inline: true},
 				%Embed.Field{name: "Freshness", value: freshness_value(stats), inline: true},
+				%Embed.Field{name: "Contracts", value: contracts_value(stats), inline: false},
 				%Embed.Field{name: "Undercut list", value: undercut_value(stats), inline: false},
 				%Embed.Field{name: "Coverage", value: coverage_value(stats), inline: false},
 				%Embed.Field{name: "Poller", value: poller_value(stats), inline: false}
@@ -657,6 +658,16 @@ defmodule Discord.Embeds do
 			"Jita buy-wall types: #{count(stats[:jita_buy_types])}"
 	end
 
+	defp contracts_value(stats) do
+		"Cached: **#{count(stats[:contract_count])}** across #{count(stats[:contract_regions])} regions " <>
+			"• #{count(stats[:contract_items_count])} item rows\n" <>
+			"Items: resolved #{count(stats[:contracts_resolved])} • pending #{count(stats[:contracts_pending])} " <>
+			"• failed #{count(stats[:contracts_failed])}\n" <>
+			"Workers: #{count(stats[:contract_page_workers])} • round: #{round_state(stats[:contract_active_round])} " <>
+			"• last complete #{round_label(stats[:contract_top_round])} • desired #{count(stats[:contract_last_desired])} " <>
+			"• seen #{round_label(stats[:contract_last_seen_round])}"
+	end
+
 	defp coverage_value(stats) do
 		types = count(stats[:tracked_types])
 		names = count(stats[:known_names])
@@ -680,6 +691,13 @@ defmodule Discord.Embeds do
 	defp count(value) when is_integer(value), do: format_count(value)
 	defp count(value) when is_binary(value), do: value
 	defp count(_), do: "0"
+
+	defp round_state(nil), do: "idle"
+	defp round_state(_), do: "running"
+
+	defp round_label(nil), do: "none"
+	defp round_label(value) when is_integer(value), do: "##{format_count(value)}"
+	defp round_label(_), do: "none"
 
 	# 1234567 -> 1,234,567 (Discord renders thousands separators fine).
 	defp format_count(nil), do: "0"

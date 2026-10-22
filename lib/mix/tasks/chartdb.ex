@@ -7,13 +7,14 @@ defmodule Mix.Tasks.Chartdb do
 	@gap 20
 	@row_h 22
 	@view_row_h 19
-	@canvas_w 1240
+	@canvas_w 1560
 
 	@slots [
 		{40, 280, ["market"]},
 		{350, 260, ["names", "regions", "systems", "etags"]},
 		{640, 260, ["discord", "marketListView"]},
-		{930, 270, ["schema_migrations", :legend]}
+		{930, 270, ["schema_migrations", :legend]},
+		{1220, 300, ["contracts", "contract_items"]}
 	]
 
 	@fks [
@@ -190,6 +191,14 @@ defmodule Mix.Tasks.Chartdb do
 
 	defp meta("schema_migrations", _schema), do: {"schema_migrations", nil, ["Ecto-managed"]}
 
+	defp meta("contracts", _schema) do
+		{"contracts", nil, ["item fetch once", "item 404 drops row"]}
+	end
+
+	defp meta("contract_items", _schema) do
+		{"contract_items", nil, ["composite PK", "blueprint copies 0"]}
+	end
+
 	defp label_style(_table, %{pk?: true}), do: :bold
 	defp label_style(_table, _col), do: :plain
 
@@ -246,7 +255,9 @@ defmodule Mix.Tasks.Chartdb do
 				"etags" => "#e5dbff",
 				"discord" => "#f3d9fa",
 				"marketListView" => "#ffecd2",
-				"schema_migrations" => "#f1f3f5"
+				"schema_migrations" => "#f1f3f5",
+				"contracts" => "#ffd8a8",
+				"contract_items" => "#e6fcf5"
 			}[box.name]
 
 		dash = if box.view?, do: ~s( stroke-dasharray="8 4"), else: ""
