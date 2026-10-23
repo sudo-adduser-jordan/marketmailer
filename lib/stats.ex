@@ -1,19 +1,6 @@
 defmodule Marketmailer.Stats do
 	@moduledoc false
 
-	# Database + market cache statistics for the /database_stats slash command.
-	#
-	# The aggregate is a full scan of the market table (~1s on a multi-million
-	# row file). :timer.tc/1 runs it in the caller, so it only stays off the
-	# gateway consumer when the caller is the deferred Task (run_stats_task);
-	# the two fallback paths — the defer failed, or no bot is registered — run it
-	# inline on the consumer and block it for that ~1s. The result is reused for
-	# @cache_ttl_ms. The cache lives in :persistent_term on purpose: a new
-	# supervised process or a new ETS table would not exist after a hot
-	# upgrade (the supervisor keeps its old child list and Application.start/2
-	# does not re-run), while a persistent_term key survives the upgrade with
-	# no process to supervise.
-
 	@cache_key {__MODULE__, :cache}
 	@cache_ttl_ms 60_000
 
@@ -76,8 +63,6 @@ defmodule Marketmailer.Stats do
 		stats
 	end
 
-	# Public so the missing-table guard is directly testable; every other
-	# caller goes through runtime/0.
 	def ets_size(table) do
 		case :ets.whereis(table) do
 			:undefined -> 0
@@ -92,7 +77,6 @@ defmodule Marketmailer.Stats do
 		div(System.convert_time_unit(native, :native, :millisecond), 1_000)
 	end
 
-	# One page worker per (region, page) registered as {:page, region, page}.
 	defp page_workers do
 		if Process.whereis(Marketmailer.Registry) do
 			Marketmailer.Registry
@@ -105,9 +89,6 @@ defmodule Marketmailer.Stats do
 		_ -> 0
 	end
 
-	# The SDE import task writes priv/data/sde/<build>/ relative to the project
-	# root; resolve it off :code.priv_dir so the release finds its own copy (and
-	# falls back to nil when priv/data is not shipped).
 	defp sde_build do
 		case File.ls(Path.join(:code.priv_dir(:marketmailer), "data/sde")) do
 			{:ok, entries} -> newest_build(entries)

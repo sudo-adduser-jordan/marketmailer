@@ -42,9 +42,6 @@ defmodule ESI do
 		end
 	end
 
-	# Bucket limits are per rate-limit group. A 429 pauses the whole group so
-	# the other page workers stop hammering the same bucket; the group is
-	# learned from the X-Ratelimit-Group header per route (see note_rate/4).
 	def wait_for_rate_window(url) do
 		config = rate_config()
 
@@ -59,9 +56,7 @@ defmodule ESI do
 	end
 
 	def page_url(region, page \\ 1), do: "https://esi.evetech.net/v1/markets/#{region}/orders/?page=#{page}"
-
 	def contracts_page_url(region, page \\ 1), do: "https://esi.evetech.net/v1/contracts/public/#{region}/?page=#{page}"
-
 	def contract_items_url(contract_id), do: "https://esi.evetech.net/v1/contracts/public/items/#{contract_id}/"
 
 	def fetch(region, page \\ 1, opts \\ []) do
@@ -90,7 +85,6 @@ defmodule ESI do
 
 		case http_fun.(url, request_opts) do
 			{:ok, response} ->
-				# Any HTTP answer proves the link is back, including 4xx/5xx.
 				Marketmailer.Maintenance.report_connected()
 				respond(response, url)
 
@@ -107,9 +101,6 @@ defmodule ESI do
 		end
 	end
 
-	# Transport failures mean the network is gone; HTTP statuses (even 5xx)
-	# mean it is not. Shared by the market and contract pollers so both halt
-	# on the same signal.
 	def network_error?(%{reason: reason}) when reason in @network_reasons, do: true
 
 	def network_error?(%{__exception__: true} = error) do
@@ -370,8 +361,6 @@ defmodule ESI do
 		end
 	end
 
-	# Test seam: a worker fetch can be stubbed without passing http_fun
-	# through every call site.
 	defp configured_http_fun do
 		Application.get_env(:marketmailer, :esi_http_fun, &Req.get/2)
 	end

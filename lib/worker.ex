@@ -150,9 +150,6 @@ defmodule Marketmailer.PageWorker do
 
 	defp handle_error(reason, errs, state) do
 		%{id: id, page: page} = state
-		# A network failure is not a per-worker backoff: the watchdog owns
-		# recovery, so re-check the shared gate soon instead of waiting out
-		# an exponential delay that other workers are not paying.
 		delay = if ESI.network_error?(reason), do: Marketmailer.Maintenance.recheck_ms(), else: backoff_ms(errs)
 		schedule_next(delay)
 

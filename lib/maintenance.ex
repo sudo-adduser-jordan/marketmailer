@@ -2,14 +2,6 @@ defmodule Marketmailer.Maintenance do
 	@moduledoc false
 	use GenServer
 
-	# Network watchdog. One process owns "is the network reachable?" so every
-	# poller can halt on the same signal instead of retrying on its own. While
-	# down it probes with a DNS+TCP connect (no ESI request, no error-limit or
-	# rate-limit budget) and notifies subscribers when the link returns.
-	#
-	# State lives in ETS so workers only pay one table read per tick:
-	# {:network, %{state: :up | :down, reason: string | nil, since_ms, probes}}.
-
 	@table :network_state
 	@key :network
 
@@ -57,10 +49,6 @@ defmodule Marketmailer.Maintenance do
 
 	def request_timeout_ms, do: Keyword.fetch!(config(), :request_timeout_ms)
 
-	# A transport failure proves the link is gone; the first caller flips the
-	# shared state, the process logs it and starts probing. Repeated reports
-	# while already down are no-ops, so in-flight workers cannot reset the
-	# probe cadence.
 	def report_disconnect(reason) do
 		if up?() do
 			write_status(%{state: :down, reason: describe(reason), since_ms: now_ms(), probes: 0})
@@ -74,8 +62,6 @@ defmodule Marketmailer.Maintenance do
 		:ok
 	end
 
-	# Any answer from the network (even a 4xx/5xx) proves connectivity. The
-	# process owns the log line and the subscriber notification.
 	def report_connected do
 		if down?() do
 			write_status(up_status())

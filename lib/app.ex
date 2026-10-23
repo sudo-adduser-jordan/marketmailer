@@ -8,11 +8,11 @@ defmodule Marketmailer.Application do
 	def start(_type, _args) do
 		configure_file_logger()
 		Marketmailer.Log.info("app_start", %{booted_at: DateTime.utc_now()}, "marketmailer starting")
-		ensure_ets(:market_cache, [:named_table, :set, :public, read_concurrency: true])
-		ensure_ets(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
-		ensure_ets(:esi_rate_state, [:named_table, :set, :public, read_concurrency: true])
-		ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
-		ensure_ets(:janice_chart_cache, [:named_table, :set, :public])
+		create_cache_if_not_exists(:market_cache, [:named_table, :set, :public, read_concurrency: true])
+		create_cache_if_not_exists(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
+		create_cache_if_not_exists(:esi_rate_state, [:named_table, :set, :public, read_concurrency: true])
+		create_cache_if_not_exists(:network_state, [:named_table, :set, :public, read_concurrency: true])
+		create_cache_if_not_exists(:janice_chart_cache, [:named_table, :set, :public])
 
 		:ok = Database.Migrations.run!()
 
@@ -24,7 +24,11 @@ defmodule Marketmailer.Application do
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
 				{Task.Supervisor, name: Marketmailer.TaskSup}
-			] ++ poller_core_children() ++ [Janice.Supervisor] ++ dashboard_children() ++ bot_children()
+			] ++
+				poller_core_children() ++
+				[Janice.Supervisor] ++
+				dashboard_children() ++
+				bot_children()
 
 		opts = [
 			strategy: :one_for_one,
@@ -46,7 +50,6 @@ defmodule Marketmailer.Application do
 			] ++
 				contracts_children() ++
 				[
-					# The broadcaster only exists to deliver what the pollers report.
 					Discord.Broadcaster
 				]
 		else
@@ -91,7 +94,7 @@ defmodule Marketmailer.Application do
 
 	defp dashboard_enabled?, do: Application.get_env(:marketmailer, :dashboard_enabled, true)
 
-	defp ensure_ets(name, opts) do
+	defp create_cache_if_not_exists(name, opts) do
 		case :ets.whereis(name) do
 			:undefined -> :ets.new(name, opts)
 			_tid -> :ok
@@ -104,16 +107,10 @@ defmodule Marketmailer.Application do
 		ensure_file_logger(path)
 	end
 
-	# The production error sink. Tests point this at their own file under the
-	# same directory, so a test run can never delete or append to the live
-	# `logs/errors.jsonl` (or its rotated archives).
 	def error_log_path do
 		Application.get_env(:marketmailer, :error_log_path, @default_error_log_path)
 	end
 
-	# Start each boot with a fresh sink: remove the configured file and the
-	# rotation archives that belong to it. Sibling sinks (prod vs test) keep
-	# their files, so the directory itself is never removed.
 	def reset_error_log(path) do
 		_ = File.rm(path)
 

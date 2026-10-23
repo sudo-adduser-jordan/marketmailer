@@ -319,6 +319,9 @@ defmodule Discord.Database do
 		end)
 	end
 
+	defp raise_on_error({:ok, _}), do: :ok
+	defp raise_on_error({:error, e}), do: raise(e)
+
 	def upsert(guild_id, channel_id) do
 		now = NaiveDateTime.utc_now(:second)
 
@@ -347,11 +350,6 @@ defmodule Discord.Database do
 			record -> raise_on_error(Database.Writer.write(fn -> Database.delete(record) end))
 		end
 	end
-
-	# Slash-command handlers respond only after this returns, so a failed
-	# write must raise (and be logged) rather than report false success.
-	defp raise_on_error({:ok, _}), do: :ok
-	defp raise_on_error({:error, e}), do: raise(e)
 end
 
 defmodule Market.Database do
@@ -363,8 +361,6 @@ defmodule Market.Database do
 
 	@upsert_chunk_size 1000
 
-	# SQL is embedded at compile time: the text ships in the beam (no runtime
-	# file read) and editing a .sql recompiles this module.
 	@external_resource Path.join(__DIR__, "sql/getBestOrder.sql")
 	@external_resource Path.join(__DIR__, "sql/getMarketItem.sql")
 	@external_resource Path.join(__DIR__, "sql/getCapitalItem.sql")
@@ -400,9 +396,6 @@ defmodule Market.Database do
 		end
 	end
 
-	# One transaction per page: the insert and the stale-id delete commit
-	# together, so a partial failure can never leave a page half-updated (or
-	# delete rows the insert did not replace).
 	defp write_page(rows, url) do
 		case Database.transaction(fn ->
 					 {changed, seen_ids} =
@@ -416,7 +409,6 @@ defmodule Market.Database do
 								 )
 								 |> Database.all()
 								 |> Map.new(fn row ->
-									 # The select list after order_id is exactly @compare_fields, in order.
 									 [order_id | values] = Tuple.to_list(row)
 
 									 {order_id, @compare_fields |> Enum.zip(values) |> Map.new()}
@@ -494,8 +486,6 @@ defmodule Market.Database do
 
 	def get_market_item(_item_name), do: nil
 
-	# Capital hulls are filtered out of every Jita buy-wall query, so the lookup
-	# needs its own exact-name probe to explain why they cannot be in high sec.
 	def get_capital_item(item_name) when is_binary(item_name) do
 		case normalize_item_name(item_name) do
 			"" -> nil
@@ -523,10 +513,6 @@ defmodule Market.Database do
 
 	def get_items_less_than_jita_buy, do: load_rows(@items_less_than, "getItemsLessThan.sql")
 
-	# Item names come only from the SDE (`mix sde.import`), so a stale snapshot
-	# turns visible labels into the "Type <id>" fallback. Count what users
-	# actually see — unnamed types inside the top of the undercut list — so the
-	# check stays quiet for SDE entries that are unpublished and never listed.
 	def count_unnamed_undercut_types do
 		top =
 			from v in "marketListView",
@@ -541,8 +527,6 @@ defmodule Market.Database do
 		) || 0
 	end
 
-	# Surface SDE name drift at boot, scoped to the rows users actually see: an
-	# unnamed type inside the top of the undercut list renders as "Type <id>".
 	def log_unnamed_undercut_types do
 		case count_unnamed_undercut_types() do
 			0 ->
@@ -564,9 +548,6 @@ defmodule Market.Database do
 			)
 	end
 
-	# Read-only aggregates for /database_stats. A single row of scalar
-	# subqueries keeps it to one round trip; load_rows/3 already logs a
-	# failed statement as market_query_failed.
 	def get_database_stats do
 		case load_rows(@database_stats, "databaseStats.sql") do
 			[stats | _] -> {:ok, stats}
