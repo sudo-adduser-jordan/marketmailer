@@ -17,4 +17,35 @@ defmodule MarketmailerTest.Fixtures do
 
 		:ok
 	end
+
+	# Network-level halt: all ESI pollers park (unlike park_page_workers, which
+	# only exercises the ESI 5xx maintenance path).
+	def network_down(reason \\ :econnrefused) do
+		ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
+
+		:ets.insert(
+			:network_state,
+			{:network, %{state: :down, reason: inspect(reason), since_ms: System.system_time(:millisecond), probes: 0}}
+		)
+
+		ExUnit.Callbacks.on_exit(fn ->
+			if :ets.whereis(:network_state) != :undefined do
+				:ets.delete(:network_state, :network)
+			end
+		end)
+
+		:ok
+	end
+
+	def reset_network do
+		ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
+
+		if Process.whereis(Marketmailer.Maintenance) do
+			Marketmailer.Maintenance.reset()
+		else
+			:ets.delete(:network_state, :network)
+		end
+
+		:ok
+	end
 end

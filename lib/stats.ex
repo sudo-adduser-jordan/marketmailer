@@ -37,6 +37,7 @@ defmodule Marketmailer.Stats do
 			regions: length(Marketmailer.RegionManagerSupervisor.region_ids()),
 			uptime_seconds: uptime_seconds(),
 			sde_build: sde_build(),
+			network: Marketmailer.Maintenance.status(),
 			cache_entries: ets_size(:market_cache),
 			esi_error_entries: ets_size(:esi_error_state),
 			esi_rate_entries: ets_size(:esi_rate_state),

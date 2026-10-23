@@ -8,6 +8,19 @@ defmodule ESI do
 	@key :blocked_until
 	@rate_table :esi_rate_state
 	@rate_defaults [enabled: true, max_block_ms: 900_000, jitter_ms: 500]
+	@network_reasons [
+		:nxdomain,
+		:econnrefused,
+		:econnreset,
+		:etimedout,
+		:timeout,
+		:closed,
+		:ehostunreach,
+		:enetunreach,
+		:enetdown,
+		:eaddrnotavail,
+		:epipe
+	]
 
 	def wait_for_error_window do
 		now = System.system_time(:millisecond)
@@ -57,20 +70,33 @@ defmodule ESI do
 
 	def get(url, opts \\ []) do
 		wait_for_rate_window(url)
-		http_fun = Keyword.get(opts, :http_fun, &Req.get/2)
+		http_fun = Keyword.get(opts, :http_fun, configured_http_fun())
 		conditional = Keyword.get(opts, :conditional, true)
 		etag = if conditional, do: Etag.Database.get_etag(url)
 		context = Keyword.get(opts, :context, %{})
+		timeout = Marketmailer.Maintenance.request_timeout_ms()
 
 		headers =
 			[{"User-Agent", @user_agent}] ++
 				if etag, do: [{"If-None-Match", etag}], else: []
 
-		case http_fun.(url, headers: headers, pool_timeout: :infinity, retry_log_level: :info) do
+		request_opts = [
+			headers: headers,
+			pool_timeout: timeout,
+			receive_timeout: timeout,
+			connect_options: [timeout: timeout],
+			retry_log_level: :info
+		]
+
+		case http_fun.(url, request_opts) do
 			{:ok, response} ->
+				# Any HTTP answer proves the link is back, including 4xx/5xx.
+				Marketmailer.Maintenance.report_connected()
 				respond(response, url)
 
 			{:error, error} ->
+				if network_error?(error), do: Marketmailer.Maintenance.report_disconnect(error)
+
 				Marketmailer.Log.error(
 					"esi_http_error",
 					Map.merge(context, %{url: url, error: inspect(error)}),
@@ -80,6 +106,34 @@ defmodule ESI do
 				{:error, error}
 		end
 	end
+
+	# Transport failures mean the network is gone; HTTP statuses (even 5xx)
+	# mean it is not. Shared by the market and contract pollers so both halt
+	# on the same signal.
+	def network_error?(%{reason: reason}) when reason in @network_reasons, do: true
+
+	def network_error?(%{__exception__: true} = error) do
+		module = error.__struct__ |> Module.split() |> List.last() |> String.downcase()
+
+		String.contains?(module, ["transport", "mint", "finch"]) or
+			error
+			|> Exception.message()
+			|> String.downcase()
+			|> String.contains?([
+				"nxdomain",
+				"network",
+				"connection",
+				"closed",
+				"timeout",
+				"unreachable",
+				"econnrefused",
+				"ehostunreach"
+			])
+	end
+
+	def network_error?(reason) when reason in @network_reasons, do: true
+	def network_error?({:error, reason}), do: network_error?(reason)
+	def network_error?(_reason), do: false
 
 	defp respond(%{status: 200} = response, url) do
 		clear_maintenance()
@@ -314,5 +368,11 @@ defmodule ESI do
 					_ -> 0
 				end
 		end
+	end
+
+	# Test seam: a worker fetch can be stubbed without passing http_fun
+	# through every call site.
+	defp configured_http_fun do
+		Application.get_env(:marketmailer, :esi_http_fun, &Req.get/2)
 	end
 end

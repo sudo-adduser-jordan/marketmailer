@@ -39,6 +39,7 @@ defmodule ContractsTest do
 
 		:persistent_term.erase({Contracts, :top_round})
 		:persistent_term.erase({Contracts, :round_stats})
+		MarketmailerTest.Fixtures.reset_network()
 
 		on_exit(fn ->
 			Database.delete_all("contract_items")
@@ -48,6 +49,7 @@ defmodule ContractsTest do
 			Database.delete_all("regions")
 			:persistent_term.erase({Contracts, :top_round})
 			:persistent_term.erase({Contracts, :round_stats})
+			MarketmailerTest.Fixtures.reset_network()
 		end)
 
 		:ok
@@ -420,6 +422,84 @@ defmodule ContractsTest do
 		assert_receive {:"$gen_cast", {:run_round, @round}}, 2_000
 
 		GenServer.stop(manager)
+	end
+
+	test "manager pauses contract rounds while the network is down" do
+		region = 91_000_021
+		key = {Marketmailer.RegionManagerSupervisor, :region_ids}
+		old = :persistent_term.get(key, [])
+
+		previous = Application.get_env(:marketmailer, :contracts, [])
+
+		Application.put_env(:marketmailer, :contracts,
+			initial_delay_ms: 3_600_000,
+			region_concurrency: 1,
+			pause_recheck_ms: 3_600_000
+		)
+
+		:persistent_term.put(key, [region])
+
+		{:ok, fake} =
+			GenServer.start_link(
+				ContractsTest.FakeRegion,
+				{region, self()},
+				name: {:via, Registry, {Marketmailer.Registry, {:contract_region, region}}}
+			)
+
+		MarketmailerTest.Fixtures.network_down()
+
+		{:ok, manager} = Contracts.Manager.start_link()
+		send(manager, :start_round)
+
+		refute_receive {:started, ^region, _round}, 250
+		assert %{round: nil, paused: true} = :sys.get_state(manager)
+
+		Marketmailer.Maintenance.report_connected()
+		send(manager, {:maintenance, :up})
+
+		assert_receive {:started, ^region, _round}, 1_000
+
+		GenServer.stop(manager)
+		GenServer.stop(fake)
+
+		if previous do
+			Application.put_env(:marketmailer, :contracts, previous)
+		else
+			Application.delete_env(:marketmailer, :contracts)
+		end
+
+		:persistent_term.put(key, old)
+		:persistent_term.erase({Contracts, :active_round})
+	end
+
+	test "a contract page worker fetches nothing while the network is down" do
+		region = 91_000_022
+		page = 1
+		test_pid = self()
+		previous = Application.get_env(:marketmailer, :esi_http_fun)
+
+		Application.put_env(:marketmailer, :esi_http_fun, fn url, _opts ->
+			send(test_pid, {:fetched, url})
+			{:ok, %{status: 200, headers: %{"x-pages" => ["1"]}, body: "[]"}}
+		end)
+
+		on_exit(fn ->
+			if previous do
+				Application.put_env(:marketmailer, :esi_http_fun, previous)
+			else
+				Application.delete_env(:marketmailer, :esi_http_fun)
+			end
+		end)
+
+		MarketmailerTest.Fixtures.network_down()
+
+		{:ok, worker} = Contracts.PageWorker.start_link({region, page})
+		Contracts.PageWorker.run_round(region, page, @round)
+
+		refute_receive {:fetched, _url}, 200
+		assert Process.alive?(worker)
+
+		GenServer.stop(worker)
 	end
 
 	defp collect_starts(count), do: Enum.map(1..count, fn _ -> assert_receive({:started, _id, _round}, 1_000) end)

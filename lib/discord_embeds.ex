@@ -680,13 +680,22 @@ defmodule Discord.Embeds do
 	end
 
 	defp poller_value(stats) do
-		"Regions: #{count(stats[:regions])} • page workers: #{count(stats[:page_workers])}\n" <>
+		"Network: #{network_value(stats[:network])} • Regions: #{count(stats[:regions])} • page workers: #{count(stats[:page_workers])}\n" <>
 			"Etag pages: #{count(stats[:etag_pages])} • ETS cache: #{count(stats[:cache_entries])} " <>
 			"(#{count(stats[:esi_error_entries])} error-state, " <>
 			"#{count(stats[:esi_rate_entries])} rate-state, #{count(stats[:janice_cache_entries])} chart)\n" <>
 			"Alert channels: #{count(stats[:alert_channels])} • VM uptime: #{format_uptime(stats[:uptime_seconds])} • " <>
 			"SDE build: #{stats[:sde_build] || "?"}"
 	end
+
+	defp network_value(%{state: :down} = status) do
+		case status[:reason] do
+			reason when is_binary(reason) and reason != "" -> "DOWN (#{reason})"
+			_ -> "DOWN"
+		end
+	end
+
+	defp network_value(_status), do: "up"
 
 	defp count(nil), do: "0"
 	defp count(value) when is_integer(value), do: format_count(value)

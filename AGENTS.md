@@ -243,6 +243,11 @@ then pipe to jq:
 ## Architecture map
 
 - `lib/app.ex` - supervision tree + boot-time migration run (see policy above)
+- `lib/maintenance.ex` - `Marketmailer.Maintenance`: network watchdog. A
+  transport failure halts all ESI polling; a DNS+TCP probe to
+  `esi.evetech.net:443` (configurable, no ESI budget) resumes it on reconnect
+  (`network_lost`/`network_restored`, `{:maintenance, :down | :up}` to
+  subscribers such as `Contracts.Manager`)
 - `priv/repo/migrations` - schema migrations
 - `lib/database.ex` - `Database` repo + `Database.Writer`/`Database.Queue`
   (serialized, retrying writes on one process);

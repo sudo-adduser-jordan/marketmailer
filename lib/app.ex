@@ -12,6 +12,7 @@ defmodule Marketmailer.Application do
 		ensure_ets(:market_cache, [:named_table, :set, :public, read_concurrency: true])
 		ensure_ets(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 		ensure_ets(:esi_rate_state, [:named_table, :set, :public, read_concurrency: true])
+		ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
 		ensure_ets(:janice_chart_cache, [:named_table, :set, :public])
 
 		:ok = migrate()
@@ -20,6 +21,7 @@ defmodule Marketmailer.Application do
 			[
 				Database,
 				Database.Queue,
+				Marketmailer.Maintenance,
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
 				{Task.Supervisor, name: Marketmailer.TaskSup}

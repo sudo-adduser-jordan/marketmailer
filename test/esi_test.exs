@@ -14,8 +14,15 @@ defmodule ESI.ClientTest do
 						:ets.new(:esi_rate_state, [:named_table, :set, :public, read_concurrency: true])
 				end
 
+				if :ets.whereis(:network_state) == :undefined do
+						:ets.new(:network_state, [:named_table, :set, :public, read_concurrency: true])
+				end
+
 				:ets.match_delete(:esi_rate_state, {{:rate_block, :_}, :_})
 				:ets.match_delete(:esi_rate_state, {{:rate_group, :_}, :_})
+				MarketmailerTest.Fixtures.reset_network()
+
+				ExUnit.Callbacks.on_exit(fn -> MarketmailerTest.Fixtures.reset_network() end)
 
 				:ok
 		end
@@ -175,5 +182,64 @@ defmodule ESI.ClientTest do
 				assert {:error, :rate_limited, ctx} = ESI.fetch(98_002_004, 1, http_fun: http_fun)
 				assert ctx.retry_after_ms == 5_000
 				assert :ets.match(:esi_rate_state, {{:rate_block, :_}, :_}) == []
+		end
+
+		test "a transport error reports the network down" do
+				http_fun = fn _url, _opts -> {:error, %Req.TransportError{reason: :econnrefused}} end
+
+				assert {:error, _error} = ESI.fetch(98_003_001, 1, http_fun: http_fun)
+				assert Marketmailer.Maintenance.down?()
+
+				assert %{state: :down, reason: reason} = Marketmailer.Maintenance.status()
+				assert reason =~ "refused"
+		end
+
+		test "an HTTP answer restores the network" do
+				Marketmailer.Maintenance.report_disconnect(:econnrefused)
+				assert Marketmailer.Maintenance.down?()
+
+				http_fun = fn _url, _opts ->
+						{:ok, %{status: 304, headers: %{"x-pages" => ["1"]}, body: ""}}
+				end
+
+				assert {:not_modified, _ctx} = ESI.fetch(98_003_002, 1, http_fun: http_fun)
+				assert eventually(fn -> Marketmailer.Maintenance.up?() end)
+		end
+
+		test "requests carry bounded timeouts" do
+				test_pid = self()
+
+				http_fun = fn _url, opts ->
+						send(test_pid, {:request_opts, opts})
+						{:ok, %{status: 304, headers: %{"x-pages" => ["1"]}, body: ""}}
+				end
+
+				assert {:not_modified, _ctx} = ESI.fetch(98_003_003, 1, http_fun: http_fun)
+				assert_received {:request_opts, opts}
+				assert is_integer(opts[:pool_timeout]) and opts[:pool_timeout] > 0
+				assert is_integer(opts[:receive_timeout]) and opts[:receive_timeout] > 0
+				assert is_list(opts[:connect_options])
+		end
+
+		test "classifies transport errors only" do
+				assert ESI.network_error?(%Req.TransportError{reason: :econnrefused})
+				assert ESI.network_error?(:timeout)
+				assert ESI.network_error?({:error, :nxdomain})
+				refute ESI.network_error?(%{status: 500})
+				refute ESI.network_error?(500)
+		end
+
+		defp eventually(fun, attempts \\ 50) do
+				cond do
+						fun.() ->
+								true
+
+						attempts <= 0 ->
+								false
+
+						true ->
+								Process.sleep(10)
+								eventually(fun, attempts - 1)
+				end
 		end
 end

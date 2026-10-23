@@ -13,6 +13,7 @@ defmodule Contracts do
 		item_retry_max_ms: 14_400_000,
 		region_timeout_ms: 600_000,
 		round_deadline_ms: 1_500_000,
+		pause_recheck_ms: 30_000,
 		page_limit: 5_000,
 		broadcast_limit: 100,
 		broadcast_per_page: 10,
@@ -589,13 +590,32 @@ defmodule Contracts.PageWorker do
 
 	@impl true
 	def handle_cast({:run_round, round}, state) do
-		if state.round == round do
-			{:noreply, state}
-		else
-			state = %{state | round: round}
-			{status, context} = fetch_and_process(state, round)
-			Contracts.RegionManager.page_result(state.region, round, state.page, status, context)
-			{:noreply, %{state | round: nil}}
+		cond do
+			state.round == round ->
+				{:noreply, state}
+
+			Marketmailer.Maintenance.down?() ->
+				Contracts.RegionManager.page_result(
+					state.region,
+					round,
+					state.page,
+					:failed,
+					%{reason: :offline}
+				)
+
+				Marketmailer.Log.info(
+					"contracts_page_offline",
+					%{region: state.region, page: state.page, round: round},
+					"Contracts #{state.region}/#{state.page}: network down, page skipped"
+				)
+
+				{:noreply, %{state | round: nil}}
+
+			true ->
+				state = %{state | round: round}
+				{status, context} = fetch_and_process(state, round)
+				Contracts.RegionManager.page_result(state.region, round, state.page, status, context)
+				{:noreply, %{state | round: nil}}
 		end
 	end
 
@@ -695,32 +715,45 @@ defmodule Contracts.PageWorker do
 		candidates = Contracts.Database.item_candidates(region, page, round, config, now)
 
 		Enum.reduce_while(candidates, %{fetched: 0, failed: 0, dropped: 0}, fn candidate, acc ->
-			if Contracts.Manager.active_round?(round) and
-					 Contracts.Database.claim_item(candidate.contract_id, round) do
-				result =
-					Contracts.ItemGate.run(fn ->
-						fetch_items(candidate.contract_id, candidate.items_attempts, config)
-					end)
-
-				acc =
-					case result do
-						:fetched -> %{acc | fetched: acc.fetched + 1}
-						:dropped -> %{acc | dropped: acc.dropped + 1}
-						{:failed, _reason} -> %{acc | failed: acc.failed + 1}
-					end
-
-				{:cont, acc}
-			else
-				if Contracts.Manager.active_round?(round) do
-					{:cont, acc}
-				else
+			cond do
+				Marketmailer.Maintenance.down?() ->
 					{:halt, acc}
-				end
+
+				Contracts.Manager.active_round?(round) and
+						Contracts.Database.claim_item(candidate.contract_id, round) ->
+					result =
+						Contracts.ItemGate.run(fn ->
+							fetch_items(candidate.contract_id, candidate.items_attempts, config)
+						end)
+
+					acc =
+						case result do
+							:fetched -> %{acc | fetched: acc.fetched + 1}
+							:dropped -> %{acc | dropped: acc.dropped + 1}
+							{:failed, _reason} -> %{acc | failed: acc.failed + 1}
+						end
+
+					{:cont, acc}
+
+				Contracts.Manager.active_round?(round) ->
+					{:cont, acc}
+
+				true ->
+					{:halt, acc}
 			end
 		end)
 	end
 
 	defp fetch_items(contract_id, attempts, config) do
+		if Marketmailer.Maintenance.down?() do
+			Contracts.Database.release_item_claim(contract_id)
+			{:failed, :offline}
+		else
+			do_fetch_items(contract_id, attempts, config)
+		end
+	end
+
+	defp do_fetch_items(contract_id, attempts, config) do
 		url = Contracts.items_url(contract_id)
 		ESI.wait_for_error_window()
 
@@ -791,11 +824,15 @@ defmodule Contracts.PageWorker do
 		if Database.Writer.disk_full?(error), do: :disk_full, else: :persist_failed
 	end
 
-	defp failure_reason(%{reason: inner}) when is_atom(inner), do: inner
-	defp failure_reason(%{__exception__: true} = error), do: Exception.message(error)
-	defp failure_reason(reason) when is_atom(reason) or is_binary(reason), do: reason
-	defp failure_reason(reason) when is_integer(reason), do: reason
-	defp failure_reason(_reason), do: :unknown
+	defp failure_reason(reason) do
+		if ESI.network_error?(reason), do: :offline, else: failure_label(reason)
+	end
+
+	defp failure_label(%{reason: inner}) when is_atom(inner), do: inner
+	defp failure_label(%{__exception__: true} = error), do: Exception.message(error)
+	defp failure_label(reason) when is_atom(reason) or is_binary(reason), do: reason
+	defp failure_label(reason) when is_integer(reason), do: reason
+	defp failure_label(_reason), do: :unknown
 
 	@impl true
 	def handle_info(_message, state), do: {:noreply, state}
@@ -1162,6 +1199,7 @@ defmodule Contracts.Manager do
 		config = Contracts.config()
 		delay = Keyword.fetch!(config, :initial_delay_ms) + :rand.uniform(5_000)
 		Process.send_after(self(), :start_round, delay)
+		Marketmailer.Maintenance.subscribe(self())
 
 		{:ok,
 		 %{
@@ -1171,7 +1209,8 @@ defmodule Contracts.Manager do
 			 active: %{},
 			 results: %{},
 			 started_at: nil,
-			 deadline_timer: nil
+			 deadline_timer: nil,
+			 paused: false
 		 }}
 	end
 
@@ -1182,40 +1221,49 @@ defmodule Contracts.Manager do
 
 	@impl true
 	def handle_info(:start_round, state) do
-		regions = Marketmailer.RegionManagerSupervisor.region_ids()
-
-		if regions == [] do
-			Marketmailer.Log.warning(
-				"contracts_round_skipped",
-				%{reason: :regions_missing},
-				"Contract round skipped: no SDE regions loaded"
-			)
-
-			Process.send_after(self(), :start_round, 300_000)
+		if Marketmailer.Maintenance.down?() do
+			state = note_paused(state)
+			Process.send_after(self(), :start_round, Keyword.fetch!(state.config, :pause_recheck_ms))
 			{:noreply, state}
 		else
-			round = System.unique_integer([:positive, :monotonic])
-			:persistent_term.put(@active_round_key, round)
-			deadline = Process.send_after(self(), {:round_deadline, round}, Keyword.fetch!(state.config, :round_deadline_ms))
+			regions = Marketmailer.RegionManagerSupervisor.region_ids()
 
-			Marketmailer.Log.info(
-				"contracts_round_started",
-				%{round: round, regions: length(regions)},
-				"Contract round #{round} started across #{length(regions)} regions"
-			)
+			if regions == [] do
+				Marketmailer.Log.warning(
+					"contracts_round_skipped",
+					%{reason: :regions_missing},
+					"Contract round skipped: no SDE regions loaded"
+				)
 
-			state = %{
-				state
-				| round: round,
-					queue: regions,
-					active: %{},
-					results: %{},
-					started_at: Contracts.now_ms(),
-					deadline_timer: deadline
-			}
+				Process.send_after(self(), :start_round, 300_000)
+				{:noreply, state}
+			else
+				round = System.unique_integer([:positive, :monotonic])
+				:persistent_term.put(@active_round_key, round)
 
-			state = dispatch(state) |> maybe_finalize()
-			{:noreply, state}
+				deadline =
+					Process.send_after(self(), {:round_deadline, round}, Keyword.fetch!(state.config, :round_deadline_ms))
+
+				Marketmailer.Log.info(
+					"contracts_round_started",
+					%{round: round, regions: length(regions)},
+					"Contract round #{round} started across #{length(regions)} regions"
+				)
+
+				state = %{
+					state
+					| round: round,
+						queue: regions,
+						active: %{},
+						results: %{},
+						started_at: Contracts.now_ms(),
+						deadline_timer: deadline,
+						paused: false
+				}
+
+				state = dispatch(state) |> maybe_finalize()
+				{:noreply, state}
+			end
 		end
 	end
 
@@ -1246,7 +1294,53 @@ defmodule Contracts.Manager do
 	end
 
 	def handle_info({:round_deadline, _round}, state), do: {:noreply, state}
+
+	def handle_info({:maintenance, :down}, %{round: round} = state) when not is_nil(round) do
+		Marketmailer.Log.info(
+			"contracts_round_paused",
+			%{round: round, active: map_size(state.active)},
+			"Contract round #{round} paused: network down"
+		)
+
+		Enum.each(Map.keys(state.active), &Contracts.RegionManager.abort(&1, round))
+		cancel_timer(state.deadline_timer)
+		:persistent_term.erase(@active_round_key)
+		Process.send_after(self(), :start_round, Keyword.fetch!(state.config, :pause_recheck_ms))
+
+		{:noreply,
+		 %{
+			 state
+			 | round: nil,
+				 queue: [],
+				 active: %{},
+				 results: %{},
+				 started_at: nil,
+				 deadline_timer: nil,
+				 paused: true
+		 }}
+	end
+
+	def handle_info({:maintenance, :down}, state), do: {:noreply, %{state | paused: true}}
+
+	def handle_info({:maintenance, :up}, %{round: nil} = state) do
+		send(self(), :start_round)
+		{:noreply, %{state | paused: false}}
+	end
+
+	def handle_info({:maintenance, :up}, state), do: {:noreply, state}
 	def handle_info(_message, state), do: {:noreply, state}
+
+	defp note_paused(%{paused: true} = state), do: state
+
+	defp note_paused(state) do
+		Marketmailer.Log.info(
+			"contracts_round_paused",
+			%{reason: "network"},
+			"Contract rounds paused while the network is down"
+		)
+
+		%{state | paused: true}
+	end
 
 	defp dispatch(state) do
 		max_regions = Keyword.fetch!(state.config, :region_concurrency)
@@ -1331,7 +1425,8 @@ defmodule Contracts.Manager do
 				active: %{},
 				results: %{},
 				started_at: nil,
-				deadline_timer: nil
+				deadline_timer: nil,
+				paused: state.paused
 		}
 	end
 

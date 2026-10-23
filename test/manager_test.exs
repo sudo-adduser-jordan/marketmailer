@@ -14,6 +14,7 @@ defmodule Marketmailer.RegionManagerTest do
 		end
 
 		MarketmailerTest.Fixtures.park_page_workers()
+		MarketmailerTest.Fixtures.reset_network()
 
 		:ok
 	end

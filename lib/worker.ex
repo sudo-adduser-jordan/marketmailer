@@ -48,15 +48,17 @@ defmodule Marketmailer.PageWorker do
 				{:stop, :normal, state}
 
 			:ok ->
-				if ESI.maintenance_active?() do
-					if try_claim_ping() do
-						perform_fetch(state)
-					else
+				cond do
+					Marketmailer.Maintenance.down?() ->
+						schedule_next(Marketmailer.Maintenance.recheck_ms())
+						{:noreply, state}
+
+					ESI.maintenance_active?() and not try_claim_ping() ->
 						schedule_next(@ping_interval)
 						{:noreply, state}
-					end
-				else
-					perform_fetch(state)
+
+					true ->
+						perform_fetch(state)
 				end
 		end
 	end
@@ -146,7 +148,10 @@ defmodule Marketmailer.PageWorker do
 
 	defp handle_error(reason, errs, state) do
 		%{id: id, page: page} = state
-		delay = backoff_ms(errs)
+		# A network failure is not a per-worker backoff: the watchdog owns
+		# recovery, so re-check the shared gate soon instead of waiting out
+		# an exponential delay that other workers are not paying.
+		delay = if ESI.network_error?(reason), do: Marketmailer.Maintenance.recheck_ms(), else: backoff_ms(errs)
 		schedule_next(delay)
 
 		Marketmailer.Log.warning(
@@ -217,39 +222,15 @@ defmodule Marketmailer.PageWorker do
 
 	defp first_line(e), do: e |> Exception.message() |> String.split("\n") |> List.first()
 
-	defp failure_reason(%{reason: inner}) when is_atom(inner) do
-		if inner in [:nxdomain, :econnrefused, :econnreset, :etimedout, :timeout, :closed, :ehostunreach, :enetunreach] do
-			:offline
-		else
-			inner
-		end
+	defp failure_reason(reason) do
+		if ESI.network_error?(reason), do: :offline, else: failure_label(reason)
 	end
 
-	defp failure_reason(%{__exception__: true} = error) do
-		module = error.__struct__ |> Module.split() |> List.last() |> String.downcase()
-
-		if String.contains?(module, ["transport", "mint", "finch", "req", "http", "connection"]) or
-				 Exception.message(error)
-				 |> String.downcase()
-				 |> String.contains?([
-					 "nxdomain",
-					 "network",
-					 "connection",
-					 "closed",
-					 "timeout",
-					 "unreachable",
-					 "econnrefused",
-					 "ehostunreach"
-				 ]) do
-			:offline
-		else
-			:unknown
-		end
-	end
-
-	defp failure_reason(reason) when is_atom(reason) or is_binary(reason), do: reason
-	defp failure_reason(reason) when is_integer(reason), do: reason
-	defp failure_reason(_reason), do: :unknown
+	defp failure_label(%{reason: inner}) when is_atom(inner), do: inner
+	defp failure_label(%{__exception__: true}), do: :unknown
+	defp failure_label(reason) when is_atom(reason) or is_binary(reason), do: reason
+	defp failure_label(reason) when is_integer(reason), do: reason
+	defp failure_label(_reason), do: :unknown
 
 	defp try_claim_ping do
 		now = System.system_time(:millisecond)

@@ -44,6 +44,17 @@ config :marketmailer, :esi_rate_limit,
 	max_block_ms: 900_000,
 	jitter_ms: 500
 
+# Network watchdog: a transport failure pauses all polling; a DNS+TCP connect
+# to the probe target checks whether the link is back (no ESI budget used).
+config :marketmailer, :maintenance,
+	probe_host: "esi.evetech.net",
+	probe_port: 443,
+	probe_ms: 5_000,
+	max_probe_ms: 60_000,
+	probe_timeout_ms: 5_000,
+	recheck_ms: 5_000,
+	request_timeout_ms: 30_000
+
 config :marketmailer, ecto_repos: [Database]
 
 config :phoenix, :json_library, Jason
