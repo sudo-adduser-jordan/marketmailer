@@ -1,9 +1,10 @@
 defmodule Marketmailer.PageWorker do
 	use GenServer, restart: :transient
 
+	alias Marketmailer.Utils
+
 	@ping_interval 10_000
 	@gate_recheck_ms 5_000
-	# Max spread, in ms, applied once per worker at start (see init/1).
 	@start_jitter 30_000
 
 	def start_link({manager, id, page}) do
@@ -14,9 +15,6 @@ defmodule Marketmailer.PageWorker do
 
 	@impl true
 	def init({_manager, id, page}) do
-		# Offset each worker by a random start so the whole market does not
-		# fetch (and then persist) on the same ESI TTL boundary. The offset is
-		# applied once here, so it persists across cycles without drifting.
 		delay = Etag.Database.resume_delay_ms(ESI.page_url(id, page)) + start_jitter_ms()
 		Process.send_after(self(), :work, delay)
 		{:ok, %{id: id, page: page, errors: 0}}
@@ -63,6 +61,10 @@ defmodule Marketmailer.PageWorker do
 		end
 	end
 
+	defp backoff_ms(errors) do
+		(60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
+	end
+
 	defp fetch_gate(id, page) do
 		Marketmailer.RegionManager.fetch_gate(id, page)
 	catch
@@ -90,7 +92,7 @@ defmodule Marketmailer.PageWorker do
 		Marketmailer.Log.info(
 			"page_fetch_ok",
 			%{region: id, page: page, status: 200, orders: length(data), ttl_ms: ctx.ttl, url: ctx.url},
-			"200 #{id} #{length(data)} \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
+			"200 #{id} #{length(data)} \t #{Utils.format_ttl(ctx.ttl)} \t #{ctx.url}"
 		)
 
 		case persist_orders(data, ctx) do
@@ -110,7 +112,7 @@ defmodule Marketmailer.PageWorker do
 		Marketmailer.Log.info(
 			"page_fetch_not_modified",
 			%{region: id, page: page, status: 304, ttl_ms: ctx.ttl, url: ctx.url},
-			"304 #{id}     \t #{format_ttl(ctx.ttl)} \t #{ctx.url}"
+			"304 #{id}     \t #{Utils.format_ttl(ctx.ttl)} \t #{ctx.url}"
 		)
 
 		:ok = safe_upsert_etag(ctx)
@@ -138,7 +140,7 @@ defmodule Marketmailer.PageWorker do
 		Marketmailer.Log.warning(
 			"page_fetch_rate_limited",
 			%{region: id, page: page, status: 429, retry_after_ms: ctx.retry_after_ms, url: ctx.url},
-			"429 #{id}     \t retry in #{format_ttl(ctx.retry_after_ms)} \t #{ctx.url}"
+			"429 #{id}     \t retry in #{Utils.format_ttl(ctx.retry_after_ms)} \t #{ctx.url}"
 		)
 
 		Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: :rate_limited})
@@ -170,8 +172,6 @@ defmodule Marketmailer.PageWorker do
 				{:error, persist_failure_reason(e, ctx, length(data))}
 
 			_count ->
-				# The orders are durable here; a failed etag write only costs a
-				# re-fetch next cycle, so it must never mask the persisted page.
 				case Etag.Database.upsert_etag(ctx.url, ctx.etag, Map.get(ctx, :expires_at)) do
 					:ok ->
 						:ok
@@ -212,7 +212,6 @@ defmodule Marketmailer.PageWorker do
 	end
 
 	defp safe_upsert_etag(%{etag: nil}), do: :ok
-
 	defp safe_upsert_etag(%{etag: false}), do: :ok
 
 	defp safe_upsert_etag(ctx) do
@@ -264,20 +263,5 @@ defmodule Marketmailer.PageWorker do
 		)
 
 		{:stop, :normal, state}
-	end
-
-	defp backoff_ms(errors) do
-		(60_000 * :math.pow(2, errors)) |> round() |> min(300_000)
-	end
-
-	def format_ttl(ttl_ms) do
-		total_seconds = div(ttl_ms, 1_000)
-		minutes = div(total_seconds, 60)
-		seconds = rem(total_seconds, 60)
-
-		min = String.pad_leading("#{minutes}", 2, "0")
-		sec = String.pad_leading("#{seconds}", 2, "0")
-
-		"#{min}:#{sec}"
 	end
 end

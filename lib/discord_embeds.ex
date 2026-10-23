@@ -1,4 +1,5 @@
 defmodule Discord.Embeds do
+	alias Marketmailer.Utils
 	alias Nostrum.Struct.Embed
 
 	@color_success 0x43B581
@@ -22,14 +23,7 @@ defmodule Discord.Embeds do
 	defp error_author, do: branded_author(@icon_error)
 
 	defp with_version(%Embed{timestamp: ts} = embed) do
-		%{embed | footer: %Embed.Footer{text: "#{format_footer_date(ts)} • v#{app_version()}"}, timestamp: nil}
-	end
-
-	defp format_footer_date(ts) when is_binary(ts) do
-		case DateTime.from_iso8601(String.trim(ts)) do
-			{:ok, dt, _} -> Calendar.strftime(dt, "%b %d, %Y %H:%M UTC")
-			_ -> Calendar.strftime(DateTime.utc_now(), "%b %d, %Y %H:%M UTC")
-		end
+		%{embed | footer: %Embed.Footer{text: "#{Utils.format_footer_date(ts)} • v#{app_version()}"}, timestamp: nil}
 	end
 
 	defp app_version do
@@ -279,7 +273,7 @@ defmodule Discord.Embeds do
 			|> Enum.flat_map(fn {region, reasons} ->
 				case List.wrap(reasons) do
 					[] -> ["Region #{region} — refresh failed"]
-					list -> Enum.map(list, fn reason -> "Region #{region} — #{format_failure(reason)}" end)
+					list -> Enum.map(list, fn reason -> "Region #{region} — #{Utils.format_failure(reason)}" end)
 				end
 			end)
 
@@ -290,10 +284,6 @@ defmodule Discord.Embeds do
 
 		failure_lines ++ pending_lines
 	end
-
-	defp format_failure(%{page: nil, reason: reason}), do: "failed: #{reason}"
-	defp format_failure(%{page: page, reason: reason}), do: "page #{page}: #{reason}"
-	defp format_failure(reason), do: "failed: #{inspect(reason)}"
 
 	def list_components(_page, _total_pages, 0), do: []
 
@@ -351,9 +341,9 @@ defmodule Discord.Embeds do
 
 	defp list_line(item) do
 		name = list_name(item)
-		margin = format_list_margin(list_field(item, :margin, "margin"))
-		system = list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
-		security = format_security(list_field(item, :security_status, "security_status")) |> to_string()
+		margin = Utils.format_list_margin(list_field(item, :margin, "margin"))
+		system = Utils.list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
+		security = Utils.format_security(list_field(item, :security_status, "security_status")) |> to_string()
 
 		"**#{name}** • #{margin} • #{system} • #{security}"
 	end
@@ -364,7 +354,7 @@ defmodule Discord.Embeds do
 		name = list_field(item, :item, "item") || list_field(item, :item_name, "item_name")
 
 		if is_binary(name) and String.trim(name) != "" do
-			list_truncate(name, @list_item_width)
+			Utils.list_truncate(name, @list_item_width)
 		else
 			type_label(item)
 		end
@@ -374,38 +364,6 @@ defmodule Discord.Embeds do
 		case list_field(item, :type_id, "type_id") do
 			id when is_integer(id) and id > 0 -> "Type #{id}"
 			_ -> "?"
-		end
-	end
-
-	defp list_truncate(nil, _max), do: "?"
-	defp list_truncate("", _max), do: "?"
-
-	defp list_truncate(name, max) when is_binary(name) and is_integer(max) do
-		name = String.trim(name)
-
-		cond do
-			name == "" -> "?"
-			String.length(name) <= max -> name
-			true -> String.slice(name, 0, max - 1) <> "…"
-		end
-	end
-
-	defp list_truncate(_, _), do: "?"
-
-	defp format_list_margin(margin) do
-		case to_number(margin) do
-			nil ->
-				"?"
-
-			number ->
-				sign = if number < 0, do: "-", else: "+"
-				abs_value = abs(number)
-
-				cond do
-					abs_value >= 1_000_000 -> "#{sign}#{Float.round(abs_value / 1_000_000, 1)}M"
-					abs_value >= 1_000 -> "#{sign}#{Float.round(abs_value / 1_000, 1)}k"
-					true -> "#{sign}#{:erlang.float_to_binary(Float.round(abs_value, 2), decimals: 2)}"
-				end
 		end
 	end
 
@@ -435,47 +393,16 @@ defmodule Discord.Embeds do
 
 	defp more_line(dropped), do: "… +#{dropped} more"
 
-	defp format_isk(number) when is_number(number),
-		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
-
 	defp location_value(item) do
-		"#{or_unknown(item.location_name)} - #{or_unknown(item.system_name)} - #{or_unknown(item.region_name)} • #{format_security(item.security_status)}"
+		"#{Utils.or_unknown(item.location_name)} - #{Utils.or_unknown(item.system_name)} - #{Utils.or_unknown(item.region_name)} • #{Utils.format_security(item.security_status)}"
 	end
-
-	defp millions_compact(abs_value),
-		do: :erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2) <> "M"
-
-	defp to_number(nil), do: nil
-	defp to_number(number) when is_number(number), do: number * 1.0
-
-	defp to_number(binary) when is_binary(binary) do
-		case Float.parse(String.trim(binary)) do
-			{number, _} -> number
-			:error -> nil
-		end
-	end
-
-	defp to_number(_), do: nil
 
 	defp per_unit_margin(item) do
-		with buy when not is_nil(buy) <- to_number(item.buy_price),
-				 sell when not is_nil(sell) <- to_number(item.price) do
+		with buy when not is_nil(buy) <- Utils.to_number(item.buy_price),
+				 sell when not is_nil(sell) <- Utils.to_number(item.price) do
 			buy - sell
 		else
 			_ -> nil
-		end
-	end
-
-	defp price_value(price) do
-		case to_number(price) do
-			nil ->
-				"? ISK"
-
-			number ->
-				abs_value = abs(number)
-				formatted = if abs_value >= 1_000_000, do: millions_compact(abs_value), else: format_isk(abs_value)
-				prefix = if number < 0, do: "-", else: ""
-				"#{prefix}#{formatted} ISK"
 		end
 	end
 
@@ -505,17 +432,17 @@ defmodule Discord.Embeds do
 				},
 				%Embed.Field{
 					name: "Sell",
-					value: price_value(item.price),
+					value: Utils.price_value(item.price),
 					inline: true
 				},
 				%Embed.Field{
 					name: "Buy",
-					value: price_value(item.buy_price),
+					value: Utils.price_value(item.buy_price),
 					inline: true
 				},
 				%Embed.Field{
 					name: "Margin",
-					value: margin_value(per_unit_margin(item)),
+					value: Utils.margin_value(per_unit_margin(item)),
 					inline: false
 				}
 			]
@@ -526,30 +453,6 @@ defmodule Discord.Embeds do
 	defp embed_color(nil), do: @color_info
 	defp embed_color(profit) when is_number(profit) and profit > 0, do: @color_success
 	defp embed_color(_profit), do: @color_error
-
-	defp margin_value(nil), do: "? ISK"
-
-	defp margin_value(profit) when is_number(profit) do
-		sign = if profit >= 0, do: "+", else: "-"
-		abs_value = abs(profit * 1.0)
-
-		if abs_value >= 1_000_000 do
-			"#{sign}#{millions_compact(abs_value)} ISK"
-		else
-			"#{sign}#{format_isk(abs_value)} ISK"
-		end
-	end
-
-	defp or_unknown(nil), do: "?"
-	defp or_unknown(""), do: "?"
-	defp or_unknown(value), do: value
-
-	defp format_security(security) do
-		case to_number(security) do
-			nil -> "?"
-			number -> Float.round(number, 1)
-		end
-	end
 
 	defp channel_embed(description, color) do
 		%Embed{
@@ -627,64 +530,64 @@ defmodule Discord.Embeds do
 
 	defp order_cache_value(stats) do
 		"""
-		Orders: **#{format_count(stats[:order_count])}**
-		Sell / buy: #{format_count(stats[:sell_orders])} / #{format_count(stats[:buy_orders])}
-		Types: #{format_count(stats[:tracked_types])}
-		Systems: #{format_count(stats[:tracked_systems])}
+		Orders: **#{Utils.format_count(stats[:order_count])}**
+		Sell / buy: #{Utils.format_count(stats[:sell_orders])} / #{Utils.format_count(stats[:buy_orders])}
+		Types: #{Utils.format_count(stats[:tracked_types])}
+		Systems: #{Utils.format_count(stats[:tracked_systems])}
 		"""
 		|> String.trim_trailing()
 	end
 
 	defp storage_value(stats) do
 		"""
-		Size: **#{format_bytes(stats[:page_count], stats[:page_size])}**
+		Size: **#{Utils.format_bytes(stats[:page_count], stats[:page_size])}**
 		Journal: #{stats[:journal_mode] || "?"}
 		Schema: #{stats[:schema_version] || "?"}
-		Oldest order: #{format_timestamp(stats[:first_write_at])}
+		Oldest order: #{Utils.format_timestamp(stats[:first_write_at])}
 		"""
 		|> String.trim_trailing()
 	end
 
 	defp freshness_value(stats) do
 		"""
-		Last write: **#{relative_age(stats[:last_write_at])}**
-		Query: #{format_milliseconds(stats[:query_ms])}
+		Last write: **#{Utils.relative_age(stats[:last_write_at])}**
+		Query: #{Utils.format_milliseconds(stats[:query_ms])}
 		"""
 		|> String.trim_trailing()
 	end
 
 	defp undercut_value(stats) do
-		"#{format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.\n" <>
-			"Jita buy-wall types: #{count(stats[:jita_buy_types])}"
+		"#{Utils.format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.\n" <>
+			"Jita buy-wall types: #{Utils.count(stats[:jita_buy_types])}"
 	end
 
 	defp contracts_value(stats) do
-		"Cached: **#{count(stats[:contract_count])}** across #{count(stats[:contract_regions])} regions " <>
-			"• #{count(stats[:contract_items_count])} item rows\n" <>
-			"Items: resolved #{count(stats[:contracts_resolved])} • pending #{count(stats[:contracts_pending])} " <>
-			"• failed #{count(stats[:contracts_failed])}\n" <>
-			"Workers: #{count(stats[:contract_page_workers])} • round: #{round_state(stats[:contract_active_round])} " <>
-			"• last complete #{round_label(stats[:contract_top_round])} • desired #{count(stats[:contract_last_desired])} " <>
+		"Cached: **#{Utils.count(stats[:contract_count])}** across #{Utils.count(stats[:contract_regions])} regions " <>
+			"• #{Utils.count(stats[:contract_items_count])} item rows\n" <>
+			"Items: resolved #{Utils.count(stats[:contracts_resolved])} • pending #{Utils.count(stats[:contracts_pending])} " <>
+			"• failed #{Utils.count(stats[:contracts_failed])}\n" <>
+			"Workers: #{Utils.count(stats[:contract_page_workers])} • round: #{round_state(stats[:contract_active_round])} " <>
+			"• last complete #{round_label(stats[:contract_top_round])} • desired #{Utils.count(stats[:contract_last_desired])} " <>
 			"• seen #{round_label(stats[:contract_last_seen_round])}"
 	end
 
 	defp coverage_value(stats) do
-		types = count(stats[:tracked_types])
-		names = count(stats[:known_names])
+		types = Utils.count(stats[:tracked_types])
+		names = Utils.count(stats[:known_names])
 
-		"Names: #{names} / systems: #{count(stats[:known_systems])} in the SDE cache\n" <>
+		"Names: #{names} / systems: #{Utils.count(stats[:known_systems])} in the SDE cache\n" <>
 			"Types with orders: #{types} of #{names} known names\n" <>
-			"Unnamed locations: #{count(stats[:unnamed_locations])} " <>
-			"(#{share(stats[:unnamed_locations], stats[:order_count])} of orders)\n" <>
-			"Unknown systems: #{count(stats[:unknown_systems])}"
+			"Unnamed locations: #{Utils.count(stats[:unnamed_locations])} " <>
+			"(#{Utils.share(stats[:unnamed_locations], stats[:order_count])} of orders)\n" <>
+			"Unknown systems: #{Utils.count(stats[:unknown_systems])}"
 	end
 
 	defp poller_value(stats) do
-		"Network: #{network_value(stats[:network])} • Regions: #{count(stats[:regions])} • page workers: #{count(stats[:page_workers])}\n" <>
-			"Etag pages: #{count(stats[:etag_pages])} • ETS cache: #{count(stats[:cache_entries])} " <>
-			"(#{count(stats[:esi_error_entries])} error-state, " <>
-			"#{count(stats[:esi_rate_entries])} rate-state, #{count(stats[:janice_cache_entries])} chart)\n" <>
-			"Alert channels: #{count(stats[:alert_channels])} • VM uptime: #{format_uptime(stats[:uptime_seconds])} • " <>
+		"Network: #{network_value(stats[:network])} • Regions: #{Utils.count(stats[:regions])} • page workers: #{Utils.count(stats[:page_workers])}\n" <>
+			"Etag pages: #{Utils.count(stats[:etag_pages])} • ETS cache: #{Utils.count(stats[:cache_entries])} " <>
+			"(#{Utils.count(stats[:esi_error_entries])} error-state, " <>
+			"#{Utils.count(stats[:esi_rate_entries])} rate-state, #{Utils.count(stats[:janice_cache_entries])} chart)\n" <>
+			"Alert channels: #{Utils.count(stats[:alert_channels])} • VM uptime: #{Utils.format_uptime(stats[:uptime_seconds])} • " <>
 			"SDE build: #{stats[:sde_build] || "?"}"
 	end
 
@@ -697,124 +600,10 @@ defmodule Discord.Embeds do
 
 	defp network_value(_status), do: "up"
 
-	defp count(nil), do: "0"
-	defp count(value) when is_integer(value), do: format_count(value)
-	defp count(value) when is_binary(value), do: value
-	defp count(_), do: "0"
-
 	defp round_state(nil), do: "idle"
 	defp round_state(_), do: "running"
 
 	defp round_label(nil), do: "none"
-	defp round_label(value) when is_integer(value), do: "##{format_count(value)}"
+	defp round_label(value) when is_integer(value), do: "##{Utils.format_count(value)}"
 	defp round_label(_), do: "none"
-
-	# 1234567 -> 1,234,567 (Discord renders thousands separators fine).
-	defp format_count(nil), do: "0"
-
-	defp format_count(value) when is_integer(value) do
-		value
-		|> Integer.to_string()
-		|> group_digits()
-	end
-
-	defp format_count(value) when is_float(value), do: format_count(round(value))
-	defp format_count(value) when is_binary(value), do: value
-	defp format_count(_), do: "?"
-
-	defp group_digits(digits) do
-		sign = if String.starts_with?(digits, "-"), do: "-", else: ""
-		digits = String.trim_leading(digits, "-")
-
-		digits
-		|> String.reverse()
-		|> String.replace(~r/(\d{3})(?=\d)/, "\\1,")
-		|> String.reverse()
-		|> then(&(sign <> &1))
-	end
-
-	defp format_bytes(nil, _page_size), do: "?"
-	defp format_bytes(_page_count, nil), do: "?"
-
-	defp format_bytes(page_count, page_size) when is_integer(page_count) and is_integer(page_size) do
-		bytes = page_count * page_size
-
-		cond do
-			bytes >= 1_073_741_824 -> "#{Float.round(bytes / 1_073_741_824, 2)} GB"
-			bytes >= 1_048_576 -> "#{Float.round(bytes / 1_048_576, 1)} MB"
-			bytes >= 1_024 -> "#{Float.round(bytes / 1_024, 1)} KB"
-			true -> "#{bytes} B"
-		end
-	end
-
-	defp format_bytes(_page_count, _page_size), do: "?"
-
-	defp format_milliseconds(nil), do: "?"
-	defp format_milliseconds(ms) when is_integer(ms), do: "#{format_count(ms)} ms"
-	defp format_milliseconds(_), do: "?"
-
-	# SQLite stores NaiveDateTime UTC seconds; a missing/failed parse must not
-	# fall back to "now" the way the footer's DateTime helper does.
-	defp format_timestamp(nil), do: "?"
-	defp format_timestamp(""), do: "?"
-
-	defp format_timestamp(timestamp) when is_binary(timestamp) do
-		case NaiveDateTime.from_iso8601(String.trim(timestamp)) do
-			{:ok, at} -> Calendar.strftime(at, "%b %d, %Y %H:%M UTC")
-			{:error, _} -> "?"
-		end
-	end
-
-	defp format_timestamp(_), do: "?"
-
-	defp format_uptime(nil), do: "?"
-
-	defp format_uptime(seconds) when is_integer(seconds) and seconds >= 0 do
-		days = div(seconds, 86_400)
-		hours = div(rem(seconds, 86_400), 3_600)
-		minutes = div(rem(seconds, 3_600), 60)
-
-		cond do
-			days > 0 -> "#{days}d #{hours}h"
-			hours > 0 -> "#{hours}h #{minutes}m"
-			true -> "#{minutes}m"
-		end
-	end
-
-	defp format_uptime(_), do: "?"
-
-	# The market table stores NaiveDateTime UTC seconds ("2026-10-17T01:34:03").
-	defp relative_age(nil), do: "never"
-	defp relative_age(""), do: "never"
-
-	defp relative_age(timestamp) when is_binary(timestamp) do
-		case NaiveDateTime.from_iso8601(String.trim(timestamp)) do
-			{:ok, at} -> relative_age_seconds(NaiveDateTime.diff(NaiveDateTime.utc_now(), at, :second))
-			{:error, _} -> "?"
-		end
-	end
-
-	defp relative_age(%NaiveDateTime{} = at),
-		do: relative_age_seconds(NaiveDateTime.diff(NaiveDateTime.utc_now(), at, :second))
-
-	defp relative_age(_), do: "?"
-
-	defp relative_age_seconds(seconds) do
-		cond do
-			seconds < 60 -> "#{max(seconds, 0)}s ago"
-			seconds < 3_600 -> "#{div(seconds, 60)}m ago"
-			seconds < 86_400 -> "#{div(seconds, 3_600)}h ago"
-			true -> "#{div(seconds, 86_400)}d ago"
-		end
-	end
-
-	defp share(nil, _total), do: "?"
-	defp share(_part, nil), do: "?"
-	defp share(_part, 0), do: "?"
-
-	defp share(part, total) when is_integer(part) and is_integer(total) do
-		"#{Float.round(part / total * 100, 1)}%"
-	end
-
-	defp share(_part, _total), do: "?"
 end
