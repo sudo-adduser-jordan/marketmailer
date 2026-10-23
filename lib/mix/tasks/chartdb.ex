@@ -9,6 +9,16 @@ defmodule Mix.Tasks.Chartdb do
 	@view_row_h 19
 	@canvas_w 1560
 
+	# SQL is embedded at compile time: the text ships in the beam (no runtime
+	# file read) and editing a .sql recompiles this module.
+	@external_resource Path.join(__DIR__, "../../sql/sqliteDatabaseList.sql")
+	@external_resource Path.join(__DIR__, "../../sql/schemaObjects.sql")
+	@external_resource Path.join(__DIR__, "../../sql/marketIndexes.sql")
+
+	@database_list File.read!(Path.join(__DIR__, "../../sql/sqliteDatabaseList.sql"))
+	@schema_objects File.read!(Path.join(__DIR__, "../../sql/schemaObjects.sql"))
+	@market_indexes File.read!(Path.join(__DIR__, "../../sql/marketIndexes.sql"))
+
 	@slots [
 		{40, 280, ["market"]},
 		{350, 260, ["names", "regions", "systems", "etags"]},
@@ -54,18 +64,13 @@ defmodule Mix.Tasks.Chartdb do
 	end
 
 	defp introspect!(repo, tmp) do
-		%{rows: [[_seq, _name, file]]} = Ecto.Adapters.SQL.query!(repo, "PRAGMA database_list", [])
+		%{rows: [[_seq, _name, file]]} = Ecto.Adapters.SQL.query!(repo, @database_list, [])
 
 		if file != tmp do
 			Mix.raise("chartdb: refusing — connected database is not the temp file (#{file})")
 		end
 
-		%{rows: objects} =
-			Ecto.Adapters.SQL.query!(
-				repo,
-				"SELECT type, name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name",
-				[]
-			)
+		%{rows: objects} = Ecto.Adapters.SQL.query!(repo, @schema_objects, [])
 
 		tables =
 			Enum.map(objects, fn [type, name] ->
@@ -79,12 +84,7 @@ defmodule Mix.Tasks.Chartdb do
 				%{name: name, view?: type == "view", columns: columns}
 			end)
 
-		%{rows: indexes} =
-			Ecto.Adapters.SQL.query!(
-				repo,
-				"SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'market' AND name NOT LIKE 'sqlite_autoindex%'",
-				[]
-			)
+		%{rows: indexes} = Ecto.Adapters.SQL.query!(repo, @market_indexes, [])
 
 		partial = Enum.count(indexes, fn [sql] -> sql =~ "WHERE" end)
 		%{tables: tables, market_indexes: length(indexes), market_partial: partial}

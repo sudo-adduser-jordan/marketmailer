@@ -1,7 +1,6 @@
 defmodule Marketmailer.Application do
 	use Application
 
-	@unmigrated_tables ["systems", "names", "discord", "etags", "market"]
 	@default_error_log_path "logs/errors.jsonl"
 	@log_handler :marketmailer_errors
 
@@ -15,7 +14,7 @@ defmodule Marketmailer.Application do
 		ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
 		ensure_ets(:janice_chart_cache, [:named_table, :set, :public])
 
-		:ok = migrate()
+		:ok = Database.Migrations.run!()
 
 		children =
 			[
@@ -34,33 +33,9 @@ defmodule Marketmailer.Application do
 
 		{:ok, pid} = Supervisor.start_link(children, opts)
 
-		log_missing_sde_names()
+		Market.Database.log_unnamed_undercut_types()
 
 		{:ok, pid}
-	end
-
-	# Names come only from the SDE import, so a stale snapshot silently turns
-	# item labels into "Type <id>" in the undercut list. Surface the drift at
-	# boot, scoped to the rows users actually see.
-	defp log_missing_sde_names do
-		case Market.Database.count_unnamed_undercut_types() do
-			0 ->
-				:ok
-
-			count ->
-				Marketmailer.Log.warning(
-					"sde_names_missing",
-					%{count: count},
-					"#{count} unnamed type(s) in the top of the undercut list; run mix sde.import to refresh the name cache"
-				)
-		end
-	rescue
-		error ->
-			Marketmailer.Log.warning(
-				"sde_names_missing_check_failed",
-				%{reason: Exception.message(error)},
-				"could not check SDE name coverage"
-			)
 	end
 
 	defp poller_core_children do
@@ -120,41 +95,6 @@ defmodule Marketmailer.Application do
 		case :ets.whereis(name) do
 			:undefined -> :ets.new(name, opts)
 			_tid -> :ok
-		end
-	end
-
-	defp migrate do
-		path = Path.join(:code.priv_dir(:marketmailer), "repo/migrations")
-
-		fun = fn repo ->
-			drop_unmigrated(repo)
-			Ecto.Migrator.run(repo, path, :up, all: true)
-		end
-
-		case Ecto.Migrator.with_repo(Database, fun) do
-			{:ok, _, _} -> :ok
-			{:error, error} -> raise "migrations failed: #{inspect(error)}"
-		end
-	end
-
-	defp drop_unmigrated(repo) do
-		%{rows: rows} =
-			repo.query!("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
-
-		names = MapSet.new(rows, fn [name] -> name end)
-
-		if MapSet.size(names) > 0 and not MapSet.member?(names, "schema_migrations") do
-			Marketmailer.Log.warning(
-				"unmigrated_db_dropped",
-				%{tables: @unmigrated_tables},
-				"pre-migration database detected; dropping #{Enum.join(@unmigrated_tables, ", ")}"
-			)
-
-			Enum.each(@unmigrated_tables, fn table ->
-				repo.query!("DROP TABLE IF EXISTS #{table}")
-			end)
-
-			repo.query!("DROP VIEW IF EXISTS marketView")
 		end
 	end
 

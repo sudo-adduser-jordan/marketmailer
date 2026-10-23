@@ -10,7 +10,7 @@ defmodule ContractsTest do
 
 		Ecto.Migrator.run(
 			Database,
-			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
+			Database.Migrations.migrations_path(),
 			:up,
 			all: true
 		)

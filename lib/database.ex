@@ -4,6 +4,54 @@ defmodule Database do
 		adapter: Ecto.Adapters.SQLite3
 end
 
+defmodule Database.Migrations do
+	# Boot-time schema setup. Runs before the supervision tree starts, so every
+	# entry point (`mix run`, the release, containers) boots a migrated DB.
+	@unmigrated_tables ["systems", "names", "discord", "etags", "market"]
+
+	@external_resource Path.join(__DIR__, "sql/schemaTables.sql")
+	@external_resource Path.join(__DIR__, "sql/dropTable.sql")
+	@external_resource Path.join(__DIR__, "sql/dropView.sql")
+
+	@schema_tables File.read!(Path.join(__DIR__, "sql/schemaTables.sql"))
+	@drop_table File.read!(Path.join(__DIR__, "sql/dropTable.sql"))
+	@drop_view File.read!(Path.join(__DIR__, "sql/dropView.sql"))
+
+	def run! do
+		fun = fn repo ->
+			drop_unmigrated(repo)
+			Ecto.Migrator.run(repo, migrations_path(), :up, all: true)
+		end
+
+		case Ecto.Migrator.with_repo(Database, fun) do
+			{:ok, _, _} -> :ok
+			{:error, error} -> raise "migrations failed: #{inspect(error)}"
+		end
+	end
+
+	def migrations_path, do: Path.join(:code.priv_dir(:marketmailer), "repo/migrations")
+
+	defp drop_unmigrated(repo) do
+		%{rows: rows} = repo.query!(@schema_tables)
+
+		names = MapSet.new(rows, fn [name] -> name end)
+
+		if MapSet.size(names) > 0 and not MapSet.member?(names, "schema_migrations") do
+			Marketmailer.Log.warning(
+				"unmigrated_db_dropped",
+				%{tables: @unmigrated_tables},
+				"pre-migration database detected; dropping #{Enum.join(@unmigrated_tables, ", ")}"
+			)
+
+			Enum.each(@unmigrated_tables, fn table ->
+				repo.query!(String.replace(@drop_table, ":table", table))
+			end)
+
+			repo.query!(@drop_view)
+		end
+	end
+end
+
 defmodule Database.Queue do
 	use GenServer
 
@@ -315,6 +363,22 @@ defmodule Market.Database do
 
 	@upsert_chunk_size 1000
 
+	# SQL is embedded at compile time: the text ships in the beam (no runtime
+	# file read) and editing a .sql recompiles this module.
+	@external_resource Path.join(__DIR__, "sql/getBestOrder.sql")
+	@external_resource Path.join(__DIR__, "sql/getMarketItem.sql")
+	@external_resource Path.join(__DIR__, "sql/getCapitalItem.sql")
+	@external_resource Path.join(__DIR__, "sql/suggestItems.sql")
+	@external_resource Path.join(__DIR__, "sql/getItemsLessThan.sql")
+	@external_resource Path.join(__DIR__, "sql/databaseStats.sql")
+
+	@best_order File.read!(Path.join(__DIR__, "sql/getBestOrder.sql"))
+	@market_item File.read!(Path.join(__DIR__, "sql/getMarketItem.sql"))
+	@capital_item File.read!(Path.join(__DIR__, "sql/getCapitalItem.sql"))
+	@suggest_items File.read!(Path.join(__DIR__, "sql/suggestItems.sql"))
+	@items_less_than File.read!(Path.join(__DIR__, "sql/getItemsLessThan.sql"))
+	@database_stats File.read!(Path.join(__DIR__, "sql/databaseStats.sql"))
+
 	def upsert_orders(orders, url \\ nil) do
 		timestamp = NaiveDateTime.utc_now(:second)
 
@@ -414,7 +478,7 @@ defmodule Market.Database do
 	defp normalize_field(:is_buy_order, false), do: 0
 	defp normalize_field(_field, value), do: value
 
-	def get_best_order, do: load_rows("getBestOrder.sql")
+	def get_best_order, do: load_rows(@best_order, "getBestOrder.sql")
 
 	def get_market_item(item_name) when is_binary(item_name) do
 		case normalize_item_name(item_name) do
@@ -424,7 +488,7 @@ defmodule Market.Database do
 			normalized ->
 				params = [normalized, "%#{escape_like(normalized)}%", normalized]
 
-				load_rows("getMarketItem.sql", params) |> List.first()
+				load_rows(@market_item, "getMarketItem.sql", params) |> List.first()
 		end
 	end
 
@@ -435,7 +499,7 @@ defmodule Market.Database do
 	def get_capital_item(item_name) when is_binary(item_name) do
 		case normalize_item_name(item_name) do
 			"" -> nil
-			normalized -> load_rows("getCapitalItem.sql", [normalized]) |> List.first()
+			normalized -> load_rows(@capital_item, "getCapitalItem.sql", [normalized]) |> List.first()
 		end
 	end
 
@@ -451,13 +515,13 @@ defmodule Market.Database do
 			normalized ->
 				escaped = escape_like(normalized)
 
-				load_rows("suggestItems.sql", ["%#{escaped}%", "#{escaped}%", limit])
+				load_rows(@suggest_items, "suggestItems.sql", ["%#{escaped}%", "#{escaped}%", limit])
 		end
 	end
 
 	def suggest_items(_prefix, _limit), do: []
 
-	def get_items_less_than_jita_buy, do: load_rows("getItemsLessThan.sql")
+	def get_items_less_than_jita_buy, do: load_rows(@items_less_than, "getItemsLessThan.sql")
 
 	# Item names come only from the SDE (`mix sde.import`), so a stale snapshot
 	# turns visible labels into the "Type <id>" fallback. Count what users
@@ -477,20 +541,43 @@ defmodule Market.Database do
 		) || 0
 	end
 
+	# Surface SDE name drift at boot, scoped to the rows users actually see: an
+	# unnamed type inside the top of the undercut list renders as "Type <id>".
+	def log_unnamed_undercut_types do
+		case count_unnamed_undercut_types() do
+			0 ->
+				:ok
+
+			count ->
+				Marketmailer.Log.warning(
+					"sde_names_missing",
+					%{count: count},
+					"#{count} unnamed type(s) in the top of the undercut list; run mix sde.import to refresh the name cache"
+				)
+		end
+	rescue
+		error ->
+			Marketmailer.Log.warning(
+				"sde_names_missing_check_failed",
+				%{reason: Exception.message(error)},
+				"could not check SDE name coverage"
+			)
+	end
+
 	# Read-only aggregates for /database_stats. A single row of scalar
-	# subqueries keeps it to one round trip; load_rows/2 already logs a
+	# subqueries keeps it to one round trip; load_rows/3 already logs a
 	# failed statement as market_query_failed.
 	def get_database_stats do
-		case load_rows("databaseStats.sql") do
+		case load_rows(@database_stats, "databaseStats.sql") do
 			[stats | _] -> {:ok, stats}
 			[] -> {:error, :unavailable}
 		end
 	end
 
-	defp load_rows(file, params \\ []) do
-		structs? = file in ["getBestOrder.sql", "getMarketItem.sql"]
+	defp load_rows(sql, label, params \\ []) do
+		structs? = label in ["getBestOrder.sql", "getMarketItem.sql"]
 
-		case Database.query(read_sql(file), params) do
+		case Database.query(sql, params) do
 			{:ok, %{rows: rows, columns: cols}} ->
 				keys = Enum.map(cols, &String.to_atom/1)
 
@@ -509,8 +596,8 @@ defmodule Market.Database do
 			{:error, reason} ->
 				Marketmailer.Log.warning(
 					"market_query_failed",
-					%{file: file, reason: inspect(reason)},
-					"Market query #{file} failed: #{inspect(reason)}"
+					%{file: label, reason: inspect(reason)},
+					"Market query #{label} failed: #{inspect(reason)}"
 				)
 
 				[]
@@ -519,14 +606,12 @@ defmodule Market.Database do
 		e ->
 			Marketmailer.Log.warning(
 				"market_query_failed",
-				%{file: file, reason: Exception.message(e)},
-				"Market query #{file} failed: #{Exception.message(e)}"
+				%{file: label, reason: Exception.message(e)},
+				"Market query #{label} failed: #{Exception.message(e)}"
 			)
 
 			[]
 	end
-
-	defp read_sql(file), do: File.read!(Path.join(__DIR__, file))
 
 	def normalize_item_name(name) do
 		name |> String.trim() |> String.replace(~r/\s+/, " ") |> String.trim() |> String.downcase()

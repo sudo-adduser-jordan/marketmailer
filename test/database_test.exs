@@ -6,7 +6,7 @@ defmodule Etag.ExpiryTest do
 
 		Ecto.Migrator.run(
 			Database,
-			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
+			Database.Migrations.migrations_path(),
 			:up,
 			all: true
 		)
@@ -112,7 +112,7 @@ defmodule Market.DatabaseTest do
 	setup_all do
 		Ecto.Migrator.run(
 			Database,
-			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
+			Database.Migrations.migrations_path(),
 			:up,
 			all: true
 		)
@@ -636,9 +636,7 @@ defmodule Market.DatabaseTest do
 	end
 
 	defp newest_migration_version do
-		:marketmailer
-		|> :code.priv_dir()
-		|> Path.join("repo/migrations")
+		Database.Migrations.migrations_path()
 		|> File.ls!()
 		|> Enum.filter(&String.ends_with?(&1, ".exs"))
 		|> Enum.map(&String.to_integer(String.slice(&1, 0, 14)))

@@ -124,6 +124,22 @@ defmodule Contracts.Database do
 	@moduledoc false
 	import Ecto.Query
 
+	# SQL is embedded at compile time: the text ships in the beam (no runtime
+	# file read) and editing a .sql recompiles this module.
+	@external_resource Path.join(__DIR__, "sql/contractTopDesired.sql")
+	@external_resource Path.join(__DIR__, "sql/contractClaimItem.sql")
+	@external_resource Path.join(__DIR__, "sql/contractReleaseItemClaim.sql")
+	@external_resource Path.join(__DIR__, "sql/contractMarkItemFailed.sql")
+	@external_resource Path.join(__DIR__, "sql/contractDeferItem.sql")
+	@external_resource Path.join(__DIR__, "sql/contractMaxLastSeenRound.sql")
+
+	@top_desired File.read!(Path.join(__DIR__, "sql/contractTopDesired.sql"))
+	@claim_item File.read!(Path.join(__DIR__, "sql/contractClaimItem.sql"))
+	@release_item_claim File.read!(Path.join(__DIR__, "sql/contractReleaseItemClaim.sql"))
+	@mark_item_failed File.read!(Path.join(__DIR__, "sql/contractMarkItemFailed.sql"))
+	@defer_item File.read!(Path.join(__DIR__, "sql/contractDeferItem.sql"))
+	@max_last_seen_round File.read!(Path.join(__DIR__, "sql/contractMaxLastSeenRound.sql"))
+
 	@chunk_size 500
 
 	def upsert_page(contracts, region, page, round) do
@@ -197,10 +213,7 @@ defmodule Contracts.Database do
 	def claim_item(contract_id, round) do
 		case Database.Writer.write(fn ->
 					 %{num_rows: rows} =
-						 Database.query!(
-							 "UPDATE contracts SET items_claim_round = ? WHERE contract_id = ? AND items_fetched = 0 AND items_claim_round <> ?",
-							 [round, contract_id, round]
-						 )
+						 Database.query!(@claim_item, [round, contract_id, round])
 
 					 rows
 				 end) do
@@ -211,7 +224,7 @@ defmodule Contracts.Database do
 
 	def release_item_claim(contract_id) do
 		Database.Writer.write(fn ->
-			Database.query!("UPDATE contracts SET items_claim_round = 0 WHERE contract_id = ?", [contract_id])
+			Database.query!(@release_item_claim, [contract_id])
 		end)
 	end
 
@@ -258,10 +271,7 @@ defmodule Contracts.Database do
 		next_attempt = Contracts.now_ms() + retry_delay(attempts, config)
 
 		Database.Writer.write(fn ->
-			Database.query!(
-				"UPDATE contracts SET items_attempts = items_attempts + 1, items_next_attempt_at = ?, items_claim_round = 0 WHERE contract_id = ?",
-				[next_attempt, contract_id]
-			)
+			Database.query!(@mark_item_failed, [next_attempt, contract_id])
 		end)
 	end
 
@@ -271,10 +281,7 @@ defmodule Contracts.Database do
 		next_attempt = Contracts.now_ms() + max(delay_ms, 0)
 
 		Database.Writer.write(fn ->
-			Database.query!(
-				"UPDATE contracts SET items_next_attempt_at = ?, items_claim_round = 0 WHERE contract_id = ?",
-				[next_attempt, contract_id]
-			)
+			Database.query!(@defer_item, [next_attempt, contract_id])
 		end)
 	end
 
@@ -314,67 +321,7 @@ defmodule Contracts.Database do
 	end
 
 	def top_desired(round, limit, min_margin) do
-		sql = """
-		WITH jita_buy AS (
-			SELECT m.type_id, MAX(m.price) AS price
-			FROM market m
-			WHERE m.system_id = 30000142 AND m.is_buy_order = 1
-			GROUP BY m.type_id
-		),
-		capital_avg AS (
-			SELECT m.type_id, AVG(m.price) AS price
-			FROM market m
-			JOIN names n ON n.id = m.type_id
-			WHERE m.is_buy_order = 0 AND COALESCE(n.is_capital_ship, 0) = 1
-			GROUP BY m.type_id
-		),
-		contract_values AS (
-			SELECT
-				i.contract_id,
-				SUM(
-					i.quantity * CASE
-						WHEN COALESCE(n.is_capital_ship, 0) = 1
-							THEN COALESCE(ca.price, 0)
-						ELSE COALESCE(jb.price, 0)
-					END
-				) AS items_value,
-				COUNT(*) AS item_count,
-				MAX(COALESCE(n.is_capital_ship, 0)) AS has_capital
-			FROM contract_items i
-			LEFT JOIN names n ON n.id = i.type_id
-			LEFT JOIN jita_buy jb ON jb.type_id = i.type_id
-			LEFT JOIN capital_avg ca ON ca.type_id = i.type_id
-			WHERE i.is_included = 1 AND COALESCE(i.is_blueprint_copy, 0) = 0
-			GROUP BY i.contract_id
-		)
-		SELECT
-			c.contract_id,
-			c.region_id,
-			c.type,
-			c.title,
-			c.price,
-			c.buyout,
-			v.items_value,
-			(v.items_value - COALESCE(c.price, c.buyout, 0)) AS margin,
-			v.item_count,
-			v.has_capital,
-			c.expires_at,
-			c.start_location_id,
-			COALESCE(ln.name, sy.name,
-				CASE WHEN c.start_location_id >= 1000000000000 THEN 'Player Station' ELSE '?' END) AS location_name,
-			COALESCE(r.name, '?') AS region_name
-		FROM contracts c
-		JOIN contract_values v ON v.contract_id = c.contract_id
-		LEFT JOIN names ln ON ln.id = c.start_location_id
-		LEFT JOIN systems sy ON sy.system_id = c.start_location_id
-		LEFT JOIN regions r ON r.region_id = c.region_id
-		WHERE c.last_seen_round = ?
-			AND c.expires_at > ?
-			AND c.items_fetched = 1
-			AND (v.items_value - COALESCE(c.price, c.buyout, 0)) >= ?
-		ORDER BY margin DESC, c.contract_id ASC
-		LIMIT ?
-		"""
+		sql = @top_desired
 
 		case Database.query(sql, [round, Contracts.now_ms(), min_margin, limit]) do
 			{:ok, %{rows: rows, columns: columns}} ->
@@ -412,7 +359,7 @@ defmodule Contracts.Database do
 	end
 
 	def latest_round do
-		case Database.query("SELECT MAX(last_seen_round) FROM contracts", []) do
+		case Database.query(@max_last_seen_round, []) do
 			{:ok, %{rows: [[round]]}} -> round
 			_ -> nil
 		end

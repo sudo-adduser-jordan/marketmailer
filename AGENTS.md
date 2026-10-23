@@ -6,6 +6,9 @@ the Jita buy wall). The Discord bot broadcasts the same data when
 `DISCORD_TOKEN` is set (otherwise it is skipped with a warning and the rest
 of the app keeps running).
 
+## User Generated
+
+
 ## Commands
 
 ```sh
@@ -125,8 +128,8 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   pool, and retries a transient `Database busy`/pool error before surfacing
   a real failure. Reads keep the full connection pool.
 - **Standard Ecto migrations** live in `priv/repo/migrations` and apply to the
-  single DB. `Marketmailer.
-  Application.start/2` runs pending migrations on every boot before the
+  single DB. `Marketmailer.Application.start/2` calls
+  `Database.Migrations.run!/0` on every boot before the
   supervision tree starts, so `mix run` and containers never need a separate
   migrate step; use `mix ecto.migrate` / `mix ecto.rollback` for manual control.
 - To change the schema, add a new migration (`mix ecto.gen.migration <name>`).
@@ -186,8 +189,13 @@ into high sec and stay, as do capital modules, components, fighters and
 blueprints. A fresh import defaults the flag to 0, so the filter only takes
 effect after `mix sde.import` has run against the database.
 
-Raw SQL files live in `lib/*.sql` and are loaded relative to `__DIR__`
-(CWD-safe).
+Raw SQL lives in `lib/sql/*.sql` and is embedded at compile time: the module
+that owns a statement declares `@external_resource` plus
+`@statement File.read!(Path.join(__DIR__, "sql/<file>.sql"))`, so the text
+ships in the beam (no runtime file read, a release no longer needs the source
+tree) and editing a `.sql` recompiles that module. Only identifier-interpolated
+statements (`PRAGMA table_info("#{name}")`, `SELECT #{column} FROM #{table} …`)
+stay inline — SQLite cannot bind identifiers.
 
 ## Enabled subsystems
 
@@ -242,14 +250,20 @@ then pipe to jq:
 
 ## Architecture map
 
-- `lib/app.ex` - supervision tree + boot-time migration run (see policy above)
+- `lib/app.ex` - supervision tree + logger setup; boot calls
+  `Database.Migrations.run!/0` and `Market.Database.log_unnamed_undercut_types/0`
 - `lib/maintenance.ex` - `Marketmailer.Maintenance`: network watchdog. A
   transport failure halts all ESI polling; a DNS+TCP probe to
   `esi.evetech.net:443` (configurable, no ESI budget) resumes it on reconnect
   (`network_lost`/`network_restored`, `{:maintenance, :down | :up}` to
   subscribers such as `Contracts.Manager`)
 - `priv/repo/migrations` - schema migrations
-- `lib/database.ex` - `Database` repo + `Database.Writer`/`Database.Queue`
+- `lib/sql/*.sql` - every raw statement (market queries, contract writes, SDE
+  bookkeeping, schema introspection), embedded at compile time by its owning
+  module (see Raw SQL above)
+- `lib/database.ex` - `Database` repo + `Database.Migrations` (boot-time
+  migrate + pre-migration drop, `migrations_path/0`) +
+  `Database.Writer`/`Database.Queue`
   (serialized, retrying writes on one process);
   `Etag.Database`, `Discord.Database`, `Market.Database` (reads + writes)
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed

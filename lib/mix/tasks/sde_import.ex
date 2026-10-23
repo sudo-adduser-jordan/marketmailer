@@ -4,6 +4,14 @@ defmodule Mix.Tasks.Sde.Import do
 	@latest_url "https://developers.eveonline.com/static-data/tranquility/latest.jsonl"
 	@zip_url_template "https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-BUILD-jsonl.zip"
 
+	# SQL is embedded at compile time: the text ships in the beam (no runtime
+	# file read) and editing a .sql recompiles this module.
+	@external_resource Path.join(__DIR__, "../../sql/sdeImportsTable.sql")
+	@external_resource Path.join(__DIR__, "../../sql/sdeImportRecord.sql")
+
+	@sde_imports_table File.read!(Path.join(__DIR__, "../../sql/sdeImportsTable.sql"))
+	@sde_import_record File.read!(Path.join(__DIR__, "../../sql/sdeImportRecord.sql"))
+
 	@needed_files [
 		"types.jsonl",
 		"mapSolarSystems.jsonl",
@@ -38,7 +46,7 @@ defmodule Mix.Tasks.Sde.Import do
 
 		Ecto.Migrator.run(
 			Database,
-			Path.join(:code.priv_dir(:marketmailer), "repo/migrations"),
+			Database.Migrations.migrations_path(),
 			:up,
 			all: true
 		)
@@ -477,18 +485,12 @@ defmodule Mix.Tasks.Sde.Import do
 
 	defp record_build(build) do
 		case Database.Writer.write(fn ->
-					 Database.query!(
-						 "CREATE TABLE IF NOT EXISTS sde_imports (build TEXT PRIMARY KEY, imported_at TEXT NOT NULL)",
-						 []
-					 )
+					 Database.query!(@sde_imports_table, [])
 
-					 Database.query!(
-						 "INSERT INTO sde_imports (build, imported_at) VALUES (?, ?) ON CONFLICT(build) DO UPDATE SET imported_at = excluded.imported_at",
-						 [
-							 to_string(build),
-							 NaiveDateTime.utc_now(:second) |> NaiveDateTime.to_string()
-						 ]
-					 )
+					 Database.query!(@sde_import_record, [
+						 to_string(build),
+						 NaiveDateTime.utc_now(:second) |> NaiveDateTime.to_string()
+					 ])
 				 end) do
 			{:ok, _} -> :ok
 			{:error, e} -> raise(e)
