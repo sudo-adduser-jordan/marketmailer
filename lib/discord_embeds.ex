@@ -129,7 +129,6 @@ defmodule Discord.Embeds do
 		|> with_version()
 	end
 
-	# Atoms take precedence over string keys, matching the original clause order.
 	def candidate_name(candidate) when is_map(candidate) do
 		[:item_name, :item, :name, "item_name", "item", "name"]
 		|> Enum.map(&Map.get(candidate, &1))
@@ -543,8 +542,11 @@ defmodule Discord.Embeds do
 	end
 
 	defp undercut_value(stats) do
-		"#{Utils.format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.\n" <>
-			"Jita buy-wall types: #{Utils.count(stats[:jita_buy_types])}"
+		"""
+		#{Utils.format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.
+		**Jita buy-wall types**: #{Utils.count(stats[:jita_buy_types])}
+		"""
+		|> String.trim_trailing()
 	end
 
 	defp contracts_value(stats) do
@@ -561,11 +563,14 @@ defmodule Discord.Embeds do
 		types = Utils.count(stats[:tracked_types])
 		names = Utils.count(stats[:known_names])
 
-		"Names: #{names} / systems: #{Utils.count(stats[:known_systems])} in the SDE cache\n" <>
-			"Types with orders: #{types} of #{names} known names\n" <>
-			"Unnamed locations: #{Utils.count(stats[:unnamed_locations])} " <>
-			"(#{Utils.share(stats[:unnamed_locations], stats[:order_count])} of orders)\n" <>
-			"Unknown systems: #{Utils.count(stats[:unknown_systems])}"
+		"""
+		**Names**: #{names} / systems: #{Utils.count(stats[:known_systems])} in the SDE cache
+		**Types with orders**: #{types} of #{names} known names
+		**Unnamed locations**: #{Utils.count(stats[:unnamed_locations])}
+		**#{Utils.share(stats[:unnamed_locations], stats[:order_count])}** of orders
+		**Unknown systems**: #{Utils.count(stats[:unknown_systems])}
+		"""
+		|> String.trim_trailing()
 	end
 
 	defp status_value(stats) do
