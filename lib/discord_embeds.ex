@@ -2,17 +2,16 @@ defmodule Discord.Embeds do
 	alias Marketmailer.Utils
 	alias Nostrum.Struct.Embed
 
+	@list_max 100
+
 	@color_success 0x43B581
 	@color_error 0xF04747
 	@color_info 0x7289DA
 	@color_warning 0xFAA61A
 
-	# Jita IV - Moon 4 - Caldari Navy Assembly Plant (station 60003760, type 52678).
-	# ESI exposes no station-icon route, so the market embeds use the station's type icon.
 	@icon_ "https://images.evetech.net/types/52678/icon?size=64"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
 	@icon_database "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/database.png"
-
 	@icon_broadcast "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 
@@ -141,8 +140,6 @@ defmodule Discord.Embeds do
 
 	def candidate_name(_), do: nil
 
-	@list_max 100
-
 	defp paginate(items, page, per_page) do
 		list = Enum.take(items, @list_max)
 		per_page = if is_integer(per_page) and per_page > 0, do: per_page, else: list_per_page()
@@ -200,19 +197,11 @@ defmodule Discord.Embeds do
 		%{embeds: [market_list_embed(list, page, per_page)], components: list_components(page, total_pages, length(list))}
 	end
 
-	# Normalizes an embed or a ready payload into something Discord accepts as a
-	# response body. Nostrum's Helpers.combine_embeds/1 only understands the
-	# singular `:embed` key, so a bare %Embed{} struct would reach the wire as a
-	# top-level {"type": "rich", ...} body with no content/embeds/components and
-	# Discord answers 400 50006 "Cannot send an empty message" — which leaves a
-	# deferred interaction stuck on "Bot is thinking..." forever. Map payloads
-	# (mounting :components, :files, ...) pass through untouched.
 	def payload(%Embed{} = embed), do: %{embeds: [embed]}
 	def payload(payload), do: payload
 
 	def list_per_page, do: 10
 
-	# The slash command and the broadcaster render the exact same page.
 	def market_list_message(items), do: market_list_payload(items, 1, list_per_page())
 
 	def round_status_embed(failures, pending) do
