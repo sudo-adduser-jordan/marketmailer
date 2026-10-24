@@ -500,6 +500,30 @@ defmodule Discord.EmbedsTest do
 		assert error.components == []
 	end
 
+	test "contract embeds share the author and footer of every other embed" do
+		config = contracts_config()
+
+		broadcast_icon =
+			"https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
+
+		failure_icon =
+			"https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
+
+		[list_embed] = Discord.Embeds.contract_list_payload(contracts(1), 1, config).embeds
+		[empty_embed] = Discord.Embeds.contract_list_empty_payload("none").embeds
+		[error_embed] = Discord.Embeds.contract_list_error_payload().embeds
+
+		for embed <- [list_embed, empty_embed, error_embed] do
+			assert embed.author.name == "\u200B"
+			assert embed.footer.text =~ ~r/ • v\d+\.\d+\.\d+$/
+			assert embed.timestamp == nil
+		end
+
+		assert list_embed.author.icon_url == broadcast_icon
+		assert empty_embed.author.icon_url == broadcast_icon
+		assert error_embed.author.icon_url == failure_icon
+	end
+
 	defp contracts(count, overrides \\ []) do
 		for index <- 1..count do
 			%{

@@ -228,7 +228,7 @@ defmodule Discord.Embeds do
 		%{
 			embeds: [
 				%Embed{
-					author: %Embed.Author{name: "\u200BContract Board", icon_url: @icon_broadcast},
+					author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
 					title: title,
 					description: description,
 					color: @color_contract,
@@ -244,7 +244,7 @@ defmodule Discord.Embeds do
 		%{
 			embeds: [
 				%Embed{
-					author: %Embed.Author{name: "\u200BContract Board", icon_url: @icon_broadcast},
+					author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
 					title: "Contract arbitrage",
 					description: message,
 					color: @color_contract,
@@ -260,7 +260,7 @@ defmodule Discord.Embeds do
 		%{
 			embeds: [
 				%Embed{
-					author: %Embed.Author{name: "\u200BContract Board", icon_url: @icon_error},
+					author: %Embed.Author{name: "\u200B", icon_url: @icon_error},
 					title: "Contracts unavailable",
 					description: "The contract list could not be loaded. Try again after the next contract round.",
 					color: @color_error,

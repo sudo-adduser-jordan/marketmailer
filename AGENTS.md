@@ -306,8 +306,8 @@ then pipe to jq:
   `/list_contracts`, the round broadcast and its pager), database stats,
   channel registration and round status. Every embed hardcodes its own
   `%Embed.Author{name: …, icon_url: …}` (invisible name plus the broadcast or
-  failure icon; contracts label theirs "Contract Board") and renders the
-  `date • v<semver>` footer through `with_version/1`; paging buttons come
+  failure icon) and renders the `date • v<semver>` footer through
+  `with_version/1`; paging buttons come
   from one `pager_components/3` helper (`market_list:` / `contract_list:`
   custom-id prefixes). Rendered line lists are never dropped silently -
   overflow is marked with a trailing `… +N more`.
