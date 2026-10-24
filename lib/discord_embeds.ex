@@ -19,8 +19,6 @@ defmodule Discord.Embeds do
 		%Embed.Author{name: "\u200B", icon_url: icon_url}
 	end
 
-	defp error_author, do: branded_author(@icon_error)
-
 	defp with_version(%Embed{timestamp: ts} = embed) do
 		%{embed | footer: %Embed.Footer{text: "#{Utils.format_footer_date(ts)} • v#{app_version()}"}, timestamp: nil}
 	end
@@ -36,7 +34,7 @@ defmodule Discord.Embeds do
 
 	def server_only(_interaction) do
 		%Embed{
-			author: error_author(),
+			author: branded_author(@icon_error),
 			title: "Server only",
 			description: "This command can only be used inside a server, not in DMs.",
 			color: @color_error,
@@ -51,7 +49,7 @@ defmodule Discord.Embeds do
 			description: "Error",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: error_author(),
+			author: branded_author(@icon_error),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -68,7 +66,7 @@ defmodule Discord.Embeds do
 			description: "No cached market order was found for **#{item_name}**.",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: error_author(),
+			author: branded_author(@icon_error),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -167,19 +165,22 @@ defmodule Discord.Embeds do
 
 		total_pages = max(1, ceil_div(length(capped), per_page))
 
-		title =
+		pages =
 			if total_pages > 1 do
-				"Items undercutting the Jita buy wall (#{page}/#{total_pages})"
+				"(#{page}/#{total_pages})"
 			else
-				"Items undercutting the Jita buy wall"
+				""
 			end
 
 		%Embed{
-			title: title,
+			author: %Embed.Author{
+				name: "\u200BJita Buy Wall",
+				icon_url: @icon_broadcast
+			},
+			title: pages,
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: branded_author(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -212,7 +213,7 @@ defmodule Discord.Embeds do
 			description: description,
 			color: if(failures == %{}, do: @color_info, else: @color_error),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: if(failures == %{}, do: branded_author(), else: error_author()),
+			author: if(failures == %{}, do: branded_author(), else: branded_author(@icon_error)),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -445,7 +446,7 @@ defmodule Discord.Embeds do
 
 	defp channel_embed(description, color) do
 		%Embed{
-			author: if(color == @color_error, do: error_author(), else: branded_author()),
+			author: if(color == @color_error, do: branded_author(@icon_error), else: branded_author()),
 			title: "Channel Registration",
 			description: description,
 			color: color,
@@ -482,22 +483,22 @@ defmodule Discord.Embeds do
 		stats = if is_map(stats), do: stats, else: %{}
 
 		%Embed{
-			author: branded_author(),
-			title: "Database Statistics",
-			description: "Local SQLite cache — no ESI calls.",
+			author: %Embed.Author{
+				name: "\u200BDatabase Statistics",
+				icon_url: @icon_broadcast
+			},
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database
 			},
 			fields: [
-				%Embed.Field{name: "Order cache", value: order_cache_value(stats), inline: true},
-				%Embed.Field{name: "Storage", value: storage_value(stats), inline: true},
-				%Embed.Field{name: "Freshness", value: freshness_value(stats), inline: true},
-				%Embed.Field{name: "Contracts", value: contracts_value(stats), inline: false},
-				%Embed.Field{name: "Undercut list", value: undercut_value(stats), inline: false},
-				%Embed.Field{name: "Coverage", value: coverage_value(stats), inline: false},
-				%Embed.Field{name: "Poller", value: poller_value(stats), inline: false}
+				%Embed.Field{name: "##__Status__", value: status_value(stats)},
+				%Embed.Field{name: "##__Storage__", value: storage_value(stats)},
+				%Embed.Field{name: "##__Coverage__", value: coverage_value(stats)},
+				%Embed.Field{name: "##__Orders__", value: order_cache_value(stats)},
+				%Embed.Field{name: "##__Contracts__", value: contracts_value(stats)},
+				%Embed.Field{name: "##__Jita Buy Wall__", value: undercut_value(stats)}
 			]
 		}
 		|> with_version()
@@ -505,9 +506,9 @@ defmodule Discord.Embeds do
 
 	def database_stats_error_embed do
 		%Embed{
-			author: error_author(),
+			author: branded_author(@icon_error),
 			title: "Database Statistics",
-			description: "The database statistics could not be read. The cache is unchanged and the command can be retried.",
+			description: "The database statistics could not be read.",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
@@ -519,28 +520,24 @@ defmodule Discord.Embeds do
 
 	defp order_cache_value(stats) do
 		"""
-		Orders: **#{Utils.format_count(stats[:order_count])}**
-		Sell / buy: #{Utils.format_count(stats[:sell_orders])} / #{Utils.format_count(stats[:buy_orders])}
-		Types: #{Utils.format_count(stats[:tracked_types])}
-		Systems: #{Utils.format_count(stats[:tracked_systems])}
+		**Orders**: #{Utils.format_count(stats[:order_count])}
+		**Sell**: #{Utils.format_count(stats[:sell_orders])}
+		**Buy**: #{Utils.format_count(stats[:buy_orders])}
+		**Types**: #{Utils.format_count(stats[:tracked_types])}
+		**Systems**: #{Utils.format_count(stats[:tracked_systems])}
+		**Oldest order**: #{Utils.format_timestamp(stats[:first_write_at])}
 		"""
 		|> String.trim_trailing()
 	end
 
 	defp storage_value(stats) do
 		"""
-		Size: **#{Utils.format_bytes(stats[:page_count], stats[:page_size])}**
-		Journal: #{stats[:journal_mode] || "?"}
-		Schema: #{stats[:schema_version] || "?"}
-		Oldest order: #{Utils.format_timestamp(stats[:first_write_at])}
-		"""
-		|> String.trim_trailing()
-	end
-
-	defp freshness_value(stats) do
-		"""
-		Last write: **#{Utils.relative_age(stats[:last_write_at])}**
-		Query: #{Utils.format_milliseconds(stats[:query_ms])}
+		**Provider**: SQLite
+		**Size**: #{Utils.format_bytes(stats[:page_count], stats[:page_size])}
+		**Journal Mode**: #{stats[:journal_mode]}
+		**Schema Version**: #{stats[:schema_version]}
+		**Last write**: #{Utils.relative_age(stats[:last_write_at])}
+		**Query**: #{Utils.format_milliseconds(stats[:query_ms])}
 		"""
 		|> String.trim_trailing()
 	end
@@ -571,13 +568,21 @@ defmodule Discord.Embeds do
 			"Unknown systems: #{Utils.count(stats[:unknown_systems])}"
 	end
 
-	defp poller_value(stats) do
-		"Network: #{network_value(stats[:network])} • Regions: #{Utils.count(stats[:regions])} • page workers: #{Utils.count(stats[:page_workers])}\n" <>
-			"Etag pages: #{Utils.count(stats[:etag_pages])} • ETS cache: #{Utils.count(stats[:cache_entries])} " <>
-			"(#{Utils.count(stats[:esi_error_entries])} error-state, " <>
-			"#{Utils.count(stats[:esi_rate_entries])} rate-state, #{Utils.count(stats[:janice_cache_entries])} chart)\n" <>
-			"Alert channels: #{Utils.count(stats[:alert_channels])} • VM uptime: #{Utils.format_uptime(stats[:uptime_seconds])} • " <>
-			"SDE build: #{stats[:sde_build] || "?"}"
+	defp status_value(stats) do
+		"""
+		**Network**: #{network_value(stats[:network])}
+		**Regions**: #{Utils.count(stats[:regions])}
+		**Workers**: #{Utils.count(stats[:page_workers])}
+		**Etags**: #{Utils.count(stats[:etag_pages])}
+		**ETS cache**: #{Utils.count(stats[:cache_entries])}
+		**Errors**: #{Utils.count(stats[:esi_error_entries])}
+		**Rate**: #{Utils.count(stats[:esi_rate_entries])}
+					**Janice**: #{Utils.count(stats[:janice_cache_entries])}
+		**Registired Channels**: #{Utils.count(stats[:alert_channels])}
+					**Uptime**: #{Utils.format_uptime(stats[:uptime_seconds])}
+		**SDE**: #{stats[:sde_build]}
+		"""
+		|> String.trim_trailing()
 	end
 
 	defp network_value(%{state: :down} = status) do
