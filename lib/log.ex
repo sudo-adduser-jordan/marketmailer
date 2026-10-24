@@ -1,6 +1,10 @@
 defmodule Marketmailer.Log do
 	require Logger
 
+	@default_error_log_path "logs/errors.jsonl"
+	@file_handler :marketmailer_errors
+	@file_level :warning
+
 	def info(event, fields \\ %{}, message \\ nil), do: emit(:info, event, fields, message)
 
 	def warning(event, fields \\ %{}, message \\ nil), do: emit(:warning, event, fields, message)
@@ -23,6 +27,75 @@ defmodule Marketmailer.Log do
 
 	defp maybe_put(map, _key, nil), do: map
 	defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+	# Boot-time sink: a fresh file per boot, removing only this sink's file and
+	# its rotation archives so sibling sinks (prod vs test) keep theirs.
+	def setup do
+		path = error_log_path()
+		reset_error_log(path)
+		install_file_logger(path)
+	end
+
+	def error_log_path, do: Application.get_env(:marketmailer, :error_log_path, @default_error_log_path)
+
+	def reset_error_log(path) do
+		_ = File.rm(path)
+
+		case File.ls(Path.dirname(path)) do
+			{:ok, entries} ->
+				prefix = Path.basename(path)
+				dir = Path.dirname(path)
+
+				for entry <- entries, String.starts_with?(entry, prefix), do: File.rm(Path.join(dir, entry))
+
+			_ ->
+				:ok
+		end
+
+		:ok
+	end
+
+	def install_file_logger(path \\ error_log_path(), handler \\ @file_handler) do
+		File.mkdir_p!(Path.dirname(path))
+
+		if healthy?(handler, path) do
+			:ok
+		else
+			:logger.remove_handler(handler)
+			add_handler(handler, path)
+		end
+	rescue
+		_ -> :ok
+	end
+
+	defp healthy?(handler, path), do: File.exists?(path) and match?({:ok, _}, :logger.get_handler_config(handler))
+
+	defp add_handler(handler, path) do
+		case :logger.add_handler(handler, :logger_std_h, handler_config(path)) do
+			:ok -> :ok
+			{:error, reason} -> handler_failed(reason)
+		end
+	end
+
+	defp handler_config(path) do
+		%{
+			config: %{
+				type: :file,
+				file: String.to_charlist(path),
+				max_no_bytes: 10_000_000,
+				max_no_files: 5,
+				compress_on_rotate: true,
+				filesync_repeat_interval: 1_000
+			},
+			level: @file_level,
+			formatter: {Marketmailer.Log.Format, %{pretty: true, color: false}}
+		}
+	end
+
+	defp handler_failed(reason) do
+		warning("error_log_handler_failed", %{reason: inspect(reason)})
+		:ok
+	end
 end
 
 defmodule Marketmailer.Log.Format do

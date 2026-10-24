@@ -18,8 +18,6 @@ defmodule MarketmailerTest.Fixtures do
 		:ok
 	end
 
-	# Network-level halt: all ESI pollers park (unlike park_page_workers, which
-	# only exercises the ESI 5xx maintenance path).
 	def network_down(reason \\ :econnrefused) do
 		ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
 

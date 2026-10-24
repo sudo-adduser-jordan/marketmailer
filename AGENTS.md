@@ -227,9 +227,11 @@ queryable fields, no sensitive data in fields). Everything funnels through
   (strings/numbers/booleans) (`config.exs`,
   `:default_handler` level `:info`).
 - **File** — warning-level events and above, plain pretty JSON to
-  `./logs/errors.jsonl` (rotation: 5 × 10 MB, gz on rotate). The sink path is
-  `config :marketmailer, :error_log_path`; on every boot only that sink's
-  file and rotation archives are removed and recreated, never the whole
+  `./logs/errors.jsonl` (rotation: 5 × 10 MB, gz on rotate). `Marketmailer.Log.setup/0`
+  owns this sink (`error_log_path/0`, `reset_error_log/1`,
+  `install_file_logger/2`), and `Application.start/2` calls it first. The sink
+  path is `config :marketmailer, :error_log_path`; on every boot only that
+  sink's file and rotation archives are removed and recreated, never the whole
   `logs/` directory. `config/test.exs` points the sink at `logs/test.jsonl`,
   so `mix test` can never delete or append to the live `logs/errors.jsonl`.
   `ERL_CRASH_DUMP=logs/erl_crash.dump` (`.env`, `Taskfile.yml`) now also
@@ -250,8 +252,12 @@ then pipe to jq:
 
 ## Architecture map
 
-- `lib/app.ex` - supervision tree + logger setup; boot calls
-  `Database.Migrations.run!/0` and `Market.Database.log_unnamed_undercut_types/0`
+- `lib/app.ex` - supervision tree + ETS caches; boot calls
+  `Marketmailer.Log.setup/0`, `Database.Migrations.run!/0` and
+  `Market.Database.log_unnamed_undercut_types/0`
+- `lib/log.ex` - `Marketmailer.Log` (`info/warning/error` events, the
+  boot-time file sink) + `Marketmailer.Log.Format` (the JSON renderer both
+  sinks use)
 - `lib/maintenance.ex` - `Marketmailer.Maintenance`: network watchdog. A
   transport failure halts all ESI polling; a DNS+TCP probe to
   `esi.evetech.net:443` (configurable, no ESI budget) resumes it on reconnect

@@ -1,4 +1,4 @@
-defmodule Marketmailer.ApplicationTest do
+defmodule Marketmailer.LogTest do
 	use ExUnit.Case, async: false
 
 	require Logger
@@ -14,7 +14,7 @@ defmodule Marketmailer.ApplicationTest do
 	test "recreates a deleted error log and keeps logging", %{tmp_dir: dir} do
 		path = Path.join(dir, "errors.jsonl")
 
-		assert :ok = Marketmailer.Application.ensure_file_logger(path, @handler)
+		assert :ok = Marketmailer.Log.install_file_logger(path, @handler)
 		Logger.warning("repair probe one")
 		Logger.flush()
 		assert File.exists?(path)
@@ -23,7 +23,7 @@ defmodule Marketmailer.ApplicationTest do
 		File.rm!(path)
 		refute File.exists?(path)
 
-		assert :ok = Marketmailer.Application.ensure_file_logger(path, @handler)
+		assert :ok = Marketmailer.Log.install_file_logger(path, @handler)
 		Logger.warning("repair probe two")
 		Logger.flush()
 		assert File.exists?(path)
@@ -34,13 +34,13 @@ defmodule Marketmailer.ApplicationTest do
 	test "healthy log is a no-op", %{tmp_dir: dir} do
 		path = Path.join(dir, "errors.jsonl")
 
-		assert :ok = Marketmailer.Application.ensure_file_logger(path, @handler)
-		assert :ok = Marketmailer.Application.ensure_file_logger(path, @handler)
+		assert :ok = Marketmailer.Log.install_file_logger(path, @handler)
+		assert :ok = Marketmailer.Log.install_file_logger(path, @handler)
 		assert File.exists?(path)
 	end
 
 	test "the test environment points every log sink away from the production log" do
-		path = Marketmailer.Application.error_log_path()
+		path = Marketmailer.Log.error_log_path()
 
 		assert path == "logs/test.jsonl"
 		assert path != "logs/errors.jsonl"
@@ -56,7 +56,7 @@ defmodule Marketmailer.ApplicationTest do
 
 		for file <- [prod, prod_rotated, test_sink, test_rotated], do: File.write!(file, "x")
 
-		assert :ok = Marketmailer.Application.reset_error_log(test_sink)
+		assert :ok = Marketmailer.Log.reset_error_log(test_sink)
 
 		refute File.exists?(test_sink)
 		refute File.exists?(test_rotated)
@@ -72,6 +72,6 @@ defmodule Marketmailer.ApplicationTest do
 			if configured, do: Application.put_env(:marketmailer, :error_log_path, configured)
 		end)
 
-		assert Marketmailer.Application.error_log_path() == "logs/errors.jsonl"
+		assert Marketmailer.Log.error_log_path() == "logs/errors.jsonl"
 	end
 end
