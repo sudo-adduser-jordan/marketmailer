@@ -16,10 +16,6 @@ defmodule Discord.Embeds do
 	@icon_broadcast "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
 	@icon_error "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
 
-	defp branded_author(icon_url \\ @icon_broadcast) do
-		%Embed.Author{name: "\u200B", icon_url: icon_url}
-	end
-
 	defp with_version(%Embed{timestamp: ts} = embed) do
 		%{embed | footer: %Embed.Footer{text: "#{Utils.format_footer_date(ts)} • v#{app_version()}"}, timestamp: nil}
 	end
@@ -35,7 +31,7 @@ defmodule Discord.Embeds do
 
 	def server_only(_interaction) do
 		%Embed{
-			author: branded_author(@icon_error),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_error},
 			title: "Server only",
 			description: "This command can only be used inside a server, not in DMs.",
 			color: @color_error,
@@ -50,7 +46,7 @@ defmodule Discord.Embeds do
 			description: "Error",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: branded_author(@icon_error),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_error},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -67,7 +63,7 @@ defmodule Discord.Embeds do
 			description: "No cached market order was found for **#{item_name}**.",
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: branded_author(@icon_error),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_error},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -85,7 +81,7 @@ defmodule Discord.Embeds do
 				"**#{item_name}** is a capital hull that cannot enter high security space, so it cannot be sold or delivered in Jita. It is excluded from the Jita buy-wall checks.",
 			color: @color_warning,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: branded_author(),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_market
 			}
@@ -122,7 +118,7 @@ defmodule Discord.Embeds do
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: branded_author(),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -232,7 +228,7 @@ defmodule Discord.Embeds do
 		%{
 			embeds: [
 				%Embed{
-					author: branded_author(),
+					author: %Embed.Author{name: "\u200BContract Board", icon_url: @icon_broadcast},
 					title: title,
 					description: description,
 					color: @color_contract,
@@ -248,7 +244,7 @@ defmodule Discord.Embeds do
 		%{
 			embeds: [
 				%Embed{
-					author: branded_author(),
+					author: %Embed.Author{name: "\u200BContract Board", icon_url: @icon_broadcast},
 					title: "Contract arbitrage",
 					description: message,
 					color: @color_contract,
@@ -264,7 +260,7 @@ defmodule Discord.Embeds do
 		%{
 			embeds: [
 				%Embed{
-					author: branded_author(@icon_error),
+					author: %Embed.Author{name: "\u200BContract Board", icon_url: @icon_error},
 					title: "Contracts unavailable",
 					description: "The contract list could not be loaded. Try again after the next contract round.",
 					color: @color_error,
@@ -351,7 +347,11 @@ defmodule Discord.Embeds do
 			description: description,
 			color: if(failures == %{}, do: @color_info, else: @color_error),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: if(failures == %{}, do: branded_author(), else: branded_author(@icon_error)),
+			author:
+				if(failures == %{},
+					do: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
+					else: %Embed.Author{name: "\u200B", icon_url: @icon_error}
+				),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -365,7 +365,7 @@ defmodule Discord.Embeds do
 			description: "Market data is stale; ESI appears to be down.",
 			color: @color_warning,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: branded_author(),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -386,7 +386,7 @@ defmodule Discord.Embeds do
 			description: description,
 			color: @color_error,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-			author: branded_author(),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
 			}
@@ -545,7 +545,7 @@ defmodule Discord.Embeds do
 		type_icon = "https://images.evetech.net/types/#{item.type_id}/icon?size=64"
 
 		%Embed{
-			author: branded_author(),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
 			title: item.item_name || "Market order",
 			description: "[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Tycoon](#{eve_tycoon_url})",
 			color: embed_color(per_unit_margin(item)),
@@ -588,7 +588,11 @@ defmodule Discord.Embeds do
 
 	defp channel_embed(description, color) do
 		%Embed{
-			author: if(color == @color_error, do: branded_author(@icon_error), else: branded_author()),
+			author:
+				if(color == @color_error,
+					do: %Embed.Author{name: "\u200B", icon_url: @icon_error},
+					else: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast}
+				),
 			title: "Channel Registration",
 			description: description,
 			color: color,
@@ -648,7 +652,7 @@ defmodule Discord.Embeds do
 
 	def database_stats_error_embed do
 		%Embed{
-			author: branded_author(@icon_error),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_error},
 			title: "Database Statistics",
 			description: "The database statistics could not be read.",
 			color: @color_error,
