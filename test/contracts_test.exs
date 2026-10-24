@@ -1,9 +1,16 @@
 defmodule ContractsTest do
 	use ExUnit.Case, async: false
 
+	import Ecto.Query, only: [from: 2]
+
 	@round 42
 	@now Contracts.now_ms()
 	@future @now + 3_600_000
+
+	@region 99_000_301
+	@jita 30_000_142
+	@tritanium 34
+	@naglfar 19_720
 
 	setup_all do
 		await_repo!(Database, 10_000)
@@ -56,27 +63,158 @@ defmodule ContractsTest do
 	end
 
 	test "contract tables exist" do
+		%{rows: rows} = Database.query!("SELECT name FROM sqlite_master WHERE type = 'table'")
+		tables = MapSet.new(rows, fn [name] -> name end)
+
+		assert MapSet.member?(tables, "contracts")
+		assert MapSet.member?(tables, "contract_items")
 	end
 
 	test "contracts exits" do
+		assert :ok = Contracts.Database.upsert_page([contract(1_001), contract(1_002)], @region, 1, @round)
+
+		assert Database.one(from c in "contracts", select: count(c.contract_id)) == 2
+
+		assert Database.one(from c in "contracts", where: c.contract_id == 1_001, select: c.last_seen_round) ==
+						 @round
+
+		assert Database.one(from c in "contracts", where: c.contract_id == 1_001, select: c.region_id) ==
+						 @region
 	end
 
 	test "contracts items exits" do
+		seed([contract(1_001)])
+
+		assert {:ok, _} =
+						 Contracts.Database.replace_items(1_001, [
+							 %{
+								 "record_id" => 1_001_034,
+								 "type_id" => @tritanium,
+								 "quantity" => 10,
+								 "is_included" => true,
+								 "is_blueprint_copy" => false
+							 }
+						 ])
+
+		assert Database.one(from i in "contract_items", where: i.contract_id == 1_001, select: count(i.record_id)) ==
+						 1
+
+		%{rows: [[fetched]]} =
+			Database.query!("SELECT items_fetched FROM contracts WHERE contract_id = 1001")
+
+		assert fetched in [1, "true"]
 	end
 
 	test "contracts types excluded" do
+		config = Contracts.config()
+
+		for type <- ~w(courier auction loan unknown) do
+			refute Contracts.candidate?(esi_contract(type), config, @now)
+		end
+
+		assert Contracts.candidate?(esi_contract("item_exchange"), config, @now)
+		refute Contracts.candidate?(esi_contract("item_exchange", %{"date_expired" => iso(@now - 1)}), config, @now)
+		refute Contracts.candidate?(%{"type" => "item_exchange"}, config, @now)
+		refute Contracts.candidate?(nil, config, @now)
 	end
 
 	test "captials are included in contracts" do
+		seed_name(@tritanium, "Tritanium", 0)
+		seed_name(@naglfar, "Naglfar", 1)
+
+		seed_market([
+			market_row(1, @tritanium, @jita, 1, 100.0),
+			market_row(2, @naglfar, 30_000_144, 0, 2_000_000_000.0)
+		])
+
+		seed([contract(1_001)])
+		seed_items(1_001, [{@tritanium, 1}, {@naglfar, 1}])
+
+		assert [row] = Contracts.Database.top_desired(@round, 100, 0)
+		assert row.contract_id == 1_001
+		assert row.has_capital == 1
+		assert row.item_count == 2
+		assert row.items_value == 2_000_000_100.0
 	end
 
 	test "captials are valued at market average" do
+		seed_name(@naglfar, "Naglfar", 1)
+
+		seed_market([
+			market_row(1, @naglfar, 30_000_144, 0, 2_000_000_000.0),
+			market_row(2, @naglfar, 30_000_145, 0, 4_000_000_000.0),
+			market_row(3, @naglfar, @jita, 1, 1_000_000_000.0)
+		])
+
+		seed([contract(1_001)])
+		seed_items(1_001, [{@naglfar, 2}])
+
+		assert [row] = Contracts.Database.top_desired(@round, 100, 0)
+		assert row.items_value == 6_000_000_000.0
+		assert row.has_capital == 1
 	end
 
 	test "contracts are filtered by margin" do
+		seed_name(@tritanium, "Tritanium", 0)
+		seed_market([market_row(1, @tritanium, @jita, 1, 100.0)])
+
+		seed([
+			contract(1_001, %{"price" => 0}),
+			contract(1_002, %{"price" => 100}),
+			contract(1_003, %{"price" => 1_000}),
+			contract(1_004, %{"price" => 0})
+		])
+
+		seed_items(1_001, [{@tritanium, 1}])
+		seed_items(1_002, [{@tritanium, 1}])
+		seed_items(1_003, [{@tritanium, 10}])
+		seed_items(1_004, [{@tritanium, 10}])
+
+		assert Contracts.Database.top_desired(@round, 100, 100) |> Enum.map(& &1.contract_id) == [1_004, 1_001]
+		assert Contracts.Database.top_desired(@round, 100, 1_001) == []
+		assert Contracts.Database.top_desired(@round, 1, 0) |> Enum.map(& &1.contract_id) == [1_004]
+		assert Contracts.Database.top_desired(@round + 1, 100, 0) == []
 	end
 
-	defp collect_starts(count), do: Enum.map(1..count, fn _ -> assert_receive({:started, _id, _round}, 1_000) end)
+	defp seed(contracts) do
+		assert :ok = Contracts.Database.upsert_page(contracts, @region, 1, @round)
+		Database.query!("UPDATE contracts SET items_fetched = 1")
+		:ok
+	end
+
+	defp seed_items(contract_id, items) do
+		rows = Enum.map(items, fn {type_id, quantity} -> item(contract_id, type_id, quantity, 1, 0) end)
+		Database.insert_all("contract_items", rows)
+	end
+
+	defp seed_name(id, name, capital) do
+		Database.insert_all("names", [%{id: id, name: name, is_capital_ship: capital}])
+	end
+
+	defp seed_market(rows), do: Database.insert_all("market", rows)
+
+	defp esi_contract(type, overrides \\ %{}) do
+		Map.merge(
+			%{
+				"contract_id" => 1_001,
+				"type" => type,
+				"title" => "",
+				"price" => 0,
+				"buyout" => nil,
+				"date_expired" => iso(@future),
+				"date_issued" => iso(@now)
+			},
+			overrides
+		)
+	end
+
+	defp contract(contract_id, overrides \\ %{}) do
+		Contracts.normalize(
+			esi_contract("item_exchange", Map.merge(%{"contract_id" => contract_id}, overrides)),
+			@region,
+			1
+		)
+	end
 
 	defp await_repo!(repo, timeout) do
 		deadline = System.monotonic_time(:millisecond) + timeout

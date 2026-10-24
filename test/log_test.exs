@@ -3,7 +3,7 @@ defmodule Marketmailer.LogTest do
 
 	require Logger
 
-	@handler :marketmailer_app_test
+	@handler :marketmailer_log_test
 
 	setup do
 		on_exit(fn -> :logger.remove_handler(@handler) end)
