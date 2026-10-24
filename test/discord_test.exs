@@ -371,7 +371,9 @@ defmodule Discord.EmbedsTest do
 			Discord.Embeds.channel_removed(%{channel_id: 1}),
 			Discord.Embeds.list_channel(nil),
 			Discord.Embeds.database_stats_embed(%{}),
-			Discord.Embeds.database_stats_error_embed()
+			Discord.Embeds.database_stats_error_embed(),
+			hd(Discord.Embeds.contract_list_empty_payload("none").embeds),
+			hd(Discord.Embeds.contract_list_error_payload().embeds)
 		]
 
 		for %Embed{} = embed <- embeds do
@@ -428,6 +430,98 @@ defmodule Discord.EmbedsTest do
 
 		overridden = Discord.Embeds.market_embed(market_item(), "attachment://janice-34.png")
 		assert overridden.thumbnail.url == "attachment://janice-34.png"
+	end
+
+	test "contract lines carry price, value, margin, items and expiry" do
+		config = contracts_config()
+
+		[contract] =
+			contracts(1,
+				title: "  Capital hull lot  ",
+				price: 1_500_000_000.0,
+				items_value: 1_750_000_000.0,
+				margin: 250_000_000.0,
+				has_capital: 1,
+				item_names: ["Naglfar", "Fighter"],
+				item_count: 2,
+				expires_at: Contracts.now_ms() + 7_200_000
+			)
+
+		[embed] = Discord.Embeds.contract_list_payload([contract], 1, config).embeds
+		description = embed.description
+
+		assert description =~ "**Capital hull lot** [CAPITAL]"
+		assert description =~ "The Forge / Jita IV - Moon 4"
+		assert description =~ "1.5b ISK → 1.8b ISK (**+250.0m ISK**)"
+		assert description =~ "2 item(s): Naglfar, Fighter"
+		assert description =~ ~r/• expires \d+h \d+m •/
+		assert description =~ "`1001`"
+	end
+
+	test "contract list paginates with buttons" do
+		config = contracts_config(broadcast_per_page: 2)
+		payload = Discord.Embeds.contract_list_payload(contracts(5), 2, config)
+
+		assert [embed] = payload.embeds
+		assert embed.title == "Contract arbitrage (2/3)"
+
+		lines = String.split(embed.description, "\n")
+		assert length(lines) == 2
+		assert hd(lines) =~ "Contract 3"
+		assert List.last(lines) =~ "Contract 4"
+
+		assert [%{components: [prev, next]}] = payload.components
+		assert prev.label == "Prev"
+		assert prev.custom_id == "contract_list:page:1"
+		assert next.label == "Next"
+		assert next.custom_id == "contract_list:page:3"
+		refute next.disabled
+
+		assert [last_embed] = Discord.Embeds.contract_list_payload(contracts(5), 99, config).embeds
+		assert last_embed.title == "Contract arbitrage (3/3)"
+
+		empty = Discord.Embeds.contract_list_payload([], 1, config)
+		assert [empty_embed] = empty.embeds
+		assert empty.components == []
+		assert empty_embed.description == "No contracts meet the 100m ISK margin this cycle."
+	end
+
+	test "contract list empty and error payloads" do
+		empty = Discord.Embeds.contract_list_empty_payload("No contract round has completed yet.")
+		assert [empty_embed] = empty.embeds
+		assert empty_embed.title == "Contract arbitrage"
+		assert empty_embed.description == "No contract round has completed yet."
+		assert empty.components == []
+
+		error = Discord.Embeds.contract_list_error_payload()
+		assert [error_embed] = error.embeds
+		assert error_embed.title == "Contracts unavailable"
+		assert error_embed.color == 0xF04747
+		assert error.components == []
+	end
+
+	defp contracts(count, overrides \\ []) do
+		for index <- 1..count do
+			%{
+				contract_id: 1_000 + index,
+				title: "Contract #{index}",
+				price: 100_000_000.0,
+				buyout: nil,
+				has_capital: 0,
+				items_value: 300_000_000.0,
+				margin: 200_000_000.0,
+				item_count: 1,
+				item_names: ["Tritanium"],
+				region_name: "The Forge",
+				location_name: "Jita IV - Moon 4",
+				expires_at: Contracts.now_ms() + 3_600_000
+			}
+			|> Map.merge(Map.new(overrides))
+		end
+	end
+
+	defp contracts_config(overrides \\ []) do
+		Contracts.config(Keyword.merge([broadcast_per_page: 10, broadcast_limit: 100], overrides))
 	end
 
 	defp market_list do

@@ -523,9 +523,9 @@ defmodule Discord.Consumer do
 			try do
 				Contracts.Broadcast.command_payload()
 			rescue
-				_ -> Contracts.Embeds.error_payload()
+				_ -> Embeds.contract_list_error_payload()
 			catch
-				_, _ -> Contracts.Embeds.error_payload()
+				_, _ -> Embeds.contract_list_error_payload()
 			end
 
 		case Api.Interaction.create_response(interaction, %{type: 4, data: payload}) do

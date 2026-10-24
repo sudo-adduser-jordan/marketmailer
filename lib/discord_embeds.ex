@@ -8,6 +8,7 @@ defmodule Discord.Embeds do
 	@color_error 0xF04747
 	@color_info 0x7289DA
 	@color_warning 0xFAA61A
+	@color_contract 0x7B68EE
 
 	@icon_ "https://images.evetech.net/types/52678/icon?size=64"
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/background.png"
@@ -204,6 +205,144 @@ defmodule Discord.Embeds do
 
 	def market_list_message(items), do: market_list_payload(items, 1, list_per_page())
 
+	# /list_contracts, the contract round broadcast and the pager buttons all
+	# render this one payload; only the page differs.
+	def contract_list_payload(contracts, page, config) do
+		per_page = config |> Keyword.fetch!(:broadcast_per_page) |> max(1)
+		limit = Keyword.fetch!(config, :broadcast_limit)
+		contracts = Enum.take(List.wrap(contracts), limit)
+		total_pages = max(1, ceil_div(length(contracts), per_page))
+		page = clamp_page(page, total_pages)
+		page_items = list_page_slice(contracts, page, per_page)
+
+		description =
+			if page_items == [] do
+				"No contracts meet the 100m ISK margin this cycle."
+			else
+				truncate_lines(Enum.map(page_items, &contract_line/1), "")
+			end
+
+		title =
+			if total_pages > 1 do
+				"Contract arbitrage (#{page}/#{total_pages})"
+			else
+				"Contract arbitrage"
+			end
+
+		%{
+			embeds: [
+				%Embed{
+					author: branded_author(),
+					title: title,
+					description: description,
+					color: @color_contract,
+					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+				}
+				|> with_version()
+			],
+			components: contract_list_components(page, total_pages)
+		}
+	end
+
+	def contract_list_empty_payload(message) do
+		%{
+			embeds: [
+				%Embed{
+					author: branded_author(),
+					title: "Contract arbitrage",
+					description: message,
+					color: @color_contract,
+					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+				}
+				|> with_version()
+			],
+			components: []
+		}
+	end
+
+	def contract_list_error_payload do
+		%{
+			embeds: [
+				%Embed{
+					author: branded_author(@icon_error),
+					title: "Contracts unavailable",
+					description: "The contract list could not be loaded. Try again after the next contract round.",
+					color: @color_error,
+					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+				}
+				|> with_version()
+			],
+			components: []
+		}
+	end
+
+	defp contract_line(contract) do
+		name = contract_name(contract)
+		capital = if contract.has_capital == 1, do: " [CAPITAL]", else: ""
+		price = contract.price || contract.buyout || 0
+		items = contract_item_label(contract)
+		location = "#{contract.region_name} / #{contract.location_name}"
+
+		"**#{Utils.list_truncate(name, 48)}**#{capital} • #{location} • " <>
+			"#{format_isk_compact(price)} → #{format_isk_compact(contract.items_value)} " <>
+			"(**+#{format_isk_compact(contract.margin)}**) • #{items} • " <>
+			"#{contract_expiry_label(contract.expires_at)} • `#{contract.contract_id}`"
+	end
+
+	defp contract_name(%{title: title, contract_id: id}) do
+		title = String.trim(title || "")
+		if title == "", do: "Contract #{id}", else: title
+	end
+
+	defp contract_item_label(contract) do
+		names = contract |> Map.get(:item_names, []) |> Enum.take(3)
+		count = contract.item_count || length(names)
+
+		if names == [] do
+			"#{count} item(s)"
+		else
+			"#{count} item(s): #{Enum.join(names, ", ")}"
+		end
+	end
+
+	defp contract_expiry_label(nil), do: "expiry unknown"
+
+	defp contract_expiry_label(expires_at) when is_integer(expires_at) do
+		remaining = expires_at - Contracts.now_ms()
+
+		cond do
+			remaining <= 0 ->
+				"expired"
+
+			remaining >= 86_400_000 ->
+				"expires #{div(remaining, 86_400_000)}d #{div(rem(remaining, 86_400_000), 3_600_000)}h"
+
+			remaining >= 3_600_000 ->
+				"expires #{div(remaining, 3_600_000)}h #{div(rem(remaining, 3_600_000), 60_000)}m"
+
+			true ->
+				"expires #{div(remaining, 60_000)}m"
+		end
+	end
+
+	defp format_isk_compact(number) when is_number(number) do
+		value = number * 1.0
+		absolute = abs(value)
+
+		cond do
+			absolute >= 1_000_000_000 -> "#{Float.round(value / 1_000_000_000, 1)}b ISK"
+			absolute >= 1_000_000 -> "#{Float.round(value / 1_000_000, 1)}m ISK"
+			absolute >= 1_000 -> "#{Float.round(value / 1_000, 1)}k ISK"
+			true -> "#{round(value)} ISK"
+		end
+	end
+
+	defp format_isk_compact(_number), do: "? ISK"
+
+	defp contract_list_components(_page, total_pages) when total_pages <= 1, do: []
+
+	defp contract_list_components(page, total_pages), do: pager_components("contract_list", page, total_pages)
+
 	def round_status_embed(failures, pending) do
 		description = truncate_lines(status_lines(failures, pending), "All regions reported.")
 
@@ -278,7 +417,11 @@ defmodule Discord.Embeds do
 
 	def list_components(_page, total_pages, _count) when total_pages <= 1, do: []
 
-	def list_components(page, total_pages, _count) do
+	def list_components(page, total_pages, _count), do: pager_components("market_list", page, total_pages)
+
+	defp pager_components(_prefix, _page, total_pages) when total_pages <= 1, do: []
+
+	defp pager_components(prefix, page, total_pages) do
 		[
 			%{
 				type: 1,
@@ -287,14 +430,14 @@ defmodule Discord.Embeds do
 						type: 2,
 						style: 2,
 						label: "Prev",
-						custom_id: "market_list:page:#{page - 1}",
+						custom_id: "#{prefix}:page:#{page - 1}",
 						disabled: page <= 1
 					},
 					%{
 						type: 2,
 						style: 2,
 						label: "Next",
-						custom_id: "market_list:page:#{page + 1}",
+						custom_id: "#{prefix}:page:#{page + 1}",
 						disabled: page >= total_pages
 					}
 				]
@@ -492,12 +635,12 @@ defmodule Discord.Embeds do
 				url: @icon_database
 			},
 			fields: [
-				%Embed.Field{name: "##__Status__", value: status_value(stats)},
-				%Embed.Field{name: "##__Storage__", value: storage_value(stats)},
-				%Embed.Field{name: "##__Coverage__", value: coverage_value(stats)},
-				%Embed.Field{name: "##__Orders__", value: order_cache_value(stats)},
-				%Embed.Field{name: "##__Contracts__", value: contracts_value(stats)},
-				%Embed.Field{name: "##__Jita Buy Wall__", value: undercut_value(stats)}
+				%Embed.Field{name: "##Status", value: status_value(stats)},
+				%Embed.Field{name: "##Storage", value: storage_value(stats)},
+				%Embed.Field{name: "##Coverage", value: coverage_value(stats)},
+				%Embed.Field{name: "##Orders", value: order_cache_value(stats)},
+				%Embed.Field{name: "##Contracts", value: contracts_value(stats)},
+				%Embed.Field{name: "##Jita Buy Wall", value: undercut_value(stats)}
 			]
 		}
 		|> with_version()

@@ -288,7 +288,7 @@ then pipe to jq:
   zero-order region and a page-1 failure, so the broadcast barrier always
   closes)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
-- `lib/discord.ex` - nostrum consumer, slash commands, embed builders,
+- `lib/discord.ex` - nostrum consumer, slash commands,
   `Discord.Broadcaster` (starts only with the pollers; collects one report
   per configured region and broadcasts when every one has reported, logging
   `round_closed`, `broadcast_delivered`/`broadcast_no_channels` at info),
@@ -301,6 +301,14 @@ then pipe to jq:
   Moon 4 station icon (`types/52678`, the station's type: ESI serves no
   station-icon route). Rendered line lists are never dropped silently -
   `Discord.Embeds` marks overflow with a trailing `… +N more`.
+- `lib/discord_embeds.ex` - `Discord.Embeds`, every Discord embed and
+  payload: market list/item, contract board (`contract_list_payload/3` for
+  `/list_contracts`, the round broadcast and its pager), database stats,
+  channel registration and round status. All embeds share the branded author
+  and the `date • v<semver>` footer (`with_version/1`); paging buttons come
+  from one `pager_components/3` helper (`market_list:` / `contract_list:`
+  custom-id prefixes). Rendered line lists are never dropped silently -
+  overflow is marked with a trailing `… +N more`.
 - `lib/schema.ex` - ecto schemas (`Discord`, `Etag`, `Market`, `MarketView`)
 - `lib/mix/tasks/` - `sde.import` (official JSONL SDE bulk seed),
   `chartdb` (schema diagram rebuild)

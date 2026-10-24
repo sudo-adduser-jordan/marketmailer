@@ -1385,6 +1385,7 @@ defmodule Contracts.Broadcast do
 	@moduledoc false
 
 	alias Contracts.Database
+	alias Discord.Embeds
 
 	@top_round_key {Contracts, :top_round}
 	@round_stats_key {Contracts, :round_stats}
@@ -1395,7 +1396,7 @@ defmodule Contracts.Broadcast do
 		:persistent_term.put(@top_round_key, round)
 		:persistent_term.put(@round_stats_key, stats(results, round, length(top)))
 
-		payload = Contracts.Embeds.page_payload(top, 1, config)
+		payload = Embeds.contract_list_payload(top, 1, config)
 		delivered = deliver(payload)
 
 		Marketmailer.Log.info(
@@ -1420,12 +1421,12 @@ defmodule Contracts.Broadcast do
 
 		if is_integer(round) do
 			top = load_top(round, Keyword.fetch!(config, :broadcast_limit), config)
-			Contracts.Embeds.page_payload(top, 1, config)
+			Embeds.contract_list_payload(top, 1, config)
 		else
-			Contracts.Embeds.empty_payload("No contract round has completed yet.")
+			Embeds.contract_list_empty_payload("No contract round has completed yet.")
 		end
 	rescue
-		_ -> Contracts.Embeds.error_payload()
+		_ -> Embeds.contract_list_error_payload()
 	end
 
 	def page_payload(page) do
@@ -1434,12 +1435,12 @@ defmodule Contracts.Broadcast do
 
 		if is_integer(round) do
 			top = load_top(round, Keyword.fetch!(config, :broadcast_limit), config)
-			Contracts.Embeds.page_payload(top, page, config)
+			Embeds.contract_list_payload(top, page, config)
 		else
-			Contracts.Embeds.empty_payload("No contract round has completed yet.")
+			Embeds.contract_list_empty_payload("No contract round has completed yet.")
 		end
 	rescue
-		_ -> Contracts.Embeds.error_payload()
+		_ -> Embeds.contract_list_error_payload()
 	end
 
 	def current_round do
@@ -1506,200 +1507,4 @@ defmodule Contracts.Broadcast do
 
 			0
 	end
-end
-
-defmodule Contracts.Embeds do
-	@moduledoc false
-	alias Nostrum.Struct.Embed
-
-	@color 0x7B68EE
-	@description_limit 4_000
-
-	def page_payload(contracts, page, config) do
-		per_page = config |> Keyword.fetch!(:broadcast_per_page) |> max(1)
-		max = Keyword.fetch!(config, :broadcast_limit)
-		contracts = Enum.take(List.wrap(contracts), max)
-		total_pages = max(1, ceil_div(length(contracts), per_page))
-		page = clamp_page(page, total_pages)
-		page_items = contracts |> Enum.drop((page - 1) * per_page) |> Enum.take(per_page)
-		stats = :persistent_term.get({Contracts, :round_stats}, %{})
-
-		description =
-			if page_items == [] do
-				"No contracts meet the 100m ISK margin this cycle."
-			else
-				page_items
-				|> Enum.map_join("\n", &line/1)
-				|> String.slice(0, @description_limit)
-			end
-
-		title =
-			if total_pages > 1 do
-				"Contract arbitrage (#{page}/#{total_pages})"
-			else
-				"Contract arbitrage"
-			end
-
-		%{
-			embeds: [
-				%Embed{
-					title: title,
-					description: description,
-					color: @color,
-					timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-					author: %Embed.Author{name: "Contract Board"},
-					footer: %Embed.Footer{text: footer(stats)}
-				}
-			],
-			components: components(page, total_pages)
-		}
-	end
-
-	def empty_payload(message) do
-		%{
-			embeds: [
-				%Embed{
-					title: "Contract arbitrage",
-					description: message,
-					color: @color,
-					timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-					author: %Embed.Author{name: "Contract Board"},
-					footer: %Embed.Footer{text: "Capital hulls valued at all-region sell average"}
-				}
-			],
-			components: []
-		}
-	end
-
-	def error_payload do
-		%{
-			embeds: [
-				%Embed{
-					title: "Contracts unavailable",
-					description: "The contract list could not be loaded. Try again after the next contract round.",
-					color: 0xF04747,
-					timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-					author: %Embed.Author{name: "Contract Board"},
-					footer: %Embed.Footer{text: "Capital hulls valued at all-region sell average"}
-				}
-			],
-			components: []
-		}
-	end
-
-	defp line(contract) do
-		name = contract_name(contract)
-		capital = if contract.has_capital == 1, do: " [CAPITAL]", else: ""
-		price = contract.price || contract.buyout || 0
-		items = item_label(contract)
-
-		location =
-			"#{contract.region_name} / #{contract.location_name}"
-
-		"**#{truncate(name, 48)}**#{capital} • #{location} • " <>
-			"#{format_isk(price)} → #{format_isk(contract.items_value)} " <>
-			"(**+#{format_isk(contract.margin)}**) • #{items} • #{expiry_label(contract.expires_at)} • `#{contract.contract_id}`"
-	end
-
-	defp contract_name(%{title: title, contract_id: id}) do
-		title = String.trim(title || "")
-		if title == "", do: "Contract #{id}", else: title
-	end
-
-	defp item_label(contract) do
-		names = contract |> Map.get(:item_names, []) |> Enum.take(3)
-		count = contract.item_count || length(names)
-
-		if names == [] do
-			"#{count} item(s)"
-		else
-			"#{count} item(s): #{Enum.join(names, ", ")}"
-		end
-	end
-
-	defp expiry_label(nil), do: "expiry unknown"
-
-	defp expiry_label(expires_at) when is_integer(expires_at) do
-		remaining = expires_at - Contracts.now_ms()
-
-		cond do
-			remaining <= 0 ->
-				"expired"
-
-			remaining >= 86_400_000 ->
-				"expires #{div(remaining, 86_400_000)}d #{div(rem(remaining, 86_400_000), 3_600_000)}h"
-
-			remaining >= 3_600_000 ->
-				"expires #{div(remaining, 3_600_000)}h #{div(rem(remaining, 3_600_000), 60_000)}m"
-
-			true ->
-				"expires #{div(remaining, 60_000)}m"
-		end
-	end
-
-	defp footer(stats) do
-		round =
-			case Map.get(stats, :round) do
-				nil -> ""
-				round -> "Round #{round} • "
-			end
-
-		failed =
-			case Map.get(stats, :failed_regions, 0) do
-				0 -> ""
-				count -> "#{count} region(s) failed • "
-			end
-
-		"#{round}#{failed}Capital hulls valued at all-region sell average"
-	end
-
-	defp format_isk(number) when is_number(number) do
-		value = number * 1.0
-		absolute = abs(value)
-
-		cond do
-			absolute >= 1_000_000_000 -> "#{Float.round(value / 1_000_000_000, 1)}b ISK"
-			absolute >= 1_000_000 -> "#{Float.round(value / 1_000_000, 1)}m ISK"
-			absolute >= 1_000 -> "#{Float.round(value / 1_000, 1)}k ISK"
-			true -> "#{round(value)} ISK"
-		end
-	end
-
-	defp format_isk(_number), do: "? ISK"
-
-	defp components(_page, total_pages) when total_pages <= 1, do: []
-
-	defp components(page, total_pages) do
-		[
-			%{
-				type: 1,
-				components: [
-					%{
-						type: 2,
-						style: 2,
-						label: "Prev",
-						custom_id: "contract_list:page:#{page - 1}",
-						disabled: page <= 1
-					},
-					%{
-						type: 2,
-						style: 2,
-						label: "Next",
-						custom_id: "contract_list:page:#{page + 1}",
-						disabled: page >= total_pages
-					}
-				]
-			}
-		]
-	end
-
-	defp truncate(value, max) when is_binary(value) do
-		if String.length(value) <= max, do: value, else: String.slice(value, 0, max - 1) <> "…"
-	end
-
-	defp clamp_page(page, total) when is_integer(page), do: page |> max(1) |> min(total)
-	defp clamp_page(_page, _total), do: 1
-
-	defp ceil_div(0, _per_page), do: 1
-	defp ceil_div(count, per_page), do: div(count + per_page - 1, per_page)
 end
