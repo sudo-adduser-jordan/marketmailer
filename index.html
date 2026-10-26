@@ -292,6 +292,13 @@ try {
     transform: rotateX(-5deg) rotateY(-30deg) rotateZ(-4deg);
     animation: 10s ease-in-out infinite pack-turn;
     will-change: transform;
+    /* Box faces are always near-black, so pin their text/line palette to
+       light-on-dark values regardless of page theme (light-mode page vars
+       are dark navy and wash out on the dark hull). */
+    --muted: #9db1c9;
+    --accent: #35e9ff;
+    --line: rgba(0, 229, 255, 0.22);
+    --line-strong: rgba(0, 229, 255, 0.5);
   }
   .pack-stage:focus-within .pack-3d { animation-play-state: paused; }
   @media (hover: hover) and (pointer: fine) { .pack-stage:hover .pack-3d { animation-play-state: paused; transform: rotateX(-4deg) rotateY(-44deg) rotateZ(-6deg); } }
