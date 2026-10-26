@@ -464,7 +464,6 @@ defmodule Discord.Embeds do
 
 	defp list_field(_item, _atom_key, _string_key), do: nil
 
-	@list_item_width 18
 	@list_system_width 10
 
 	defp list_line(item) do
@@ -480,7 +479,7 @@ defmodule Discord.Embeds do
 		name = list_field(item, :item, "item") || list_field(item, :item_name, "item_name")
 
 		if is_binary(name) and String.trim(name) != "" do
-			Utils.list_truncate(name, @list_item_width)
+			String.trim(name)
 		else
 			type_label(item)
 		end
@@ -631,15 +630,8 @@ defmodule Discord.Embeds do
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database
 			},
-			fields: [
-				%Embed.Field{name: "## Status", value: status_value(stats)},
-				%Embed.Field{name: "## Storage", value: storage_value(stats)},
-				%Embed.Field{name: "## Coverage", value: coverage_value(stats)},
-				%Embed.Field{name: "## Orders", value: order_cache_value(stats)},
-				%Embed.Field{name: "## Contracts", value: contracts_value(stats)},
-				%Embed.Field{name: "## Jita Buy Wall", value: undercut_value(stats)},
-				%Embed.Field{name: "## Commands", value: commands_value()}
-			]
+			description: stats_description(stats),
+			fields: []
 		}
 		|> with_version()
 	end
@@ -691,7 +683,42 @@ defmodule Discord.Embeds do
 	end
 
 	defp commands_value do
-		"/check_market • /list_market • /list_contracts • /database_stats • /add_channel • /remove_channel • /list_channel"
+		[
+			"/check_market",
+			"/list_market",
+			"/list_contracts",
+			"/database_stats",
+			"/add_channel",
+			"/remove_channel",
+			"/list_channel"
+		]
+		|> Enum.map_join("\n\n", &"```\n#{&1}\n```")
+	end
+
+	defp stats_description(stats) do
+		[
+			"### Status",
+			status_value(stats),
+			"",
+			"### Storage",
+			storage_value(stats),
+			"",
+			"### Coverage",
+			coverage_value(stats),
+			"",
+			"### Orders",
+			order_cache_value(stats),
+			"",
+			"### Contracts",
+			contracts_value(stats),
+			"",
+			"### Jita Buy Wall",
+			undercut_value(stats),
+			"",
+			"### Commands",
+			commands_value()
+		]
+		|> Enum.join("\n")
 	end
 
 	defp contracts_value(stats) do
