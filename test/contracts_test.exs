@@ -118,7 +118,7 @@ defmodule ContractsTest do
 		refute Contracts.candidate?(nil, config, @now)
 	end
 
-	test "captials are included in contracts" do
+	test "capitals are excluded from contracts" do
 		seed_name(@tritanium, "Tritanium", 0)
 		seed_name(@naglfar, "Naglfar", 1)
 
@@ -130,14 +130,10 @@ defmodule ContractsTest do
 		seed([contract(1_001)])
 		seed_items(1_001, [{@tritanium, 1}, {@naglfar, 1}])
 
-		assert [row] = Contracts.Database.top_desired(@round, 100, 0)
-		assert row.contract_id == 1_001
-		assert row.has_capital == 1
-		assert row.item_count == 2
-		assert row.items_value == 2_000_000_100.0
+		assert Contracts.Database.top_desired(@round, 100, 0) == []
 	end
 
-	test "captials are valued at market average" do
+	test "capital-only contracts are excluded" do
 		seed_name(@naglfar, "Naglfar", 1)
 
 		seed_market([
@@ -149,9 +145,7 @@ defmodule ContractsTest do
 		seed([contract(1_001)])
 		seed_items(1_001, [{@naglfar, 2}])
 
-		assert [row] = Contracts.Database.top_desired(@round, 100, 0)
-		assert row.items_value == 6_000_000_000.0
-		assert row.has_capital == 1
+		assert Contracts.Database.top_desired(@round, 100, 0) == []
 	end
 
 	test "thin top orders only fill their own depth" do

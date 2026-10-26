@@ -13,13 +13,6 @@ jita_sell AS (
     WHERE m.system_id = 30000142 AND m.is_buy_order = 0
     GROUP BY m.type_id
 ),
-capital_avg AS (
-    SELECT m.type_id, AVG(m.price) AS price
-    FROM market m
-    JOIN names n ON n.id = m.type_id
-    WHERE m.is_buy_order = 0 AND COALESCE(n.is_capital_ship, 0) = 1
-    GROUP BY m.type_id
-),
 fill_per_row AS (
     SELECT
         i.contract_id,
@@ -34,23 +27,9 @@ fill_per_row AS (
         AND COALESCE(n.is_capital_ship, 0) = 0
     GROUP BY i.contract_id, i.record_id
 ),
-capital_fill AS (
-    SELECT
-        i.contract_id,
-        i.record_id,
-        COALESCE(i.quantity, 0) * COALESCE(ca.price, 0) AS fill_value
-    FROM contract_items i
-    JOIN names n ON n.id = i.type_id AND COALESCE(n.is_capital_ship, 0) = 1
-    LEFT JOIN capital_avg ca ON ca.type_id = i.type_id
-    WHERE i.is_included = 1 AND COALESCE(i.is_blueprint_copy, 0) = 0
-),
 included_sums AS (
     SELECT contract_id, COALESCE(SUM(fill_value), 0) AS gross_value
-    FROM (
-        SELECT contract_id, fill_value FROM fill_per_row
-        UNION ALL
-        SELECT contract_id, fill_value FROM capital_fill
-    )
+    FROM fill_per_row
     GROUP BY contract_id
 ),
 included_counts AS (
@@ -120,6 +99,7 @@ LEFT JOIN regions r ON r.region_id = c.region_id
 WHERE c.last_seen_round = ?
     AND c.expires_at > ?
     AND c.items_fetched = 1
+    AND v.has_capital = 0
     AND (v.items_value - v.requested_cost - COALESCE(c.price, c.buyout, 0)) >= ?
 ORDER BY margin DESC, c.contract_id ASC
 LIMIT ?;
