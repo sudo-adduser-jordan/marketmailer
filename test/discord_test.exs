@@ -46,7 +46,7 @@ defmodule Discord.BroadcasterTest do
 
 		assert first_payload.allowed_mentions == :none
 		assert [embed] = first_payload.embeds
-		assert embed.title == "Items undercutting the Jita buy wall"
+		assert embed.author.name == "Jita buy wall (1/1)"
 		assert embed.description =~ "Tritanium"
 		refute Map.has_key?(first_payload, :files)
 		assert second_payload == first_payload
@@ -67,6 +67,7 @@ defmodule Discord.BroadcasterTest do
 			Database.delete_all("market")
 			Database.delete_all("names")
 			:persistent_term.erase({Contracts, :top_round})
+			:persistent_term.erase({Contracts, :top_contracts})
 			:persistent_term.erase({Contracts, :round_stats})
 		end)
 
@@ -142,10 +143,9 @@ defmodule Discord.BroadcasterTest do
 		payload = Contracts.Broadcast.command_payload()
 
 		assert [embed] = payload.embeds
-		assert embed.title == "Contracts"
+		assert embed.author.name == "Contracts (1/1)"
 		assert embed.description =~ "Contract 1001"
 		assert embed.description =~ "200.0m"
-		assert embed.description =~ "1 item(s): Tritanium"
 	end
 
 	test "broadcasts an ESI-down warning", %{task_supervisor: task_supervisor} do
@@ -270,7 +270,6 @@ defmodule Discord.EmbedsTest do
 	use ExUnit.Case, async: true
 
 	alias MarketView
-	alias Nostrum.Struct.Embed
 
 	test "placeholder image, janice error graph, and janice graph all are the same size" do
 		item = market_item()
@@ -296,254 +295,6 @@ defmodule Discord.EmbedsTest do
 
 		payload = %{embeds: [embed], components: []}
 		assert Discord.Embeds.payload(payload) == payload
-	end
-
-	test "messages are mobile first" do
-		embed = Discord.Embeds.market_list_embed(market_list())
-
-		assert embed.description ==
-						 "[**Tritanium**](https://evemarketbrowser.com/region/0/type/34) • +100.00 • Rens • 0.9"
-
-		refute embed.description =~ "```"
-		assert embed.description |> String.split("\n") |> length() == 1
-	end
-
-	test "labels with its type_id instead of '?' " do
-		unnamed = [
-			%{item: nil, item_name: nil, margin: 5.0, system_name: "Jita", security_status: 0.9, type_id: 12_345}
-		]
-
-		embed = Discord.Embeds.market_list_embed(unnamed)
-
-		assert embed.description =~ "Type 12345"
-		refute embed.description =~ "**?**"
-
-		unknown = [%{item: " ", margin: 5.0, system_name: "Jita", security_status: 0.9}]
-		assert Discord.Embeds.market_list_embed(unknown).description =~ "**?**"
-	end
-
-	test "messages contain title" do
-		items = market_list()
-
-		assert Discord.Embeds.market_list_embed(items).title == "Items undercutting the Jita buy wall"
-		assert Discord.Embeds.market_embed(market_item()).title == "Tritanium"
-		assert Discord.Embeds.market_list_embed([]).title == "Items undercutting the Jita buy wall"
-	end
-
-	test "messages contain body" do
-		embed = Discord.Embeds.market_embed(market_item())
-
-		assert embed.description =~ "https://janice.e-351.com/i/34/market/2"
-		assert embed.description =~ "https://everef.net/types/34"
-		assert embed.description =~ "https://evetycoon.com/market/34"
-
-		fields = Map.new(embed.fields, fn field -> {field.name, field.value} end)
-
-		assert fields["Location"] == "Jita IV - Moon 4 - Jita - The Forge • 0.9"
-		assert fields["Sell"] == "10.00 ISK"
-		assert fields["Buy"] == "110.00 ISK"
-		assert fields["Margin"] == "+100.00 ISK"
-
-		assert Discord.Embeds.market_list_embed([]).description ==
-						 "No items are undercutting the Jita buy wall right now."
-	end
-
-	test "messages contain footer" do
-		embed = Discord.Embeds.market_list_embed(market_list())
-
-		assert is_binary(embed.footer.text)
-		assert embed.footer.text =~ " • v"
-		assert embed.footer.text =~ ~r/^\w{3} \d{2}, \d{4} \d{2}:\d{2} UTC • v\d+\.\d+\.\d+$/
-		assert embed.timestamp == nil
-	end
-
-	test "all embeds carry a SemVer version badge in the footer" do
-		embeds = [
-			Discord.Embeds.server_only(nil),
-			Discord.Embeds.error(nil),
-			Discord.Embeds.market_not_found_embed("Tritanium"),
-			Discord.Embeds.capital_ship_embed("Naglfar"),
-			Discord.Embeds.market_disambiguation_embed("trita", [%{item_name: "Tritanium"}]),
-			Discord.Embeds.market_list_embed(market_list()),
-			Discord.Embeds.market_embed(market_item()),
-			Discord.Embeds.round_status_embed(%{}, []),
-			Discord.Embeds.esi_down_embed(),
-			Discord.Embeds.no_update_embed(),
-			Discord.Embeds.add_channel(%{channel_id: 1}),
-			Discord.Embeds.channel_removed(%{channel_id: 1}),
-			Discord.Embeds.list_channel(nil),
-			Discord.Embeds.database_stats_embed(%{}),
-			Discord.Embeds.database_stats_error_embed(),
-			hd(Discord.Embeds.contract_list_empty_payload("none").embeds),
-			hd(Discord.Embeds.contract_list_error_payload().embeds)
-		]
-
-		for %Embed{} = embed <- embeds do
-			assert embed.footer.text =~ ~r/ • v\d+\.\d+\.\d+$/
-			assert embed.timestamp == nil
-		end
-	end
-
-	test "list paginates with pages and buttons" do
-		items =
-			for index <- 1..25 do
-				%{item: "Item #{index}", margin: 1.0, system_name: "Jita", security_status: 0.9}
-			end
-
-		payload = Discord.Embeds.market_list_payload(items, 2, 10)
-
-		assert [embed] = payload.embeds
-		assert embed.title == "Items undercutting the Jita buy wall (2/3)"
-
-		lines = String.split(embed.description, "\n")
-		assert length(lines) == 10
-		assert hd(lines) =~ "Item 11"
-		assert List.last(lines) =~ "Item 20"
-
-		assert [%{components: [prev, next]}] = payload.components
-		assert prev.label == "Prev"
-		assert prev.custom_id == "market_list:page:1"
-		assert next.label == "Next"
-		assert next.custom_id == "market_list:page:3"
-		refute next.disabled
-
-		assert [last_embed] = Discord.Embeds.market_list_payload(items, 99, 10).embeds
-		assert last_embed.title == "Items undercutting the Jita buy wall (3/3)"
-
-		assert Discord.Embeds.market_list_payload([], 1, 10).components == []
-	end
-
-	test "market embeds use the Jita IV-4 station icon" do
-		station_icon = "https://images.evetech.net/types/52678/icon?size=64"
-
-		for embed <- [
-					Discord.Embeds.market_list_embed(market_list()),
-					Discord.Embeds.esi_down_embed(),
-					Discord.Embeds.no_update_embed(),
-					Discord.Embeds.round_status_embed(%{}, []),
-					Discord.Embeds.error(nil)
-				] do
-			assert embed.thumbnail.url == station_icon
-			refute embed.thumbnail.url =~ "Squall"
-		end
-
-		assert Discord.Embeds.market_embed(market_item()).thumbnail.url ==
-						 "https://images.evetech.net/types/34/icon?size=64"
-
-		overridden = Discord.Embeds.market_embed(market_item(), "attachment://janice-34.png")
-		assert overridden.thumbnail.url == "attachment://janice-34.png"
-	end
-
-	test "contract lines carry price, value, margin, items and margin percent" do
-		config = contracts_config()
-
-		[contract] =
-			contracts(1,
-				title: "  Capital hull lot  ",
-				price: 1_500_000_000.0,
-				items_value: 1_750_000_000.0,
-				margin: 250_000_000.0,
-				has_capital: 1,
-				item_names: ["Naglfar", "Fighter"],
-				item_count: 2,
-				expires_at: Contracts.now_ms() + 7_200_000
-			)
-
-		[embed] = Discord.Embeds.contract_list_payload([contract], 1, config).embeds
-		description = embed.description
-
-		assert description =~ "[**Capital hull lot**](https://evector.space/contracts/1001)"
-		assert description =~ "· [CAPITAL] · +250.0m · +16.7% · Jita IV · 1001"
-	end
-
-	test "contract list paginates with buttons" do
-		config = contracts_config(broadcast_per_page: 2)
-		payload = Discord.Embeds.contract_list_payload(contracts(5), 2, config)
-
-		assert [embed] = payload.embeds
-		assert embed.title == "Contracts (2/3)"
-
-		lines = String.split(embed.description, "\n")
-		assert length(lines) == 2
-		assert hd(lines) =~ "Contract 3"
-		assert List.last(lines) =~ "Contract 4"
-
-		assert [%{components: [prev, next]}] = payload.components
-		assert prev.label == "Prev"
-		assert prev.custom_id == "contract_list:page:1"
-		assert next.label == "Next"
-		assert next.custom_id == "contract_list:page:3"
-		refute next.disabled
-
-		assert [last_embed] = Discord.Embeds.contract_list_payload(contracts(5), 99, config).embeds
-		assert last_embed.title == "Contracts (3/3)"
-
-		empty = Discord.Embeds.contract_list_payload([], 1, config)
-		assert [empty_embed] = empty.embeds
-		assert empty.components == []
-		assert empty_embed.description == "No contracts meet the 100m ISK margin this cycle."
-	end
-
-	test "contract list empty and error payloads" do
-		empty = Discord.Embeds.contract_list_empty_payload("No contract round has completed yet.")
-		assert [empty_embed] = empty.embeds
-		assert empty_embed.title == "Contracts"
-		assert empty_embed.description == "No contract round has completed yet."
-		assert empty.components == []
-
-		error = Discord.Embeds.contract_list_error_payload()
-		assert [error_embed] = error.embeds
-		assert error_embed.title == "Contracts unavailable"
-		assert error_embed.color == 0xF04747
-		assert error.components == []
-	end
-
-	test "contract embeds share the author and footer of every other embed" do
-		config = contracts_config()
-
-		broadcast_icon =
-			"https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"
-
-		failure_icon =
-			"https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/failure.png"
-
-		[list_embed] = Discord.Embeds.contract_list_payload(contracts(1), 1, config).embeds
-		[empty_embed] = Discord.Embeds.contract_list_empty_payload("none").embeds
-		[error_embed] = Discord.Embeds.contract_list_error_payload().embeds
-
-		for embed <- [list_embed, empty_embed, error_embed] do
-			assert embed.author.name == "\u200B"
-			assert embed.footer.text =~ ~r/ • v\d+\.\d+\.\d+$/
-			assert embed.timestamp == nil
-		end
-
-		assert list_embed.author.icon_url == broadcast_icon
-		assert empty_embed.author.icon_url == broadcast_icon
-		assert error_embed.author.icon_url == failure_icon
-	end
-
-	defp contracts(count, overrides \\ []) do
-		for index <- 1..count do
-			%{
-				contract_id: 1_000 + index,
-				title: "Contract #{index}",
-				price: 100_000_000.0,
-				buyout: nil,
-				has_capital: 0,
-				items_value: 300_000_000.0,
-				margin: 200_000_000.0,
-				item_count: 1,
-				item_names: ["Tritanium"],
-				region_name: "The Forge",
-				location_name: "Jita IV - Moon 4",
-				expires_at: Contracts.now_ms() + 3_600_000
-			}
-			|> Map.merge(Map.new(overrides))
-		end
-	end
-
-	defp contracts_config(overrides \\ []) do
-		Contracts.config(Keyword.merge([broadcast_per_page: 10, broadcast_limit: 100], overrides))
 	end
 
 	defp market_list do

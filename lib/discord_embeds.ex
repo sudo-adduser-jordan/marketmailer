@@ -161,19 +161,13 @@ defmodule Discord.Embeds do
 
 		total_pages = max(1, ceil_div(length(capped), per_page))
 
-		title =
-			if total_pages > 1 do
-				"Items undercutting the Jita buy wall (#{page}/#{total_pages})"
-			else
-				"Items undercutting the Jita buy wall"
-			end
+		author = "Jita buy wall (#{page}/#{total_pages})"
 
 		%Embed{
 			author: %Embed.Author{
-				name: "\u200B",
+				name: author,
 				icon_url: @icon_broadcast
 			},
-			title: title,
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -216,18 +210,12 @@ defmodule Discord.Embeds do
 				truncate_lines(Enum.map(page_items, &contract_line/1), "")
 			end
 
-		title =
-			if total_pages > 1 do
-				"Contracts (#{page}/#{total_pages})"
-			else
-				"Contracts"
-			end
+		author = "Contracts (#{page}/#{total_pages})"
 
 		%{
 			embeds: [
 				%Embed{
-					author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
-					title: title,
+					author: %Embed.Author{name: author, icon_url: @icon_broadcast},
 					description: description,
 					color: @color_contract,
 					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
@@ -274,9 +262,8 @@ defmodule Discord.Embeds do
 		name = contract_name(contract)
 		capital = if contract.has_capital == 1, do: " · [CAPITAL]", else: ""
 		system = contract_system_short(contract)
-		items = contract_item_label(contract)
 
-		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_margin_percent(contract)} · #{system} · #{contract.contract_id} · #{items}"
+		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_margin_percent(contract)} · #{system} · #{contract.contract_id}"
 	end
 
 	defp contract_title_link(contract, name) do
@@ -302,17 +289,6 @@ defmodule Discord.Embeds do
 		case String.split(name, " - ") do
 			[first | _] -> Utils.list_truncate(String.trim(first), 24)
 			_ -> Utils.list_truncate(name, 24)
-		end
-	end
-
-	defp contract_item_label(contract) do
-		names = contract |> Map.get(:item_names, []) |> List.wrap() |> Enum.take(3)
-		count = Map.get(contract, :item_count) || length(names)
-
-		if names == [] do
-			"#{count} item(s)"
-		else
-			"#{count} item(s): #{Enum.join(names, ", ")}"
 		end
 	end
 
@@ -561,8 +537,7 @@ defmodule Discord.Embeds do
 		type_icon = "https://images.evetech.net/types/#{item.type_id}/icon?size=64"
 
 		%Embed{
-			author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
-			title: item.item_name || "Market order",
+			author: %Embed.Author{name: item.item_name || "Market order", icon_url: @icon_broadcast},
 			description: "[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Tycoon](#{eve_tycoon_url})",
 			color: embed_color(per_unit_margin(item)),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),

@@ -1387,11 +1387,13 @@ defmodule Contracts.Broadcast do
 
 	@top_round_key {Contracts, :top_round}
 	@round_stats_key {Contracts, :round_stats}
+	@top_contracts_key {Contracts, :top_contracts}
 
 	def finalize(round, results, config) do
 		limit = Keyword.fetch!(config, :broadcast_limit)
 		top = load_top(round, limit, config)
 		:persistent_term.put(@top_round_key, round)
+		:persistent_term.put(@top_contracts_key, {round, top})
 		:persistent_term.put(@round_stats_key, stats(results, round, length(top)))
 
 		payload = Embeds.contract_list_payload(top, 1, config)
@@ -1418,8 +1420,7 @@ defmodule Contracts.Broadcast do
 		round = current_round()
 
 		if is_integer(round) do
-			top = load_top(round, Keyword.fetch!(config, :broadcast_limit), config)
-			Embeds.contract_list_payload(top, 1, config)
+			Embeds.contract_list_payload(resolve_top(round, config), 1, config)
 		else
 			Embeds.contract_list_empty_payload("No contract round has completed yet.")
 		end
@@ -1432,8 +1433,7 @@ defmodule Contracts.Broadcast do
 		round = current_round()
 
 		if is_integer(round) do
-			top = load_top(round, Keyword.fetch!(config, :broadcast_limit), config)
-			Embeds.contract_list_payload(top, page, config)
+			Embeds.contract_list_payload(resolve_top(round, config), page, config)
 		else
 			Embeds.contract_list_empty_payload("No contract round has completed yet.")
 		end
@@ -1455,6 +1455,19 @@ defmodule Contracts.Broadcast do
 		Enum.map(top, fn contract ->
 			Map.put(contract, :item_names, Map.get(names, contract.contract_id, []))
 		end)
+	end
+
+	# The finalized snapshot is reused for paging so a page turn never re-runs
+	# the top-desired query (seconds on a warm book) and pages stay consistent
+	# while the next round re-stamps rows underneath. A round mismatch (fresh
+	# boot, warm DB) falls back to a live query.
+	defp resolve_top(round, config) do
+		limit = Keyword.fetch!(config, :broadcast_limit)
+
+		case :persistent_term.get(@top_contracts_key, nil) do
+			{^round, top} when is_list(top) -> Enum.take(top, limit)
+			_ -> load_top(round, limit, config)
+		end
 	end
 
 	defp stats(results, round, desired) do
