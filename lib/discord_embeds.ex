@@ -173,7 +173,6 @@ defmodule Discord.Embeds do
 				name: "Jita Buy Wall #{pages}",
 				icon_url: @icon_broadcast
 			},
-			# title: pages,
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -227,7 +226,6 @@ defmodule Discord.Embeds do
 			embeds: [
 				%Embed{
 					author: %Embed.Author{name: title, icon_url: @icon_broadcast},
-					# title: title,
 					description: description,
 					color: @color_contract,
 					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
@@ -634,12 +632,13 @@ defmodule Discord.Embeds do
 				url: @icon_database
 			},
 			fields: [
-				%Embed.Field{name: "Status", value: status_value(stats)},
-				%Embed.Field{name: "Storage", value: storage_value(stats)},
-				%Embed.Field{name: "Coverage", value: coverage_value(stats)},
-				%Embed.Field{name: "Orders", value: order_cache_value(stats)},
-				%Embed.Field{name: "Contracts", value: contracts_value(stats)},
-				%Embed.Field{name: "Jita Buy Wall", value: undercut_value(stats)}
+				%Embed.Field{name: "## Status", value: status_value(stats)},
+				%Embed.Field{name: "## Storage", value: storage_value(stats)},
+				%Embed.Field{name: "## Coverage", value: coverage_value(stats)},
+				%Embed.Field{name: "## Orders", value: order_cache_value(stats)},
+				%Embed.Field{name: "## Contracts", value: contracts_value(stats)},
+				%Embed.Field{name: "## Jita Buy Wall", value: undercut_value(stats)},
+				%Embed.Field{name: "## Commands", value: commands_value()}
 			]
 		}
 		|> with_version()
@@ -691,17 +690,21 @@ defmodule Discord.Embeds do
 		|> String.trim_trailing()
 	end
 
+	defp commands_value do
+		"/check_market • /list_market • /list_contracts • /database_stats • /add_channel • /remove_channel • /list_channel"
+	end
+
 	defp contracts_value(stats) do
 		"""
 		**Cached**: #{Utils.count(stats[:contract_count])}
-					**Regions**: #{Utils.count(stats[:contract_regions])}
+		**Regions**: #{Utils.count(stats[:contract_regions])}
 		**Rows**: #{Utils.count(stats[:contract_items_count])}
 		**Items**: resolved #{Utils.count(stats[:contracts_resolved])} • pending #{Utils.count(stats[:contracts_pending])} • failed #{Utils.count(stats[:contracts_failed])}
 		**Workers**: #{Utils.count(stats[:contract_page_workers])}
-					**Active Round**: #{round_state(stats[:contract_active_round])}
+		**Active Round**: #{round_state(stats[:contract_active_round])}
 		**Top Round**: #{round_label(stats[:contract_top_round])}
-					**Last Desired**: #{Utils.count(stats[:contract_last_desired])}
-		**Last Seen:** #{round_label(stats[:contract_last_seen_round])}
+		**Last Desired**: #{Utils.count(stats[:contract_last_desired])}
+		**Last Seen**: #{round_label(stats[:contract_last_seen_round])}
 		"""
 		|> String.trim_trailing()
 	end
@@ -729,9 +732,9 @@ defmodule Discord.Embeds do
 		**ETS cache**: #{Utils.count(stats[:cache_entries])}
 		**Errors**: #{Utils.count(stats[:esi_error_entries])}
 		**Rate**: #{Utils.count(stats[:esi_rate_entries])}
-					**Janice**: #{Utils.count(stats[:janice_cache_entries])}
-		**Registired Channels**: #{Utils.count(stats[:alert_channels])}
-					**Uptime**: #{Utils.format_uptime(stats[:uptime_seconds])}
+		**Janice**: #{Utils.count(stats[:janice_cache_entries])}
+		**Registered channels**: #{Utils.count(stats[:alert_channels])}
+		**Uptime**: #{Utils.format_uptime(stats[:uptime_seconds])}
 		**SDE**: #{stats[:sde_build]}
 		"""
 		|> String.trim_trailing()
