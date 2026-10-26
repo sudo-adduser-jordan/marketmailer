@@ -169,6 +169,9 @@ try {
   .btn-primary { background: linear-gradient(135deg, #00e5ff, #1a8fd1); color: #04121a; }
   [data-theme="light"] .btn-primary { color: #fff; }
   .btn-ghost { color: var(--accent); background: transparent; }
+  .btn-discord { background: #5865F2; border-color: #5865F2; color: #fff; display: inline-flex; align-items: center; gap: 10px; }
+  .btn-discord svg { width: 18px; height: 18px; flex: none; }
+  [data-theme="light"] .btn-discord { color: #fff; }
   .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   @media (hover: hover) and (pointer: fine) { .btn:hover { filter: brightness(1.12); transform: translateY(-1px); } }
 
@@ -496,6 +499,10 @@ try {
         <div class="cta">
           <a class="btn btn-primary" href="#quickstart">Get started</a>
           <a class="btn btn-ghost" href="#features">See the features</a>
+          <a class="btn btn-discord" href="#" title="Invite link coming soon">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.058a.082.082 0 00.031.056 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 01.078-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 01.079.009c.12.099.246.198.373.292a.077.077 0 01-.006.127 12.3 12.3 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.029 19.84 19.84 0 006.002-3.03.077.077 0 00.032-.055c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 00-.031-.03z"/></svg>
+            Add to Discord
+          </a>
         </div>
       </div>
     </div>
