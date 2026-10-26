@@ -16,7 +16,7 @@ defmodule Contracts do
 		pause_recheck_ms: 30_000,
 		page_limit: 5_000,
 		broadcast_limit: 100,
-		broadcast_per_page: 10,
+		broadcast_per_page: 5,
 		prune_grace_ms: 86_400_000
 	]
 

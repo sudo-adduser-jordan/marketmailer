@@ -270,15 +270,13 @@ defmodule Discord.Embeds do
 
 	defp contract_line(contract) do
 		name = contract_name(contract)
-		capital = if contract.has_capital == 1, do: " [CAPITAL]", else: ""
+		capital = if contract.has_capital == 1, do: " · [CAPITAL]", else: ""
 		price = contract.price || contract.buyout || 0
-		items = contract_item_label(contract)
-		location = "#{contract.region_name} / #{contract.location_name}"
+		items = contract_item_short(contract)
+		location = contract_location_short(contract)
 
-		"**#{Utils.list_truncate(name, 48)}**#{capital} • #{location} • " <>
-			"#{format_isk_compact(price)} → #{format_isk_compact(contract.items_value)} " <>
-			"(**+#{format_isk_compact(contract.margin)}**) • #{items} • " <>
-			"#{contract_expiry_label(contract.expires_at)} • `#{contract.contract_id}`"
+		"**#{Utils.list_truncate(name, 32)}** `#{contract.contract_id}` · #{contract_expiry_short(contract.expires_at)}#{capital}\n" <>
+			"+#{format_isk_short(contract.margin)} · #{format_isk_short(price)} → #{format_isk_short(contract.items_value)} · #{items} · #{location}"
 	end
 
 	defp contract_name(%{title: title, contract_id: id}) do
@@ -286,50 +284,68 @@ defmodule Discord.Embeds do
 		if title == "", do: "Contract #{id}", else: title
 	end
 
-	defp contract_item_label(contract) do
-		names = contract |> Map.get(:item_names, []) |> Enum.take(3)
-		count = contract.item_count || length(names)
+	defp contract_item_short(contract) do
+		names = contract |> Map.get(:item_names, []) |> Enum.take(2)
+		count = contract.item_count || length(Map.get(contract, :item_names, []))
+
+		suffix =
+			if count > length(names) do
+				" +#{count - length(names)}"
+			else
+				""
+			end
 
 		if names == [] do
-			"#{count} item(s)"
+			"#{count} items"
 		else
-			"#{count} item(s): #{Enum.join(names, ", ")}"
+			"#{count} items: #{Enum.join(names, ", ")}#{suffix}"
 		end
 	end
 
-	defp contract_expiry_label(nil), do: "expiry unknown"
+	defp contract_location_short(contract) do
+		name =
+			contract
+			|> Map.get(:location_name)
+			|> case do
+				nil -> Map.get(contract, :region_name, "?")
+				"" -> Map.get(contract, :region_name, "?")
+				n -> n
+			end
+			|> to_string()
 
-	defp contract_expiry_label(expires_at) when is_integer(expires_at) do
+		case String.split(name, " - ") do
+			[first, second | _] -> Utils.list_truncate("#{String.trim(first)} · #{String.trim(second)}", 24)
+			_ -> Utils.list_truncate(name, 24)
+		end
+	end
+
+	defp contract_expiry_short(nil), do: "?"
+
+	defp contract_expiry_short(expires_at) when is_integer(expires_at) do
 		remaining = expires_at - Contracts.now_ms()
 
 		cond do
-			remaining <= 0 ->
-				"expired"
-
-			remaining >= 86_400_000 ->
-				"expires #{div(remaining, 86_400_000)}d #{div(rem(remaining, 86_400_000), 3_600_000)}h"
-
-			remaining >= 3_600_000 ->
-				"expires #{div(remaining, 3_600_000)}h #{div(rem(remaining, 3_600_000), 60_000)}m"
-
-			true ->
-				"expires #{div(remaining, 60_000)}m"
+			remaining <= 0 -> "expired"
+			remaining >= 86_400_000 -> "#{div(remaining, 86_400_000)}d"
+			remaining >= 3_600_000 -> "#{div(remaining, 3_600_000)}h"
+			remaining >= 60_000 -> "#{div(remaining, 60_000)}m"
+			true -> "<1m"
 		end
 	end
 
-	defp format_isk_compact(number) when is_number(number) do
+	defp format_isk_short(number) when is_number(number) do
 		value = number * 1.0
 		absolute = abs(value)
 
 		cond do
-			absolute >= 1_000_000_000 -> "#{Float.round(value / 1_000_000_000, 1)}b ISK"
-			absolute >= 1_000_000 -> "#{Float.round(value / 1_000_000, 1)}m ISK"
-			absolute >= 1_000 -> "#{Float.round(value / 1_000, 1)}k ISK"
-			true -> "#{round(value)} ISK"
+			absolute >= 1_000_000_000 -> "#{Float.round(value / 1_000_000_000, 1)}b"
+			absolute >= 1_000_000 -> "#{Float.round(value / 1_000_000, 1)}m"
+			absolute >= 1_000 -> "#{Float.round(value / 1_000, 1)}k"
+			true -> "#{round(value)}"
 		end
 	end
 
-	defp format_isk_compact(_number), do: "? ISK"
+	defp format_isk_short(_number), do: "?"
 
 	defp contract_list_components(_page, total_pages) when total_pages <= 1, do: []
 

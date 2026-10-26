@@ -450,12 +450,11 @@ defmodule Discord.EmbedsTest do
 		[embed] = Discord.Embeds.contract_list_payload([contract], 1, config).embeds
 		description = embed.description
 
-		assert description =~ "**Capital hull lot** [CAPITAL]"
-		assert description =~ "The Forge / Jita IV - Moon 4"
-		assert description =~ "1.5b ISK → 1.8b ISK (**+250.0m ISK**)"
-		assert description =~ "2 item(s): Naglfar, Fighter"
-		assert description =~ ~r/• expires \d+h \d+m •/
-		assert description =~ "`1001`"
+		assert description =~ "**Capital hull lot** `1001`"
+		assert description =~ "· 2h · [CAPITAL]"
+		assert description =~ "+250.0m · 1.5b → 1.8b"
+		assert description =~ "2 items: Naglfar, Fighter"
+		assert description =~ "Jita IV · Moon 4"
 	end
 
 	test "contract list paginates with buttons" do
@@ -466,7 +465,7 @@ defmodule Discord.EmbedsTest do
 		assert embed.title == "Contract arbitrage (2/3)"
 
 		lines = String.split(embed.description, "\n")
-		assert length(lines) == 2
+		assert length(lines) == 4
 		assert hd(lines) =~ "Contract 3"
 		assert List.last(lines) =~ "Contract 4"
 

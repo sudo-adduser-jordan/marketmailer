@@ -154,6 +154,50 @@ defmodule ContractsTest do
 		assert row.has_capital == 1
 	end
 
+	test "thin top orders only fill their own depth" do
+		seed_name(@tritanium, "Tritanium", 0)
+
+		troll = %{market_row(1, @tritanium, @jita, 1, 1_197_600_000_000.0) | volume_remain: 1, volume_total: 1}
+		real = %{market_row(2, @tritanium, @jita, 1, 500_000_000.0) | volume_remain: 100, volume_total: 100}
+		seed_market([troll, real])
+
+		seed([contract(1_001)])
+		seed_items(1_001, [{@tritanium, 10}])
+
+		assert [row] = Contracts.Database.top_desired(@round, 100, 0)
+		assert row.items_value == 1_197_600_000_000.0 + 9 * 500_000_000.0
+	end
+
+	test "partial fills past total depth count only the fillable share" do
+		seed_name(@tritanium, "Tritanium", 0)
+		seed_market([market_row(1, @tritanium, @jita, 1, 100.0)])
+
+		seed([contract(1_001)])
+		seed_items(1_001, [{@tritanium, 200}])
+
+		assert [row] = Contracts.Database.top_desired(@round, 100, 0)
+		assert row.items_value == 100 * 100.0
+	end
+
+	test "requested items are subtracted from the margin" do
+		seed_name(@tritanium, "Tritanium", 0)
+		seed_market([market_row(1, @tritanium, @jita, 1, 100.0)])
+
+		asks = %{market_row(2, @tritanium, @jita, 0, 120.0) | volume_remain: 100, volume_total: 100}
+		seed_market([asks])
+
+		seed([contract(1_001, %{"price" => 0})])
+		Database.insert_all("contract_items", [item(1_001, @tritanium, 10, 1, 0)])
+
+		Database.query!(
+			"INSERT INTO contract_items (record_id, contract_id, type_id, quantity, is_included, is_blueprint_copy) VALUES (999001, 1001, #{@tritanium}, 5, 0, 0)"
+		)
+
+		assert [row] = Contracts.Database.top_desired(@round, 100, 0)
+		assert row.items_value == 10 * 100.0
+		assert row.margin == 10 * 100.0 - 5 * 120.0
+	end
+
 	test "contracts are filtered by margin" do
 		seed_name(@tritanium, "Tritanium", 0)
 		seed_market([market_row(1, @tritanium, @jita, 1, 100.0)])
