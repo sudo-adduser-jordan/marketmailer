@@ -271,12 +271,13 @@ defmodule Discord.Embeds do
 	defp contract_line(contract) do
 		name = contract_name(contract)
 		capital = if contract.has_capital == 1, do: " · [CAPITAL]", else: ""
-		price = contract.price || contract.buyout || 0
-		items = contract_item_short(contract)
-		location = contract_location_short(contract)
+		system = contract_system_short(contract)
 
-		"**#{Utils.list_truncate(name, 32)}** `#{contract.contract_id}` · #{contract_expiry_short(contract.expires_at)}#{capital}\n" <>
-			"+#{format_isk_short(contract.margin)} · #{format_isk_short(price)} → #{format_isk_short(contract.items_value)} · #{items} · #{location}"
+		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_expiry_short(contract.expires_at)} · #{system} · #{contract.contract_id}"
+	end
+
+	defp contract_title_link(contract, name) do
+		"[**#{Utils.list_truncate(name, 32)}**](https://evector.space/contracts/#{contract.contract_id})"
 	end
 
 	defp contract_name(%{title: title, contract_id: id}) do
@@ -284,25 +285,7 @@ defmodule Discord.Embeds do
 		if title == "", do: "Contract #{id}", else: title
 	end
 
-	defp contract_item_short(contract) do
-		names = contract |> Map.get(:item_names, []) |> Enum.take(2)
-		count = contract.item_count || length(Map.get(contract, :item_names, []))
-
-		suffix =
-			if count > length(names) do
-				" +#{count - length(names)}"
-			else
-				""
-			end
-
-		if names == [] do
-			"#{count} items"
-		else
-			"#{count} items: #{Enum.join(names, ", ")}#{suffix}"
-		end
-	end
-
-	defp contract_location_short(contract) do
+	defp contract_system_short(contract) do
 		name =
 			contract
 			|> Map.get(:location_name)
@@ -314,7 +297,7 @@ defmodule Discord.Embeds do
 			|> to_string()
 
 		case String.split(name, " - ") do
-			[first, second | _] -> Utils.list_truncate("#{String.trim(first)} · #{String.trim(second)}", 24)
+			[first | _] -> Utils.list_truncate(String.trim(first), 24)
 			_ -> Utils.list_truncate(name, 24)
 		end
 	end
@@ -488,7 +471,17 @@ defmodule Discord.Embeds do
 		system = Utils.list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
 		security = Utils.format_security(list_field(item, :security_status, "security_status")) |> to_string()
 
-		"**#{name}** • #{margin} • #{system} • #{security}"
+		"#{list_name_label(item, name)} • #{margin} • #{system} • #{security}"
+	end
+
+	defp list_name_label(item, name) do
+		case list_field(item, :type_id, "type_id") do
+			id when is_integer(id) and id > 0 ->
+				"[**#{name}**](https://evemarketbrowser.com/region/0/type/#{id})"
+
+			_ ->
+				"**#{name}**"
+		end
 	end
 
 	defp list_name(item) do
@@ -641,7 +634,7 @@ defmodule Discord.Embeds do
 				name: "\u200BDatabase Statistics",
 				icon_url: @icon_broadcast
 			},
-			color: @color_info,
+			color: @color_success,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database

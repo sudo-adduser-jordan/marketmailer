@@ -301,7 +301,9 @@ defmodule Discord.EmbedsTest do
 	test "messages are mobile first" do
 		embed = Discord.Embeds.market_list_embed(market_list())
 
-		assert embed.description == "**Tritanium** • +100.00 • Rens • 0.9"
+		assert embed.description ==
+						 "[**Tritanium**](https://evemarketbrowser.com/region/0/type/34) • +100.00 • Rens • 0.9"
+
 		refute embed.description =~ "```"
 		assert embed.description |> String.split("\n") |> length() == 1
 	end
@@ -450,11 +452,8 @@ defmodule Discord.EmbedsTest do
 		[embed] = Discord.Embeds.contract_list_payload([contract], 1, config).embeds
 		description = embed.description
 
-		assert description =~ "**Capital hull lot** `1001`"
-		assert description =~ "· 2h · [CAPITAL]"
-		assert description =~ "+250.0m · 1.5b → 1.8b"
-		assert description =~ "2 items: Naglfar, Fighter"
-		assert description =~ "Jita IV · Moon 4"
+		assert description =~ "[**Capital hull lot**](https://evector.space/contracts/1001)"
+		assert description =~ "· [CAPITAL] · +250.0m · 2h · Jita IV · 1001"
 	end
 
 	test "contract list paginates with buttons" do
@@ -465,7 +464,7 @@ defmodule Discord.EmbedsTest do
 		assert embed.title == "Contract arbitrage (2/3)"
 
 		lines = String.split(embed.description, "\n")
-		assert length(lines) == 4
+		assert length(lines) == 2
 		assert hd(lines) =~ "Contract 3"
 		assert List.last(lines) =~ "Contract 4"
 

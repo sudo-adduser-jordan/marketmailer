@@ -52,7 +52,7 @@ defmodule Marketmailer.Utils do
 	def share(_part, _total), do: "?"
 
 	def millions_compact(abs_value),
-		do: :erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2) <> "M"
+		do: :erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2) <> "m"
 
 	def format_isk(number) when is_number(number),
 		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
@@ -67,7 +67,7 @@ defmodule Marketmailer.Utils do
 				abs_value = abs(number)
 
 				cond do
-					abs_value >= 1_000_000 -> "#{sign}#{Float.round(abs_value / 1_000_000, 1)}M"
+					abs_value >= 1_000_000 -> "#{sign}#{Float.round(abs_value / 1_000_000, 1)}m"
 					abs_value >= 1_000 -> "#{sign}#{Float.round(abs_value / 1_000, 1)}k"
 					true -> "#{sign}#{:erlang.float_to_binary(Float.round(abs_value, 2), decimals: 2)}"
 				end
