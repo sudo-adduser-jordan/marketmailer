@@ -159,6 +159,7 @@
     background-clip: text;
     color: transparent;
     line-height: 1.05;
+    text-wrap: balance;
   }
   .hero .rainbow-rule {
     width: 220px; height: 8px; border-radius: 999px; margin: 18px auto 0;
@@ -207,7 +208,7 @@
   }
 
   /* ---------- Sections ---------- */
-  section { padding: 64px 0; }
+  section { padding: 64px 0; scroll-margin-top: 24px; }
   section + section::before {
     content: ""; display: block; width: 180px; height: 6px; border-radius: 999px;
     margin: 0 auto 48px; background: var(--rainbow);
@@ -217,8 +218,13 @@
     font-family: var(--sans); font-size: 12px; letter-spacing: 3px;
     color: var(--red); text-transform: uppercase; margin-bottom: 10px; font-weight: 700;
   }
-  .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 900; letter-spacing: -0.3px; font-family: var(--display); }
+  .sec-head h2 { font-size: clamp(26px, 4vw, 36px); font-weight: 900; letter-spacing: -0.3px; font-family: var(--display); text-wrap: balance; }
   .sec-head p { color: var(--muted); margin-top: 12px; max-width: 620px; margin-inline: auto; font-size: 15px; }
+  .sec-head code, .note code {
+    font-family: var(--sans); font-size: 12.5px; color: var(--blue);
+    background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25);
+    border-radius: 5px; padding: 1px 5px;
+  }
 
   /* ---------- How it works ---------- */
   .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
@@ -237,6 +243,11 @@
   .step h3 { margin: 8px 0 10px; font-size: 17px; font-family: var(--display); }
   .step p { color: var(--muted); font-size: 14px; }
   .step .flow { margin-top: 14px; font-family: var(--sans); font-size: 12px; color: var(--red); word-break: break-word; font-weight: 700; }
+  .step code {
+    font-family: var(--sans); font-size: 12px; color: var(--blue);
+    background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25);
+    border-radius: 5px; padding: 1px 5px;
+  }
 
   /* ---------- Benefits list (product page style) ---------- */
   .benefits { max-width: 760px; margin: 0 auto 44px; }
@@ -251,6 +262,11 @@
     display: grid; place-items: center; border: 2px solid var(--ink);
   }
   .benefits li strong { color: var(--ink); font-weight: 900; letter-spacing: 0.4px; }
+  .benefits code {
+    font-family: var(--sans); font-size: 12px; color: var(--blue);
+    background: var(--sky-2); border: 1px solid rgba(28, 79, 156, 0.25);
+    border-radius: 5px; padding: 1px 5px;
+  }
 
   /* ---------- Card (used by "You might also like") ---------- */
   .card {
@@ -294,6 +310,7 @@
   }
 
   /* ---------- Commands ---------- */
+  .note { max-width: 760px; margin: 16px auto 0; color: var(--muted); font-size: 13px; text-align: center; }
   .commands { background: var(--card); border: 2px solid var(--ink); border-radius: 16px; padding: 30px; box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12); }
   .cmd { display: flex; gap: 16px; padding: 12px 0; border-bottom: 2px dashed rgba(34, 25, 13, 0.2); flex-wrap: wrap; align-items: baseline; }
   .cmd:last-child { border-bottom: none; padding-bottom: 0; }
@@ -575,12 +592,74 @@
     filter: blur(2px);
   }
 
+  /* ---------- Hero stats strip ---------- */
+  .hero-stats {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px; margin-top: 30px;
+  }
+  .hero-stats div {
+    background: #fff; border: 2px solid var(--ink); border-radius: 12px;
+    padding: 10px 8px; text-align: center;
+    box-shadow: 2px 2px 0 rgba(34, 25, 13, 0.15);
+  }
+  .hero-stats b {
+    display: block; font-family: var(--display); font-weight: 900;
+    font-size: clamp(18px, 2.4vw, 24px); line-height: 1; color: var(--red);
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-stats span {
+    display: block; margin-top: 5px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  }
+  @media (max-width: 480px) {
+    .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  /* ---------- Slash command grid (Discord section) ---------- */
+  .slash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+  .slash {
+    background: #fff; border: 2px solid var(--ink); border-radius: 14px;
+    padding: 18px 20px; box-shadow: 4px 4px 0 rgba(34, 25, 13, 0.12);
+  }
+  .slash code {
+    display: inline-block; font-family: var(--sans); font-size: 13px; font-weight: 800;
+    color: var(--red); background: var(--card); border: 2px solid var(--ink);
+    border-radius: 8px; padding: 3px 9px;
+  }
+  .slash p { margin-top: 10px; color: var(--muted); font-size: 14px; }
+  .slash-note {
+    max-width: 760px; margin: 26px auto 0; text-align: center;
+    color: var(--muted); font-size: 14px;
+  }
+  .slash-note strong { color: var(--ink); font-weight: 900; }
+
+  /* ---------- Architecture figures ---------- */
+  .diagram {
+    background: #fff; border: 3px solid var(--ink); border-radius: 18px;
+    padding: 18px; box-shadow: 5px 5px 0 rgba(34, 25, 13, 0.15);
+  }
+  .diagram img { display: block; width: 100%; height: auto; }
+  .diagram figcaption {
+    margin-top: 12px; text-align: center; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  }
+  .diagrams-2 {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 22px; margin-top: 22px;
+  }
+  .diagrams-2 .diagram { display: flex; flex-direction: column; }
+  .diagrams-2 .diagram figcaption { margin-top: auto; padding-top: 12px; }
+
   /* ---------- Tables: scroll instead of squishing on narrow screens ---------- */
   .table-scroll { overflow-x: auto; }
 
   /* ---------- Responsive ---------- */
   @media (max-width: 859px) {
     .hero-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 900px) {
+    header { flex-wrap: wrap; gap: 10px 16px; }
+    nav { gap: 8px; font-size: 12px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   }
   @media (max-width: 720px) {
     :root { --gutter: 18px; --pk: 0.86; }
@@ -626,6 +705,8 @@
     <nav>
       <a href="#how">How it works</a>
       <a href="#features">Features</a>
+      <a href="#discord">Discord</a>
+      <a href="#architecture">Architecture</a>
       <a href="#quickstart">Quick start</a>
     </nav>
   </header>
@@ -699,7 +780,7 @@
               </div>
               <div class="side-label">
                 <h4 class="side-title">Nutrition Facts</h4>
-                <p class="side-sub">Serving size 1 region · Servings per pack 12</p>
+                <p class="side-sub">Serving size 1 region · Servings per pack 114</p>
                 <table class="side-table">
                   <tbody>
                     <tr><td>Arbitrage</td><td>19g</td></tr>
@@ -712,9 +793,9 @@
                 </table>
                 <p class="side-note">* magically profitable</p>
                 <p class="side-h">Ingredients</p>
-                <p class="side-p">Whole grain oats, ESI orders, ETag cache, exponential backoff, SQLite WAL, etags, resolved names.</p>
+                <p class="side-p">Whole grain oats, ESI orders, per-page ETag cache, exponential backoff, SQLite WAL, SDE-seeded names.</p>
                 <p class="side-h">Contains</p>
-                <p class="side-p">One cardboard box of arbitrage. No static data dumps — names resolve on demand.</p>
+                <p class="side-p">One cardboard box of arbitrage. Names come from the official SDE import — no ESI round-trips.</p>
                 <div class="side-foot">
                   <span class="side-nw">NET WT 14.9 OZ (421 g)</span>
                   <p class="side-fine">Marketmailer — not affiliated with General Mills or CCP Games.</p>
@@ -722,7 +803,7 @@
               </div>
               <div class="pack-side-promo">
                 <span class="big">Arbitrage in every bite!</span>
-                <span class="small">Collect all 12 regions</span>
+                <span class="small">Collect all 114 regions</span>
               </div>
             </div>
             <div class="pack-face pack-left"></div>
@@ -737,11 +818,15 @@
     <div class="rainbow-rule" aria-hidden="true"></div>
     <p class="tagline">
       A lightweight EVE Online market watcher that polls the
-      <strong>ESI market endpoints</strong>, stores orders locally in SQLite,
-      and surfaces <strong>arbitrage opportunities</strong> — the best remote
-      sell orders to instantly flip into the <strong>Jita buy wall</strong>.
-      They're magically profitable! ❤️⭐🍀🌙
+      <strong>ESI market endpoints</strong>, stores every order in local SQLite,
+      and ranks the best remote sell orders you can instantly flip into the
+      <strong>Jita buy wall</strong>. They're magically profitable! ❤️⭐🍀🌙
     </p>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="#quickstart">Get started</a>
+      <a class="btn btn-ghost" href="#features">See the features</a>
+    </div>
 
     <div class="chips">
       <span class="chip"><span class="dot on"></span> Region pollers — enabled</span>
@@ -749,10 +834,12 @@
       <span class="chip">SQLite · Elixir/OTP · Docker</span>
     </div>
 
-    <div class="cta">
-      <a class="btn btn-primary" href="#quickstart">Get started</a>
-      <a class="btn btn-ghost" href="#features">See the features</a>
-        </div>
+    <div class="hero-stats">
+      <div><b>114</b><span>regions polled</span></div>
+      <div><b>1</b><span>SQLite file</span></div>
+      <div><b>7</b><span>slash commands</span></div>
+      <div><b>0</b><span>downtime upgrades</span></div>
+    </div>
       </div>
     </div>
   </section>
@@ -771,29 +858,31 @@
         <div class="num">1</div>
         <h3>Poll ESI markets</h3>
         <p>
-          Per-region pollers fetch market orders from the ESI API with dynamic
-          page scaling and exponential backoff. ETag caching means unchanged
-          regions are skipped in a single request.
+          One manager per SDE region, one worker per ESI page. Every page polls
+          on its own ETag/Expires TTL, so unchanged pages stay cheap
+          <code>304</code>s, while page 1 reports <code>X-Pages</code> and
+          reconciles the worker set to exactly that many pages.
         </p>
-        <div class="flow">ESI → ETag cache → market pollers</div>
+        <div class="flow">ESI → per-page ETags → region managers</div>
       </div>
       <div class="step">
         <div class="num">2</div>
         <h3>Store locally</h3>
         <p>
-          Orders land in a single SQLite file (WAL mode) alongside resolved
-          EVE names for items, systems, regions and stations. Migrations run
-          automatically on every boot.
+          Orders land in a single SQLite file (WAL mode) alongside SDE-seeded
+          names, systems, regions and stations. Writes are serialized through
+          one queue, and migrations run automatically on every boot.
         </p>
-        <div class="flow">SQLite · market.db · auto-migrate</div>
+        <div class="flow">SQLite · priv/data/marketmailer.db · auto-migrate</div>
       </div>
       <div class="step">
         <div class="num">3</div>
         <h3>Surface the edge</h3>
         <p>
           Queries rank remote sell orders that undercut the Jita buy wall,
-          weighted by profit per unit and available volume. Readable on the
-          console or in your Discord server.
+          weighted by profit per unit and available volume. Capital hulls that
+          can never enter high sec are filtered out, so every row is actually
+          deliverable. Read it on the console, in Discord, or in the dashboard.
         </p>
         <div class="flow">SQL pivot → arbitrage ranked → you</div>
       </div>
@@ -814,9 +903,13 @@
       <ul>
         <li><strong>SPREAD SCANNER:</strong> A frosted-simple pipeline that finds the single best remote sell order you can instantly flip into Jita's buy wall, ranked by <em>instant_sell_profit</em>.</li>
         <li><strong>UNDERCUT RADAR:</strong> The top-100 items whose remote sell price beats Jita's best buy, ordered by margin — your shopping list for station trading runs across all watched regions.</li>
-        <li><strong>LAZY NAME RESOLUTION:</strong> No static data dumps. Item, system, region and station names resolve on demand from ESI into cached tables.</li>
-        <li><strong>GLUTEN-FREE CONCURRENCY:</strong> A per-region GenServer tree with dynamic page scaling and supervisory restarts that survive transient ESI failures.</li>
-        <li><strong>CONTAINS:</strong> One SQLite database of market orders, etags, and names, ready to eat — or to query — any time. Perfect for instant arbitrage or a lunch-box trading run.</li>
+        <li><strong>SDE-SEEDED NAMES:</strong> Item, system, region and station names are bulk-loaded from the official JSONL SDE by <code>mix sde.import</code>. No ESI round-trips for names; player structures render as <em>Player Station</em>.</li>
+        <li><strong>CAPITAL-FREE BUY WALL:</strong> Every Jita query filters out hulls that cannot enter high sec — titans, dreadnoughts, carriers, supers and the rest — so nothing on the list is undeliverable.</li>
+        <li><strong>CONTRACT BOARD:</strong> Public contracts are polled and cached too, with item lists fetched once per contract; a 404 on the items drops the contract instead of serving a half-empty row.</li>
+        <li><strong>WATCHDOG INCLUDED:</strong> A transport failure halts polling instead of burning error budget, and a DNS+TCP probe resumes every poller the moment the link is back.</li>
+        <li><strong>GLUTEN-FREE CONCURRENCY:</strong> A per-region GenServer tree with page scaling and supervisory restarts that survive transient ESI failures.</li>
+        <li><strong>ZERO-DOWNTIME UPGRADES:</strong> Castle OTP releases hot-load a patch into the running prod daemon; state-shape changes fall back to a clean restart instead of a half-applied appup.</li>
+        <li><strong>CONTAINS:</strong> One SQLite database of market orders, contracts, etags and names, ready to eat — or to query — any time. Perfect for instant arbitrage or a lunch-box trading run.</li>
       </ul>
     </div>
     <div class="facts">
@@ -845,14 +938,14 @@
           <tr>
             <td>
               <strong><span class="ic">🍀</span>Req · Jason</strong>
-              <span class="d">HTTP and JSON client for every ESI call — ETag handling, error limits and bulk name lookups.</span>
+              <span class="d">HTTP and JSON client for every ESI call — per-page ETag handling, error-limit awareness and maintenance-aware retries.</span>
             </td>
             <td>req ~&gt; 0.5.0</td>
           </tr>
           <tr>
             <td>
               <strong><span class="ic">❤️</span>Nostrum</strong>
-              <span class="d">Discord gateway: slash commands and scheduled broadcasts to your chosen channel.</span>
+              <span class="d">Discord gateway: slash commands, embeds and one market broadcast per polling round to the channels you register.</span>
             </td>
             <td>Kraigie/nostrum</td>
           </tr>
@@ -873,7 +966,7 @@
         </tbody>
       </table>
       </div>
-      <p class="note">Also in the build: Playwright (Janice chart captures) · Castle (hot upgrades) · Taskfile + Docker (prod daemon) · Quokka + HendricksFormatter (dev formatter).</p>
+      <p class="note">Also in the build: Playwright (Janice chart captures) · Castle (hot upgrades) · Taskfile + Docker (prod daemon) · structured JSON logs · Quokka + HendricksFormatter (dev formatter).</p>
     </div>
   </div>
 </section>
@@ -884,15 +977,18 @@
     <div class="sec-head">
       <div class="kicker">03 · Launch</div>
       <h2>Quick start</h2>
-      <p>From clone to arbitrage feed in three commands.</p>
+      <p>From clone to a running arbitrage feed — three commands get you there.</p>
     </div>
     <div class="commands">
-      <div class="cmd"><code>mix setup</code><p>Install deps, create the SQLite database and run migrations.</p></div>
-      <div class="cmd"><code>task start</code><p>Run latest tree as prod release daemon (restarts when stale; survives terminal close).</p></div>
-      <div class="cmd"><code>task dev</code><p>Interactive shell with the app started — isolated dev.db + :4001, safe alongside prod.</p></div>
-      <div class="cmd"><code>task live:update</code><p>Hot-upgrade prod when code changed (patch-bump + appup + release); no-op otherwise.</p></div>
-      <div class="cmd"><code>mix ecto.migrate</code><p>Manual migration control (migrations also run automatically on every boot).</p></div>
+      <div class="cmd"><code>cp .example.env .env</code><p>Optional. Fill in <strong>DISCORD_TOKEN</strong> for the bot and any dashboard credentials.</p></div>
+      <div class="cmd"><code>task setup</code><p>Deps, migrations, the matching Playwright Chromium, and <strong>mix sde.import</strong>. The SDE seed creates the region rows the pollers are built from — skip it and no region manager starts.</p></div>
+      <div class="cmd"><code>task start</code><p>Build and run the latest tree as a detached prod release daemon. Survives terminal close and is a clean restart every time.</p></div>
+      <div class="cmd"><code>task dev</code><p>Interactive shell with the app started — isolated priv/data/dev.db on :4001, safe alongside the prod daemon.</p></div>
+      <div class="cmd"><code>task live:update</code><p>Castle hot upgrade in two phases. Refuses on a dirty tree, writes the version bump + appup edge first, and never leaves the daemon down.</p></div>
+      <div class="cmd"><code>task stop</code><p>Kill-all switch: gracefully stops the prod daemon, then sweeps orphaned release processes.</p></div>
+      <div class="cmd"><code>mix ecto.migrate</code><p>Manual migration control — migrations also run automatically on every boot.</p></div>
     </div>
+    <p class="note">The dashboard lives at <strong>:4000/dashboard</strong> in prod and <strong>localhost:4001/dashboard</strong> under <code>task dev</code>; set <code>DASHBOARD_USER</code> + <code>DASHBOARD_PASSWORD</code> to put it behind basic auth.</p>
     <div class="table-scroll">
     <table>
       <thead>
@@ -900,11 +996,63 @@
       </thead>
       <tbody>
         <tr><td><code>DISCORD_TOKEN</code></td><td>Enables the optional Discord bot. Missing/invalid → bot skipped with a warning.</td></tr>
-        <tr><td><code>MARKETMAILER_LOG_DIR</code></td><td>Directory for the rotated error log (default: <code>logs/</code> → <code>logs/errors.jsonl</code>).</td></tr>
-        <tr><td><code>MARKETMAILER_DB</code></td><td>Override the SQLite file path — e.g. when mounting a Docker volume.</td></tr>
+        <tr><td><code>MARKETMAILER_DB</code></td><td>SQLite file path (default <code>priv/data/marketmailer.db</code>) — e.g. when mounting a Docker volume.</td></tr>
+        <tr><td><code>SECRET_KEY_BASE</code></td><td>Signing secret for the dashboard. Unset → an ephemeral per-boot secret.</td></tr>
+        <tr><td><code>DASHBOARD_USER</code> / <code>DASHBOARD_PASSWORD</code></td><td>HTTP basic auth for <code>/dashboard</code> when both are set.</td></tr>
+        <tr><td><code>DASHBOARD_PORT</code></td><td>Dashboard port (prod default <code>4000</code>, <code>task dev</code> default <code>4001</code>).</td></tr>
+        <tr><td><code>DASHBOARD_ENABLED</code></td><td>Set to <code>false</code> to skip the dashboard endpoint entirely.</td></tr>
+        <tr><td><code>START_POLLERS</code></td><td>Dev only — set to <code>false</code> to boot <code>task dev</code> without region pollers.</td></tr>
+        <tr><td><code>MARKETMAILER_DEV_DB</code></td><td>Dev-only database path (default <code>priv/data/dev.db</code>).</td></tr>
       </tbody>
     </table>
     </div>
+  </div>
+</section>
+
+<!-- ================= Discord ================= -->
+<section id="discord">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">04 · Discord</div>
+      <h2>Discord bot</h2>
+      <p>Optional — with no <code>DISCORD_TOKEN</code> the bot is skipped with a warning and the pollers keep running.</p>
+    </div>
+    <div class="slash-grid">
+      <div class="slash"><code>/check_market</code><p>Best flip for one item: remote sell order against the Jita buy wall, with a Janice chart attached.</p></div>
+      <div class="slash"><code>/list_market</code><p>The ranked undercut board, 10 rows per page with Prev/Next buttons.</p></div>
+      <div class="slash"><code>/list_contracts</code><p>Public contracts at or above a 100m ISK margin, cached from ESI with each contract's item list fetched once.</p></div>
+      <div class="slash"><code>/database_stats</code><p>Order counts, cache sizes, ETag coverage and the running version.</p></div>
+      <div class="slash"><code>/add_channel</code><p>Route a region's broadcast to this channel.</p></div>
+      <div class="slash"><code>/remove_channel</code><p>Stop broadcasting a region here.</p></div>
+      <div class="slash"><code>/list_channel</code><p>Show the current region → channel routing.</p></div>
+    </div>
+    <p class="slash-note">Broadcasts wait for <strong>one report per polled region</strong>, then post the exact <strong>/list_market</strong> message — so the command and the broadcast can never drift apart. Page 2+ re-queries the database for live data, and Discord expires the buttons 15 minutes after posting.</p>
+  </div>
+</section>
+
+<!-- ================= Architecture ================= -->
+<section id="architecture">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">05 · Internals</div>
+      <h2>Architecture</h2>
+      <p>Fetch → write → read. Pollers only ever write to the SQLite file; every query reads that same file and never touches the network.</p>
+    </div>
+    <figure class="diagram">
+      <img src="assets/system-design.svg" alt="System design: per-page ESI pollers write market orders into SQLite, SQL joins the SDE-seeded name caches, and results render as Discord embeds." />
+      <figcaption>System design — ESI pages → SQLite → SQL → Discord</figcaption>
+    </figure>
+    <div class="diagrams-2">
+      <figure class="diagram">
+        <img src="assets/supervision.svg" alt="Supervision tree: region manager supervisor, page supervisors, bot supervisor and the dashboard endpoint." />
+        <figcaption>Supervision tree</figcaption>
+      </figure>
+      <figure class="diagram">
+        <img src="assets/schema.svg" alt="Database schema: market, etags, names, systems, discord and contracts tables plus the marketListView view." />
+        <figcaption>Database schema</figcaption>
+      </figure>
+    </div>
+    <p class="note">Solid arrows are supervision; dashed arrows are runtime links outside it. Poller and dashboard children only boot when enabled, and the ETS caches live outside the tree.</p>
   </div>
 </section>
 
@@ -912,7 +1060,7 @@
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <div class="kicker">04 · Also</div>
+      <div class="kicker">06 · Also</div>
       <h2>You Might Also Like...</h2>
       <p>More magically delicious utilities from the same kitchen.</p>
     </div>
@@ -926,7 +1074,7 @@
       <div class="card">
         <div class="thumb" style="background: var(--card);">🔥</div>
         <h3>Zero-downtime hot upgrades</h3>
-        <p>Castle OTP releases patch prod in place — no missed poll cycles.</p>
+        <p>Castle OTP releases patch prod in place. Migrations or state-shape changes fall back to <code>task start</code> instead.</p>
       </div>
       <div class="card">
         <div class="thumb" style="background: #e8f5e9;">🐳</div>
@@ -945,6 +1093,8 @@
         <h4>Site</h4>
         <a href="#how">How it works</a>
         <a href="#features">Features</a>
+        <a href="#discord">Discord bot</a>
+        <a href="#architecture">Architecture</a>
         <a href="#quickstart">Quick start</a>
       </div>
       <div>
@@ -968,7 +1118,7 @@
     </div>
     <div class="rainbow" aria-hidden="true"></div>
     <div class="stack">Elixir ~> 1.19 · OTP · Ecto + SQLite · Nostrum · req</div>
-    <p class="fine">Marketmailer v0.0.1 — an EVE Online community utility. Not affiliated with CCP Games.</p>
+    <p class="fine">Marketmailer v0.1.28 — an EVE Online community utility. Not affiliated with CCP Games.</p>
   </footer>
 </div>
 
