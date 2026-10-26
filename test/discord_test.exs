@@ -142,7 +142,7 @@ defmodule Discord.BroadcasterTest do
 		payload = Contracts.Broadcast.command_payload()
 
 		assert [embed] = payload.embeds
-		assert embed.title == "Contract arbitrage"
+		assert embed.title == "Contracts"
 		assert embed.description =~ "Contract 1001"
 		assert embed.description =~ "200.0m"
 		assert embed.description =~ "1 item(s): Tritanium"
@@ -461,7 +461,7 @@ defmodule Discord.EmbedsTest do
 		payload = Discord.Embeds.contract_list_payload(contracts(5), 2, config)
 
 		assert [embed] = payload.embeds
-		assert embed.title == "Contract arbitrage (2/3)"
+		assert embed.title == "Contracts (2/3)"
 
 		lines = String.split(embed.description, "\n")
 		assert length(lines) == 2
@@ -476,7 +476,7 @@ defmodule Discord.EmbedsTest do
 		refute next.disabled
 
 		assert [last_embed] = Discord.Embeds.contract_list_payload(contracts(5), 99, config).embeds
-		assert last_embed.title == "Contract arbitrage (3/3)"
+		assert last_embed.title == "Contracts (3/3)"
 
 		empty = Discord.Embeds.contract_list_payload([], 1, config)
 		assert [empty_embed] = empty.embeds
@@ -487,7 +487,7 @@ defmodule Discord.EmbedsTest do
 	test "contract list empty and error payloads" do
 		empty = Discord.Embeds.contract_list_empty_payload("No contract round has completed yet.")
 		assert [empty_embed] = empty.embeds
-		assert empty_embed.title == "Contract arbitrage"
+		assert empty_embed.title == "Contracts"
 		assert empty_embed.description == "No contract round has completed yet."
 		assert empty.components == []
 

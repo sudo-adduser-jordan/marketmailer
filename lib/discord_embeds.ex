@@ -218,9 +218,9 @@ defmodule Discord.Embeds do
 
 		title =
 			if total_pages > 1 do
-				"Contract arbitrage (#{page}/#{total_pages})"
+				"Contracts (#{page}/#{total_pages})"
 			else
-				"Contract arbitrage"
+				"Contracts"
 			end
 
 		%{
@@ -243,7 +243,7 @@ defmodule Discord.Embeds do
 			embeds: [
 				%Embed{
 					author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
-					title: "Contract arbitrage",
+					title: "Contracts",
 					description: message,
 					color: @color_contract,
 					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
