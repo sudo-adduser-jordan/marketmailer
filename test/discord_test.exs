@@ -86,8 +86,8 @@ defmodule Discord.BroadcasterTest do
 				range: "station",
 				system_id: 30_000_142,
 				type_id: 34,
-				volume_remain: 100,
-				volume_total: 100,
+				volume_remain: 2_000_000,
+				volume_total: 2_000_000,
 				inserted_at: NaiveDateTime.utc_now(:second),
 				updated_at: NaiveDateTime.utc_now(:second)
 			}
@@ -144,7 +144,7 @@ defmodule Discord.BroadcasterTest do
 		assert [embed] = payload.embeds
 		assert embed.title == "Contract arbitrage"
 		assert embed.description =~ "Contract 1001"
-		assert embed.description =~ "200.0m ISK"
+		assert embed.description =~ "200.0m"
 		assert embed.description =~ "1 item(s): Tritanium"
 	end
 
@@ -434,7 +434,7 @@ defmodule Discord.EmbedsTest do
 		assert overridden.thumbnail.url == "attachment://janice-34.png"
 	end
 
-	test "contract lines carry price, value, margin, items and expiry" do
+	test "contract lines carry price, value, margin, items and margin percent" do
 		config = contracts_config()
 
 		[contract] =
@@ -453,7 +453,7 @@ defmodule Discord.EmbedsTest do
 		description = embed.description
 
 		assert description =~ "[**Capital hull lot**](https://evector.space/contracts/1001)"
-		assert description =~ "· [CAPITAL] · +250.0m · 2h · Jita IV · 1001"
+		assert description =~ "· [CAPITAL] · +250.0m · +16.7% · Jita IV · 1001"
 	end
 
 	test "contract list paginates with buttons" do

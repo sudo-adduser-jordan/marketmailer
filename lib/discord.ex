@@ -108,13 +108,33 @@ defmodule Discord.Consumer do
 	def handle_event(
 				{:INTERACTION_CREATE, %Interaction{type: 3, data: %{custom_id: "contract_list:page:" <> _}} = interaction, _}
 			) do
-		page = contract_page_from_custom_id(interaction)
-		payload = Contracts.Broadcast.page_payload(page)
+		# The page query (top_desired + item names) can exceed Discord's 3s
+		# interaction window, so ack immediately and edit async. Without a
+		# running bot there is nothing to edit with, so answer inline.
+		case active_bot_name() do
+			nil ->
+				page = contract_page_from_custom_id(interaction)
+				payload = Contracts.Broadcast.page_payload(page)
 
-		Api.Interaction.create_response(interaction, %{
-			type: InteractionCallbackType.update_message(),
-			data: payload
-		})
+				Api.Interaction.create_response(interaction, %{
+					type: InteractionCallbackType.update_message(),
+					data: payload
+				})
+
+			bot_name ->
+				response = %{type: InteractionCallbackType.deferred_update_message()}
+
+				try do
+					case Api.Interaction.create_response(interaction, response) do
+						:ok -> start_contracts_page_task(bot_name, interaction)
+						{:error, reason} -> log_discord_warning("contracts_page_defer_failed", reason, interaction)
+					end
+				rescue
+					error -> log_discord_warning("contracts_page_defer_failed", Exception.message(error), interaction)
+				catch
+					_, reason -> log_discord_warning("contracts_page_defer_failed", reason, interaction)
+				end
+		end
 	end
 
 	def handle_event({:INTERACTION_CREATE, %Interaction{data: %{name: name}} = interaction, _}) do
@@ -175,7 +195,27 @@ defmodule Discord.Consumer do
 				end
 
 			"list_contracts" ->
-				respond_with_contracts(interaction)
+				case active_bot_name() do
+					nil ->
+						respond_with_contracts(interaction)
+
+					bot_name ->
+						response = %{
+							type: InteractionCallbackType.deferred_channel_message_with_source()
+						}
+
+						try do
+							case Api.Interaction.create_response(interaction, response) do
+								:ok -> start_contracts_task(bot_name, interaction)
+								{:error, reason} -> contracts_defer_fallback(interaction, reason)
+							end
+						rescue
+							error ->
+								contracts_defer_fallback(interaction, Exception.message(error))
+						catch
+							_, reason -> contracts_defer_fallback(interaction, reason)
+						end
+				end
 
 			"database_stats" ->
 				case active_bot_name() do
@@ -517,6 +557,100 @@ defmodule Discord.Consumer do
 	end
 
 	defp contract_page_from_custom_id(_), do: 1
+
+	defp start_contracts_task(bot_name, interaction) do
+		task =
+			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
+				run_contracts_task(bot_name, interaction)
+			end)
+
+		case task do
+			{:ok, _pid} ->
+				:ok
+
+			{:error, reason} ->
+				log_discord_warning("contracts_task_failed", reason, interaction)
+				edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+		end
+	rescue
+		error ->
+			log_discord_warning("contracts_task_failed", Exception.message(error), interaction)
+			edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	catch
+		_, reason ->
+			log_discord_warning("contracts_task_failed", reason, interaction)
+			edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	end
+
+	defp run_contracts_task(bot_name, interaction) do
+		payload =
+			try do
+				Contracts.Broadcast.command_payload()
+			rescue
+				_ -> Embeds.contract_list_error_payload()
+			catch
+				_, _ -> Embeds.contract_list_error_payload()
+			end
+
+		edit_response(bot_name, interaction, payload)
+	rescue
+		_ -> edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	catch
+		_, _ -> edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	end
+
+	defp contracts_defer_fallback(interaction, reason) do
+		log_discord_warning("contracts_defer_failed", reason, interaction)
+
+		try do
+			respond_with_contracts(interaction)
+		rescue
+			error -> log_discord_warning("contracts_defer_fallback_failed", Exception.message(error), interaction)
+		catch
+			_, fallback_reason -> log_discord_warning("contracts_defer_fallback_failed", fallback_reason, interaction)
+		end
+	end
+
+	defp start_contracts_page_task(bot_name, interaction) do
+		task =
+			Task.Supervisor.start_child(Marketmailer.TaskSup, fn ->
+				run_contracts_page_task(bot_name, interaction)
+			end)
+
+		case task do
+			{:ok, _pid} ->
+				:ok
+
+			{:error, reason} ->
+				log_discord_warning("contracts_page_task_failed", reason, interaction)
+				edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+		end
+	rescue
+		error ->
+			log_discord_warning("contracts_page_task_failed", Exception.message(error), interaction)
+			edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	catch
+		_, reason ->
+			log_discord_warning("contracts_page_task_failed", reason, interaction)
+			edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	end
+
+	defp run_contracts_page_task(bot_name, interaction) do
+		payload =
+			try do
+				Contracts.Broadcast.page_payload(contract_page_from_custom_id(interaction))
+			rescue
+				_ -> Embeds.contract_list_error_payload()
+			catch
+				_, _ -> Embeds.contract_list_error_payload()
+			end
+
+		edit_response(bot_name, interaction, payload)
+	rescue
+		_ -> edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	catch
+		_, _ -> edit_response(bot_name, interaction, Embeds.contract_list_error_payload())
+	end
 
 	defp respond_with_contracts(interaction) do
 		payload =

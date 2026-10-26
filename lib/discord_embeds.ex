@@ -161,18 +161,19 @@ defmodule Discord.Embeds do
 
 		total_pages = max(1, ceil_div(length(capped), per_page))
 
-		pages =
+		title =
 			if total_pages > 1 do
-				"(#{page}/#{total_pages})"
+				"Items undercutting the Jita buy wall (#{page}/#{total_pages})"
 			else
-				""
+				"Items undercutting the Jita buy wall"
 			end
 
 		%Embed{
 			author: %Embed.Author{
-				name: "Jita Buy Wall #{pages}",
+				name: "\u200B",
 				icon_url: @icon_broadcast
 			},
+			title: title,
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -217,15 +218,16 @@ defmodule Discord.Embeds do
 
 		title =
 			if total_pages > 1 do
-				"Contracts (#{page}/#{total_pages})"
+				"Contract arbitrage (#{page}/#{total_pages})"
 			else
-				"Contracts"
+				"Contract arbitrage"
 			end
 
 		%{
 			embeds: [
 				%Embed{
-					author: %Embed.Author{name: title, icon_url: @icon_broadcast},
+					author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
+					title: title,
 					description: description,
 					color: @color_contract,
 					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
@@ -272,8 +274,9 @@ defmodule Discord.Embeds do
 		name = contract_name(contract)
 		capital = if contract.has_capital == 1, do: " · [CAPITAL]", else: ""
 		system = contract_system_short(contract)
+		items = contract_item_label(contract)
 
-		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_margin_percent(contract)} · #{system} · #{contract.contract_id}"
+		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_margin_percent(contract)} · #{system} · #{contract.contract_id} · #{items}"
 	end
 
 	defp contract_title_link(contract, name) do
@@ -302,17 +305,29 @@ defmodule Discord.Embeds do
 		end
 	end
 
+	defp contract_item_label(contract) do
+		names = contract |> Map.get(:item_names, []) |> List.wrap() |> Enum.take(3)
+		count = Map.get(contract, :item_count) || length(names)
+
+		if names == [] do
+			"#{count} item(s)"
+		else
+			"#{count} item(s): #{Enum.join(names, ", ")}"
+		end
+	end
+
 	defp contract_margin_percent(contract) do
 		margin = Utils.to_number(Map.get(contract, :margin) || Map.get(contract, "margin"))
 
 		items_value =
 			Utils.to_number(Map.get(contract, :items_value) || Map.get(contract, "items_value"))
 
-		cost = if is_number(margin) and is_number(items_value), do: items_value - margin, else: nil
+		cost = if is_number(margin) and is_number(items_value), do: items_value - margin
 
-		cond do
-			is_nil(margin) or is_nil(cost) or cost <= 0 -> "?"
-			true -> "+#{Float.round(margin / cost * 100, 1)}%"
+		if is_nil(margin) or is_nil(cost) or cost <= 0 do
+			"?"
+		else
+			"+#{Float.round(margin / cost * 100, 1)}%"
 		end
 	end
 
