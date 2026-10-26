@@ -373,21 +373,11 @@ try {
   .pack-isk span { display: block; font-family: var(--mono); font-size: 0.44rem; letter-spacing: 2px; color: var(--muted); }
   .pack-barcode { position: absolute; left: 16px; bottom: 14px; width: 88px; height: 30px; background: repeating-linear-gradient(90deg, rgba(0,229,255,.75) 0 2px, transparent 2px 4px, rgba(0,229,255,.75) 4px 5px, transparent 5px 8px); border: 1px solid var(--line-strong); opacity: .8; }
 
-  .pack-side-word { position: absolute; left: 0; right: 0; top: 12px; z-index: 3; text-align: center; font-family: var(--display); font-size: 0.5rem; letter-spacing: 3px; color: var(--accent); text-transform: uppercase; }
-  .side-label {
-    position: absolute; inset: 40px 8px 10px; display: flex; flex-direction: column;
-    background: rgba(4,10,20,.94); border: 1px solid var(--line-strong); color: var(--muted); padding: 10px 9px 8px; font-family: var(--mono); font-size: 0.34rem; line-height: 1.6; letter-spacing: .5px;
-  }
-  .side-title { font-size: 0.44rem; font-weight: 400; font-family: var(--mono); letter-spacing: 2px; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--line-strong); padding-bottom: 4px; }
-  .side-sub { margin-top: 4px; font-family: var(--mono); font-size: 0.3rem; color: var(--muted); letter-spacing: 1px; }
-  .side-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.32rem; font-family: var(--mono); }
-  .side-table td { padding: 3px 0; border-bottom: 1px dotted rgba(0,229,255,.25); color: var(--muted); }
-  .side-table td:last-child { text-align: right; font-weight: 400; color: var(--accent); }
-  .side-note { margin-top: 5px; font-size: 0.28rem; font-style: normal; font-family: var(--mono); color: var(--muted); opacity: .75; }
-  .side-h { margin: 8px 0 0; font-size: 0.3rem; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; font-family: var(--mono); color: var(--accent); }
-  .side-h::before { content: "// "; opacity: .6; }
-  .side-p { margin: 2px 0 0; font-size: 0.3rem; font-family: var(--mono); color: var(--muted); }
-  .side-foot { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--line-strong); font-family: var(--mono); font-size: 0.28rem; letter-spacing: 1px; color: var(--accent); }
+  .pack-side-fill { position: absolute; inset: 14px 6px; z-index: 3; display: flex; flex-direction: column; justify-content: space-between; align-items: center; text-align: center; }
+  .pack-side-title span { display: block; font-family: var(--display); font-weight: 800; text-transform: uppercase; line-height: 1.2; letter-spacing: 2px; font-size: 0.62rem; color: #fff; }
+  .pack-side-title .cy { color: var(--accent); text-shadow: 0 0 12px rgba(0, 229, 255, 0.6); }
+  .pack-side-meta { font-family: var(--mono); font-size: 0.4rem; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; line-height: 2.1; }
+  .pack-side-ver { font-family: var(--mono); font-size: 0.42rem; letter-spacing: 2px; color: var(--accent); }
   .pack-side-promo, .pack-tab, .pack-seg, .side-fine, .side-nw { display: none; }
 
   .pack-shadow { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); z-index: 2; width: 200px; height: 22px; border-radius: 50%; background: radial-gradient(closest-side, rgba(0,0,0,.5), transparent); }
@@ -481,23 +471,10 @@ try {
               </div>
             </div>
             <div class="pack-face pack-side">
-              <div class="pack-side-word">Marketmailer</div>
-              <div class="side-label">
-                <h4 class="side-title">SPEC // DEPLOYMENT</h4>
-                <p class="side-sub">PC · ESI API · 1 SQLITE FILE</p>
-                <table class="side-table">
-                  <tbody>
-                    <tr><td>Elixir / OTP</td><td>~&gt; 1.19</td></tr>
-                    <tr><td>Database</td><td>SQLite WAL</td></tr>
-                    <tr><td>Regions</td><td>12 tracked</td></tr>
-                    <tr><td>Discord bot</td><td>optional</td></tr>
-                    <tr><td>Docker</td><td>supported</td></tr>
-                  </tbody>
-                </table>
-                <p class="side-note">// not affiliated with CCP Games</p>
-                <p class="side-h">Payload</p>
-                <p class="side-p">Pollers, ETag cache, arbitrage queries, dashboard.</p>
-                <div class="side-foot">MM // JITA IV-4 BUILD</div>
+              <div class="pack-side-fill">
+                <p class="pack-side-title"><span>Market</span><span class="cy">Mailer</span></p>
+                <p class="pack-side-meta">ESI · SQLite<br>Jita IV-4</p>
+                <p class="pack-side-ver">v0.0.1</p>
               </div>
             </div>
             <div class="pack-face pack-left"></div>
