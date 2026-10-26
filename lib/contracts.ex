@@ -256,7 +256,7 @@ defmodule Contracts.Database do
 				Database.update_all(
 					from(c in "contracts", where: c.contract_id == ^contract_id),
 					set: [
-						items_fetched: true,
+						items_fetched: 1,
 						items_attempts: 0,
 						items_next_attempt_at: 0,
 						items_claim_round: 0,
@@ -275,8 +275,6 @@ defmodule Contracts.Database do
 		end)
 	end
 
-	# A rate-limited item is not a failed attempt: push the next attempt out by
-	# Retry-After and leave items_attempts alone so the backoff does not grow.
 	def defer_item(contract_id, delay_ms) do
 		next_attempt = Contracts.now_ms() + max(delay_ms, 0)
 
@@ -302,7 +300,7 @@ defmodule Contracts.Database do
 			from(c in "contracts",
 				where:
 					c.region_id == ^region and c.page == ^page and
-						c.items_fetched == false and c.last_seen_round == ^round and
+						c.items_fetched == 0 and c.last_seen_round == ^round and
 						c.expires_at > ^now and c.items_next_attempt_at <= ^now and
 						c.items_claim_round != ^round,
 				order_by: [asc: c.price, desc: c.contract_id],

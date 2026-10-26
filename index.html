@@ -578,15 +578,13 @@ try {
       <p>From clone to a running arbitrage feed — three commands get you there.</p>
     </div>
     <div class="commands">
-      <div class="cmd"><code>cp .example.env .env</code><p>Optional. Fill in <strong>DISCORD_TOKEN</strong> for the bot and any dashboard credentials.</p></div>
       <div class="cmd"><code>task setup</code><p>Deps, migrations, the matching Playwright Chromium, and <strong>mix sde.import</strong>. The SDE seed creates the region rows the pollers are built from — skip it and no region manager starts.</p></div>
       <div class="cmd"><code>task start</code><p>Build and run the latest tree as a detached prod release daemon. Survives terminal close and is a clean restart every time.</p></div>
-      <div class="cmd"><code>task dev</code><p>Interactive shell with the app started — isolated priv/data/dev.db on :4001, safe alongside the prod daemon.</p></div>
       <div class="cmd"><code>task live:update</code><p>Castle hot upgrade in two phases. Refuses on a dirty tree, writes the version bump + appup edge first, and never leaves the daemon down.</p></div>
       <div class="cmd"><code>task stop</code><p>Kill-all switch: gracefully stops the prod daemon, then sweeps orphaned release processes.</p></div>
-      <div class="cmd"><code>mix ecto.migrate</code><p>Manual migration control — migrations also run automatically on every boot.</p></div>
+      <div class="cmd"><code>task migrate</code><p>Manual migration control — migrations also run automatically on every boot.</p></div>
+      <div class="cmd"><code>task dev</code><p>Interactive shell with the app started — isolated priv/data/dev.db on :4001, safe alongside the prod daemon.</p></div>
     </div>
-    <p class="note">The dashboard lives at <strong>:4000/dashboard</strong> in prod and <strong>localhost:4001/dashboard</strong> under <code>task dev</code>; set <code>DASHBOARD_USER</code> + <code>DASHBOARD_PASSWORD</code> to put it behind basic auth.</p>
     <div class="table-scroll">
     <table>
       <thead><tr><th>Variable</th><th>Purpose</th></tr></thead>
@@ -614,19 +612,19 @@ try {
     </div>
     <div class="also">
       <div class="card">
-        <span class="pill">New</span>
+        <!-- <span class="pill">New</span> -->
         <div class="thumb">▤</div>
-        <h3>SDE snapshot import</h3>
-        <p>Bulk-seed names/systems/stations from the official JSONL SDE in one command.</p>
+        <h3>SDE</h3>
+        <p></p>
       </div>
       <div class="card">
         <div class="thumb">⟳</div>
-        <h3>Zero-downtime hot upgrades</h3>
-        <p>Castle OTP releases patch prod in place — <code>no missed poll cycles</code>.</p>
+        <h3>Hot Upgrades</h3>
+        <p>Castle OTP releases patch production in place.</p>
       </div>
       <div class="card">
         <div class="thumb">⬢</div>
-        <h3>Docker all the things</h3>
+        <h3>Docker</h3>
         <p>One <code>docker build</code>, bind-mounted SQLite, up on any host.</p>
       </div>
     </div>
@@ -641,7 +639,6 @@ try {
       <div><h4>Connect</h4><a href="#">ESI status</a><a href="#">GitHub</a><a href="#">Contact</a></div>
       <div><h4>Legal</h4><a href="#">Terms of use</a><a href="#">Privacy policy</a><a href="#">Cookie notice</a></div>
     </div>
-    <div class="stack">ELIXIR ~&gt; 1.19 · OTP · ECTO + SQLITE · NOSTRUM · REQ</div>
     <p class="fine">Marketmailer v0.0.1 — an EVE Online community utility. Not affiliated with CCP Games.</p>
   </footer>
 </div>
@@ -700,7 +697,7 @@ try {
   }
   setState('', '◈ CHECKING ESI…');
   check();
-  setInterval(check, 60000);
+  setInterval(check, 600000);
 })();
 </script>
 
