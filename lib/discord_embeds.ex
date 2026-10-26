@@ -170,10 +170,10 @@ defmodule Discord.Embeds do
 
 		%Embed{
 			author: %Embed.Author{
-				name: "\u200BJita Buy Wall",
+				name: "Jita Buy Wall #{pages}",
 				icon_url: @icon_broadcast
 			},
-			title: pages,
+			# title: pages,
 			description: description,
 			color: @color_info,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
@@ -201,8 +201,6 @@ defmodule Discord.Embeds do
 
 	def market_list_message(items), do: market_list_payload(items, 1, list_per_page())
 
-	# /list_contracts, the contract round broadcast and the pager buttons all
-	# render this one payload; only the page differs.
 	def contract_list_payload(contracts, page, config) do
 		per_page = config |> Keyword.fetch!(:broadcast_per_page) |> max(1)
 		limit = Keyword.fetch!(config, :broadcast_limit)
@@ -220,16 +218,16 @@ defmodule Discord.Embeds do
 
 		title =
 			if total_pages > 1 do
-				"Contract arbitrage (#{page}/#{total_pages})"
+				"Contracts (#{page}/#{total_pages})"
 			else
-				"Contract arbitrage"
+				"Contracts"
 			end
 
 		%{
 			embeds: [
 				%Embed{
-					author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
-					title: title,
+					author: %Embed.Author{name: title, icon_url: @icon_broadcast},
+					# title: title,
 					description: description,
 					color: @color_contract,
 					timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
@@ -480,8 +478,6 @@ defmodule Discord.Embeds do
 		"**#{name}** • #{margin} • #{system} • #{security}"
 	end
 
-	# A type with no `names` row is an SDE import gap. Show the id so the gap
-	# is traceable instead of rendering a bare "?".
 	defp list_name(item) do
 		name = list_field(item, :item, "item") || list_field(item, :item_name, "item_name")
 
@@ -510,7 +506,6 @@ defmodule Discord.Embeds do
 		end
 	end
 
-	# Lines that do not fit are reported, never dropped silently.
 	defp collect_lines([], acc), do: {acc, 0}
 
 	defp collect_lines([line | rest], acc) do
@@ -639,12 +634,12 @@ defmodule Discord.Embeds do
 				url: @icon_database
 			},
 			fields: [
-				%Embed.Field{name: "##Status", value: status_value(stats)},
-				%Embed.Field{name: "##Storage", value: storage_value(stats)},
-				%Embed.Field{name: "##Coverage", value: coverage_value(stats)},
-				%Embed.Field{name: "##Orders", value: order_cache_value(stats)},
-				%Embed.Field{name: "##Contracts", value: contracts_value(stats)},
-				%Embed.Field{name: "##Jita Buy Wall", value: undercut_value(stats)}
+				%Embed.Field{name: "Status", value: status_value(stats)},
+				%Embed.Field{name: "Storage", value: storage_value(stats)},
+				%Embed.Field{name: "Coverage", value: coverage_value(stats)},
+				%Embed.Field{name: "Orders", value: order_cache_value(stats)},
+				%Embed.Field{name: "Contracts", value: contracts_value(stats)},
+				%Embed.Field{name: "Jita Buy Wall", value: undercut_value(stats)}
 			]
 		}
 		|> with_version()
@@ -690,20 +685,25 @@ defmodule Discord.Embeds do
 
 	defp undercut_value(stats) do
 		"""
-		#{Utils.format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.
-		**Jita buy-wall types**: #{Utils.count(stats[:jita_buy_types])}
+		**Undercut**: #{Utils.format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.
+		**Types**: #{Utils.count(stats[:jita_buy_types])}
 		"""
 		|> String.trim_trailing()
 	end
 
 	defp contracts_value(stats) do
-		"Cached: **#{Utils.count(stats[:contract_count])}** across #{Utils.count(stats[:contract_regions])} regions " <>
-			"• #{Utils.count(stats[:contract_items_count])} item rows\n" <>
-			"Items: resolved #{Utils.count(stats[:contracts_resolved])} • pending #{Utils.count(stats[:contracts_pending])} " <>
-			"• failed #{Utils.count(stats[:contracts_failed])}\n" <>
-			"Workers: #{Utils.count(stats[:contract_page_workers])} • round: #{round_state(stats[:contract_active_round])} " <>
-			"• last complete #{round_label(stats[:contract_top_round])} • desired #{Utils.count(stats[:contract_last_desired])} " <>
-			"• seen #{round_label(stats[:contract_last_seen_round])}"
+		"""
+		**Cached**: #{Utils.count(stats[:contract_count])}
+					**Regions**: #{Utils.count(stats[:contract_regions])}
+		**Rows**: #{Utils.count(stats[:contract_items_count])}
+		**Items**: resolved #{Utils.count(stats[:contracts_resolved])} • pending #{Utils.count(stats[:contracts_pending])} • failed #{Utils.count(stats[:contracts_failed])}
+		**Workers**: #{Utils.count(stats[:contract_page_workers])}
+					**Active Round**: #{round_state(stats[:contract_active_round])}
+		**Top Round**: #{round_label(stats[:contract_top_round])}
+					**Last Desired**: #{Utils.count(stats[:contract_last_desired])}
+		**Last Seen:** #{round_label(stats[:contract_last_seen_round])}
+		"""
+		|> String.trim_trailing()
 	end
 
 	defp coverage_value(stats) do
