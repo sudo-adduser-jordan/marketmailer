@@ -273,7 +273,7 @@ defmodule Discord.Embeds do
 		capital = if contract.has_capital == 1, do: " · [CAPITAL]", else: ""
 		system = contract_system_short(contract)
 
-		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_expiry_short(contract.expires_at)} · #{system} · #{contract.contract_id}"
+		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_margin_percent(contract)} · #{system} · #{contract.contract_id}"
 	end
 
 	defp contract_title_link(contract, name) do
@@ -302,17 +302,17 @@ defmodule Discord.Embeds do
 		end
 	end
 
-	defp contract_expiry_short(nil), do: "?"
+	defp contract_margin_percent(contract) do
+		margin = Utils.to_number(Map.get(contract, :margin) || Map.get(contract, "margin"))
 
-	defp contract_expiry_short(expires_at) when is_integer(expires_at) do
-		remaining = expires_at - Contracts.now_ms()
+		items_value =
+			Utils.to_number(Map.get(contract, :items_value) || Map.get(contract, "items_value"))
+
+		cost = if is_number(margin) and is_number(items_value), do: items_value - margin, else: nil
 
 		cond do
-			remaining <= 0 -> "expired"
-			remaining >= 86_400_000 -> "#{div(remaining, 86_400_000)}d"
-			remaining >= 3_600_000 -> "#{div(remaining, 3_600_000)}h"
-			remaining >= 60_000 -> "#{div(remaining, 60_000)}m"
-			true -> "<1m"
+			is_nil(margin) or is_nil(cost) or cost <= 0 -> "?"
+			true -> "+#{Float.round(margin / cost * 100, 1)}%"
 		end
 	end
 
