@@ -126,6 +126,23 @@ defmodule Marketmailer.Utils do
 
 	def list_truncate(_, _), do: "?"
 
+	# "Vale of the Silent" -> "Vale of the": a region label never needs more than
+	# three words, and clipping by characters can cut a name mid-word.
+	def first_words(nil, _count), do: "?"
+	def first_words("", _count), do: "?"
+
+	def first_words(value, count) when is_binary(value) and is_integer(count) and count > 0 do
+		value
+		|> String.split()
+		|> Enum.take(count)
+		|> case do
+			[] -> "?"
+			words -> Enum.join(words, " ")
+		end
+	end
+
+	def first_words(_, _), do: "?"
+
 	def format_bytes(nil, _page_size), do: "?"
 	def format_bytes(_page_count, nil), do: "?"
 

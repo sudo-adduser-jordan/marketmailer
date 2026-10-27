@@ -260,6 +260,7 @@ defmodule Discord.BroadcasterTest do
 				margin: 100.0,
 				location_name: "Jita IV - Moon 4",
 				system_name: "Rens",
+				region_name: "Heimatar",
 				type_id: 1_001
 			}
 		]
@@ -297,6 +298,27 @@ defmodule Discord.EmbedsTest do
 		assert Discord.Embeds.payload(payload) == payload
 	end
 
+	test "market list lines are item, margin, region" do
+		[line] = String.split(Discord.Embeds.market_list_embed(market_list()).description, "\n")
+
+		assert line ==
+						 "[**Tritanium**](https://evemarketbrowser.com/region/0/type/34) • +100.00 • Heimatar"
+
+		refute line =~ "0.9"
+	end
+
+	test "market list region labels keep their first three words" do
+		items = [%{item: "Zarmazd", margin: 38_700_000.0, region_name: "Vale of the Silent"}]
+
+		assert Discord.Embeds.market_list_embed(items).description == "**Zarmazd** • +38.7m • Vale of the"
+	end
+
+	test "market list region falls back to ? without an SDE system" do
+		items = [%{item: "Zarmazd", margin: 1.0}]
+
+		assert Discord.Embeds.market_list_embed(items).description == "**Zarmazd** • +1.00 • ?"
+	end
+
 	defp market_list do
 		[
 			%{
@@ -306,6 +328,7 @@ defmodule Discord.EmbedsTest do
 				margin: 100.0,
 				location_name: "Jita IV - Moon 4",
 				system_name: "Rens",
+				region_name: "Heimatar",
 				security_status: 0.9,
 				type_id: 34
 			}

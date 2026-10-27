@@ -454,15 +454,12 @@ defmodule Discord.Embeds do
 
 	defp list_field(_item, _atom_key, _string_key), do: nil
 
-	@list_system_width 10
-
 	defp list_line(item) do
 		name = list_name(item)
 		margin = Utils.format_list_margin(list_field(item, :margin, "margin"))
-		system = Utils.list_truncate(list_field(item, :system_name, "system_name"), @list_system_width)
-		security = Utils.format_security(list_field(item, :security_status, "security_status")) |> to_string()
+		region = Utils.first_words(list_field(item, :region_name, "region_name"), 3)
 
-		"#{list_name_label(item, name)} • #{margin} • #{system} • #{security}"
+		"#{list_name_label(item, name)} • #{margin} • #{region}"
 	end
 
 	defp list_name_label(item, name) do
