@@ -704,25 +704,25 @@ defmodule Discord.Embeds do
 
 	defp stats_description(stats) do
 		[
-			"### Status",
+			"## Status",
 			status_value(stats),
 			"",
-			"### Storage",
+			"## Storage",
 			storage_value(stats),
 			"",
-			"### Coverage",
+			"## Coverage",
 			coverage_value(stats),
 			"",
-			"### Orders",
+			"## Orders",
 			order_cache_value(stats),
 			"",
-			"### Contracts",
+			"## Contracts",
 			contracts_value(stats),
 			"",
-			"### Jita Buy Wall",
+			"## Jita Buy Wall",
 			undercut_value(stats),
 			"",
-			"### Commands",
+			"## Commands",
 			commands_value()
 		]
 		|> Enum.join("\n")
