@@ -530,12 +530,13 @@ defmodule Discord.Embeds do
 	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
 		janice_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
 		eve_ref_url = "https://everef.net/types/#{item.type_id}"
-		eve_tycoon_url = "https://evetycoon.com/market/#{item.type_id}"
+		eve_market_browser_url = "https://evemarketbrowser.com/region/0/type/#{item.type_id}"
 		type_icon = "https://images.evetech.net/types/#{item.type_id}/icon?size=64"
 
 		%Embed{
 			author: %Embed.Author{name: item.item_name || "Market order", icon_url: @icon_broadcast},
-			description: "[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Tycoon](#{eve_tycoon_url})",
+			description:
+				"[Janice](#{janice_url})\n[Eve Ref](#{eve_ref_url})\n[Eve Market Browser](#{eve_market_browser_url})",
 			color: embed_color(per_unit_margin(item)),
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{

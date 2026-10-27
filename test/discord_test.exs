@@ -288,6 +288,13 @@ defmodule Discord.EmbedsTest do
 		assert {:ok, {832, 432}} = Janice.Padding.dimensions(Janice.Padding.pad(chart_png()))
 	end
 
+	test "market embed links to eve market browser" do
+		description = Discord.Embeds.market_embed(market_item()).description
+
+		assert description =~ "[Eve Market Browser](https://evemarketbrowser.com/region/0/type/34)"
+		refute description =~ "evetycoon"
+	end
+
 	test "messages do not get stuck thinking" do
 		embed = Discord.Embeds.market_list_embed(market_list())
 
