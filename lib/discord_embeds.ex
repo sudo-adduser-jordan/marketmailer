@@ -707,28 +707,23 @@ defmodule Discord.Embeds do
 
 	defp stats_description(stats) do
 		[
-			"## Status",
-			status_value(stats),
-			"",
-			"## Storage",
-			storage_value(stats),
-			"",
-			"## Coverage",
-			coverage_value(stats),
-			"",
-			"## Orders",
-			order_cache_value(stats),
-			"",
-			"## Contracts",
-			contracts_value(stats),
-			"",
-			"## Jita Buy Wall",
-			undercut_value(stats),
-			"",
-			"## Commands",
-			commands_value()
+			section("Status", status_value(stats)),
+			section("Storage", storage_value(stats)),
+			section("Coverage", coverage_value(stats)),
+			section("Orders", order_cache_value(stats)),
+			section("Contracts", contracts_value(stats)),
+			section("Jita Buy Wall", undercut_value(stats)),
+			"## Commands\n" <> commands_value()
 		]
-		|> Enum.join("\n")
+		|> Enum.join("\n\n")
+	end
+
+	defp section(title, value), do: "## " <> title <> "\n" <> blockquote(value)
+
+	defp blockquote(value) do
+		value
+		|> String.split("\n")
+		|> Enum.map_join("\n", &("> " <> &1))
 	end
 
 	defp contracts_value(stats) do
