@@ -263,7 +263,7 @@ defmodule Discord.Embeds do
 		capital = if contract.has_capital == 1, do: " · [CAPITAL]", else: ""
 		system = contract_system_short(contract)
 
-		"#{contract_title_link(contract, name)}#{capital} · +#{format_isk_short(contract.margin)} · #{contract_margin_percent(contract)} · #{system} · #{contract.contract_id}"
+		"#{contract_title_link(contract, name)}#{capital} +#{format_isk_short(contract.margin)} · #{contract_margin_percent(contract)} · #{system} · #{contract.contract_id}"
 	end
 
 	defp contract_title_link(contract, name) do
@@ -459,7 +459,7 @@ defmodule Discord.Embeds do
 		margin = Utils.format_list_margin(list_field(item, :margin, "margin"))
 		region = Utils.first_words(list_field(item, :region_name, "region_name"), 3)
 
-		"#{list_name_label(item, name)} • #{margin} • #{region}"
+		"#{list_name_label(item, name)} #{margin} • #{region}"
 	end
 
 	defp list_name_label(item, name) do
@@ -527,6 +527,16 @@ defmodule Discord.Embeds do
 		end
 	end
 
+	defp margin_field_value(item) do
+		margin = per_unit_margin(item)
+
+		if is_nil(margin) do
+			Utils.margin_value(nil)
+		else
+			"#{Utils.margin_value(margin)} (#{Utils.margin_percent(margin, Utils.to_number(item.price))})"
+		end
+	end
+
 	def market_embed(item, thumbnail_url \\ nil, image_url \\ nil) do
 		janice_url = "https://janice.e-351.com/i/#{item.type_id}/market/2"
 		eve_ref_url = "https://everef.net/types/#{item.type_id}"
@@ -563,7 +573,7 @@ defmodule Discord.Embeds do
 				},
 				%Embed.Field{
 					name: "Margin",
-					value: Utils.margin_value(per_unit_margin(item)),
+					value: margin_field_value(item),
 					inline: false
 				}
 			]

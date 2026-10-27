@@ -51,11 +51,25 @@ defmodule Marketmailer.Utils do
 
 	def share(_part, _total), do: "?"
 
-	def millions_compact(abs_value),
-		do: :erlang.float_to_binary(Float.round(abs_value / 1_000_000, 2), decimals: 2) <> "m"
-
 	def format_isk(number) when is_number(number),
 		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
+
+	# One scale for every ISK amount a human reads: millions and billions keep two
+	# decimals (4.99m), thousands one (215.0k), and anything smaller stays exact.
+	def isk_compact(number) when is_number(number) do
+		value = number * 1.0
+		absolute = abs(value)
+
+		cond do
+			absolute >= 1_000_000_000 -> compact(value / 1_000_000_000, "b", 2)
+			absolute >= 1_000_000 -> compact(value / 1_000_000, "m", 2)
+			absolute >= 1_000 -> compact(value / 1_000, "k", 1)
+			true -> format_isk(value)
+		end
+	end
+
+	defp compact(value, suffix, precision),
+		do: :erlang.float_to_binary(Float.round(value, precision), decimals: precision) <> suffix
 
 	def format_list_margin(margin) do
 		case to_number(margin) do
@@ -87,10 +101,8 @@ defmodule Marketmailer.Utils do
 				"? ISK"
 
 			number ->
-				abs_value = abs(number)
-				formatted = if abs_value >= 1_000_000, do: millions_compact(abs_value), else: format_isk(abs_value)
 				prefix = if number < 0, do: "-", else: ""
-				"#{prefix}#{formatted} ISK"
+				"#{prefix}#{isk_compact(abs(number))} ISK"
 		end
 	end
 
@@ -98,14 +110,26 @@ defmodule Marketmailer.Utils do
 
 	def margin_value(profit) when is_number(profit) do
 		sign = if profit >= 0, do: "+", else: "-"
-		abs_value = abs(profit * 1.0)
-
-		if abs_value >= 1_000_000 do
-			"#{sign}#{millions_compact(abs_value)} ISK"
-		else
-			"#{sign}#{format_isk(abs_value)} ISK"
-		end
+		"#{sign}#{isk_compact(abs(profit * 1.0))} ISK"
 	end
+
+	def margin_value(_), do: "? ISK"
+
+	# Return on the ISK spent at the sell price, the same basis as
+	# `Discord.Embeds.contract_margin_percent/1`.
+	def margin_percent(nil, _cost), do: "?"
+	def margin_percent(_margin, nil), do: "?"
+
+	def margin_percent(margin, cost) when is_number(margin) and is_number(cost) and cost > 0 do
+		sign = if margin < 0, do: "-", else: "+"
+		percent = abs(margin) / cost * 100
+		# float interpolation switches to scientific notation past 1000 ("1.0e3%"),
+		# so the text is built explicitly.
+		value = :erlang.float_to_binary(Float.round(percent, 1), decimals: 1)
+		"#{sign}#{value}%"
+	end
+
+	def margin_percent(_margin, _cost), do: "?"
 
 	def or_unknown(nil), do: "?"
 	def or_unknown(""), do: "?"

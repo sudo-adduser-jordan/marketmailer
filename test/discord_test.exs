@@ -295,6 +295,22 @@ defmodule Discord.EmbedsTest do
 		refute description =~ "evetycoon"
 	end
 
+	test "market embed margin is compact isk plus a percentage" do
+		item = %{market_item() | price: 4_990_000.0, buy_price: 4_775_000.0}
+		fields = Discord.Embeds.market_embed(item).fields
+
+		assert Enum.find(fields, &(&1.name == "Sell")).value == "4.99m ISK"
+		assert Enum.find(fields, &(&1.name == "Buy")).value == "4.78m ISK"
+		assert Enum.find(fields, &(&1.name == "Margin")).value == "-215.0k ISK (-4.3%)"
+	end
+
+	test "market embed margin falls back to a placeholder without prices" do
+		item = %{market_item() | price: nil, buy_price: nil}
+		fields = Discord.Embeds.market_embed(item).fields
+
+		assert Enum.find(fields, &(&1.name == "Margin")).value == "? ISK"
+	end
+
 	test "messages do not get stuck thinking" do
 		embed = Discord.Embeds.market_list_embed(market_list())
 
@@ -309,7 +325,7 @@ defmodule Discord.EmbedsTest do
 		[line] = String.split(Discord.Embeds.market_list_embed(market_list()).description, "\n")
 
 		assert line ==
-						 "[**Tritanium**](https://evemarketbrowser.com/region/0/type/34) • +100.00 • Heimatar"
+						 "[**Tritanium**](https://evemarketbrowser.com/region/0/type/34) +100.00 • Heimatar"
 
 		refute line =~ "0.9"
 	end
@@ -317,13 +333,13 @@ defmodule Discord.EmbedsTest do
 	test "market list region labels keep their first three words" do
 		items = [%{item: "Zarmazd", margin: 38_700_000.0, region_name: "Vale of the Silent"}]
 
-		assert Discord.Embeds.market_list_embed(items).description == "**Zarmazd** • +38.7m • Vale of the"
+		assert Discord.Embeds.market_list_embed(items).description == "**Zarmazd** +38.7m • Vale of the"
 	end
 
 	test "market list region falls back to ? without an SDE system" do
 		items = [%{item: "Zarmazd", margin: 1.0}]
 
-		assert Discord.Embeds.market_list_embed(items).description == "**Zarmazd** • +1.00 • ?"
+		assert Discord.Embeds.market_list_embed(items).description == "**Zarmazd** +1.00 • ?"
 	end
 
 	defp market_list do
