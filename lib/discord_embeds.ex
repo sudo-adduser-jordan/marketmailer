@@ -672,7 +672,7 @@ defmodule Discord.Embeds do
 
 	defp undercut_value(stats) do
 		"""
-		**Undercut**: #{Utils.format_count(stats[:undercut_rows])} orders undercut the Jita buy wall — `/list_market` shows the top 100.
+		**Undercut**: #{Utils.format_count(stats[:undercut_rows])} orders
 		**Types**: #{Utils.count(stats[:jita_buy_types])}
 		"""
 		|> String.trim_trailing()
@@ -688,7 +688,7 @@ defmodule Discord.Embeds do
 			"/remove_channel",
 			"/list_channel"
 		]
-		|> Enum.map_join("\n\n", &"```\n#{&1}\n```")
+		|> Enum.map_join("\n", &"```#{&1}```")
 	end
 
 	defp stats_description(stats) do
