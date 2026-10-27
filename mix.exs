@@ -4,7 +4,7 @@ defmodule Marketmailer.MixProject do
 	def project do
 		[
 			app: :marketmailer,
-			version: "0.1.28",
+			version: "0.0.1",
 			elixir: "~> 1.19",
 			appup: "appup.exs",
 			compilers: Mix.compilers() ++ [:appup],
