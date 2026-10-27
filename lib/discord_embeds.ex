@@ -169,7 +169,7 @@ defmodule Discord.Embeds do
 				icon_url: @icon_broadcast
 			},
 			description: description,
-			color: @color_info,
+			color: @color_success,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_
@@ -621,7 +621,7 @@ defmodule Discord.Embeds do
 				name: "\u200BDatabase Statistics",
 				icon_url: @icon_broadcast
 			},
-			color: @color_success,
+			color: @color_warning,
 			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
 			thumbnail: %Embed.Thumbnail{
 				url: @icon_database
