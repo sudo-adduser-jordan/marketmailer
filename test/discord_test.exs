@@ -276,7 +276,7 @@ defmodule Discord.EmbedsTest do
 		item = market_item()
 
 		placeholder = Discord.Embeds.market_embed(item)
-		assert placeholder.image.url =~ "assets/background.png"
+		assert placeholder.image.url =~ "assets/expansion/background.png"
 
 		error_graph = Discord.Embeds.market_embed(item, nil, "attachment://janice-failed.png")
 		assert error_graph.image.url == "attachment://janice-failed.png"
@@ -284,7 +284,7 @@ defmodule Discord.EmbedsTest do
 		graph = Discord.Embeds.market_embed(item, nil, "attachment://janice-34.png")
 		assert graph.image.url == "attachment://janice-34.png"
 
-		assert {:ok, {width, height}} = Janice.Padding.dimensions(File.read!("assets/background.png"))
+		assert {:ok, {width, height}} = Janice.Padding.dimensions(File.read!("assets/expansion/background.png"))
 		assert {width, height} == Janice.Capture.image_size()
 		assert {:ok, {^width, ^height}} = Janice.Padding.dimensions(Janice.Capture.fallback_image())
 

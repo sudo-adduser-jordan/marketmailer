@@ -129,7 +129,7 @@ defmodule Janice.CaptureTest do
 						 chart |> Janice.Padding.fit() |> Janice.Padding.pad() |> Janice.Padding.dimensions()
 
 		assert {:ok, {^width, ^height}} =
-						 File.read!("assets/background.png") |> Janice.Padding.dimensions()
+						 File.read!("assets/expansion/background.png") |> Janice.Padding.dimensions()
 	end
 
 	test "missing playwright fallback" do
