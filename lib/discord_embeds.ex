@@ -699,7 +699,7 @@ defmodule Discord.Embeds do
 			"/remove_channel",
 			"/list_channel"
 		]
-		|> Enum.map_join("\n", &"```#{&1}```")
+		|> Enum.map_join("", &"```#{&1}```")
 	end
 
 	defp stats_description(stats) do
