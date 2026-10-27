@@ -61,8 +61,8 @@ defmodule Janice.CaptureTest do
 
 		assert_receive {:captured, 1_001}
 		assert is_binary(captured)
-		assert {:ok, {width, height}} = Janice.Padding.dimensions(captured)
-		assert {width, height} == {4 + 2 * 16, 3 + 2 * 16}
+		assert {:ok, standard} = Janice.Padding.dimensions(captured)
+		assert standard == Janice.Capture.image_size()
 	end
 
 	test "item graph is padded" do
@@ -81,7 +81,27 @@ defmodule Janice.CaptureTest do
 							 padding: 4
 						 )
 
-		assert {:ok, {18, 14}} = Janice.Padding.dimensions(small)
+		{width, height} = Janice.Padding.chart_size()
+		assert {:ok, {padded_width, padded_height}} = Janice.Padding.dimensions(small)
+		assert padded_width == width + 8
+		assert padded_height == height + 8
+	end
+
+	test "charts are normalised to the canonical size" do
+		{width, height} = Janice.Padding.chart_size()
+
+		for fixture <- [
+					png_fixture(4, 3),
+					png_fixture(width, height),
+					png_fixture(width + 90, height),
+					png_fixture(width, height + 40)
+				] do
+			assert {:ok, {^width, ^height}} = Janice.Padding.dimensions(Janice.Padding.fit(fixture))
+		end
+
+		exact = png_fixture(width, height)
+		assert Janice.Padding.fit(exact) == exact
+		assert Janice.Padding.fit("not a png") == "not a png"
 	end
 
 	test "caches exists" do
@@ -100,11 +120,16 @@ defmodule Janice.CaptureTest do
 	end
 
 	test "image size matches error and placeholder images" do
-		{:ok, {width, height}} = Janice.Padding.dimensions(Janice.Capture.fallback_image())
-		assert {width, height} == {832, 432}
+		assert {:ok, {width, height}} = Janice.Padding.dimensions(Janice.Capture.fallback_image())
+		assert {width, height} == Janice.Capture.image_size()
 
 		chart = png_fixture(800, 400)
-		assert {:ok, {^width, ^height}} = Janice.Padding.dimensions(Janice.Padding.pad(chart))
+
+		assert {:ok, {^width, ^height}} =
+						 chart |> Janice.Padding.fit() |> Janice.Padding.pad() |> Janice.Padding.dimensions()
+
+		assert {:ok, {^width, ^height}} =
+						 File.read!("assets/background.png") |> Janice.Padding.dimensions()
 	end
 
 	test "missing playwright fallback" do
@@ -119,8 +144,8 @@ defmodule Janice.CaptureTest do
 						 Janice.Playwright.classify_launch_error(%{error: %{message: "boom\ntrace"}})
 
 		assert Janice.Capture.fallback_filename() == "janice-failed.png"
-		assert {:ok, {800, 400}} = Janice.Padding.dimensions(File.read!("assets/janice-failed.png"))
-		assert {:ok, {832, 432}} = Janice.Padding.dimensions(Janice.Capture.fallback_image())
+		assert {:ok, {894, 400}} = Janice.Padding.dimensions(File.read!("assets/janice-failed.png"))
+		assert {:ok, {926, 432}} = Janice.Padding.dimensions(Janice.Capture.fallback_image())
 	end
 
 	defp ensure_cache_table do

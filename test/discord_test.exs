@@ -284,8 +284,12 @@ defmodule Discord.EmbedsTest do
 		graph = Discord.Embeds.market_embed(item, nil, "attachment://janice-34.png")
 		assert graph.image.url == "attachment://janice-34.png"
 
-		assert {:ok, {832, 432}} = Janice.Padding.dimensions(Janice.Capture.fallback_image())
-		assert {:ok, {832, 432}} = Janice.Padding.dimensions(Janice.Padding.pad(chart_png()))
+		assert {:ok, {width, height}} = Janice.Padding.dimensions(File.read!("assets/background.png"))
+		assert {width, height} == Janice.Capture.image_size()
+		assert {:ok, {^width, ^height}} = Janice.Padding.dimensions(Janice.Capture.fallback_image())
+
+		assert {:ok, {^width, ^height}} =
+						 chart_png() |> Janice.Padding.fit() |> Janice.Padding.pad() |> Janice.Padding.dimensions()
 	end
 
 	test "market embed links to eve market browser" do

@@ -2,7 +2,20 @@ defmodule Janice.Padding do
 	@signature <<137, 80, 78, 71, 13, 10, 26, 10>>
 	@default_pad 16
 
+	# Janice renders its market chart canvas at 894x400 CSS pixels at the harness
+	# viewport. Every chart, the error graph and the placeholder are normalised to
+	# this size before the border is added, so the embed image never changes size
+	# when it is replaced from the placeholder to the chart.
+	@chart_size {894, 400}
+
 	def default_pad, do: @default_pad
+
+	def chart_size, do: @chart_size
+
+	def image_size do
+		{width, height} = @chart_size
+		{width + 2 * @default_pad, height + 2 * @default_pad}
+	end
 
 	def pad(png, pad \\ @default_pad)
 
@@ -17,6 +30,24 @@ defmodule Janice.Padding do
 
 	def pad(png, _pad) when is_binary(png), do: png
 	def pad(other, _pad), do: other
+
+	def fit(png, size \\ @chart_size)
+
+	def fit(png, {width, height} = size)
+			when is_binary(png) and is_integer(width) and width > 0 and is_integer(height) and height > 0 do
+		case parse(png) do
+			{:ok, parts} ->
+				case parts do
+					{_header, _others, _idat, ^width, ^height, _color, _bpp} -> png
+					_ -> resize(png, parts, size)
+				end
+
+			_ ->
+				png
+		end
+	end
+
+	def fit(png, _size), do: png
 
 	def dimensions(<<@signature, rest::binary>>) do
 		with {:ok, header, _others, _idat} <- parse_chunks(rest, nil, [], []),
@@ -78,6 +109,25 @@ defmodule Janice.Padding do
 				 chunk("IEND", "")}
 		else
 			_ -> :error
+		end
+	end
+
+	defp resize(png, {header, others, idat, w, h, color, bpp}, {width, height}) do
+		<<_old_w::32-big, _old_h::32-big, depth, _color, comp, filter, interlace>> = header
+
+		with {:ok, rows} <- inflate_rows(idat, w, h, bpp),
+				 {:ok, compressed} <-
+					 rows
+					 |> fit_rows(w, width, height, color, bpp)
+					 |> Enum.map(fn row -> [0, row] end)
+					 |> deflate() do
+			@signature <>
+				chunk("IHDR", <<width::32-big, height::32-big, depth, color, comp, filter, interlace>>) <>
+				Enum.map_join(others, fn {type, data} -> chunk(type, data) end) <>
+				chunk("IDAT", compressed) <>
+				chunk("IEND", "")
+		else
+			_ -> png
 		end
 	end
 
@@ -173,14 +223,55 @@ defmodule Janice.Padding do
 		end
 	end
 
-	defp border_rows(rows, w, color, pad) do
-		white_px =
-			case color do
-				0 -> <<255>>
-				2 -> <<255, 255, 255>>
-				_ -> <<255, 255, 255, 255>>
-			end
+	defp white_pixel(0), do: <<255>>
+	defp white_pixel(2), do: <<255, 255, 255>>
+	defp white_pixel(_), do: <<255, 255, 255, 255>>
 
+	defp fit_rows(rows, w, width, height, color, bpp) do
+		white_px = white_pixel(color)
+		blank_row = :binary.copy(white_px, width)
+
+		rows
+		|> Enum.map(&fit_row(&1, w, width, bpp, white_px))
+		|> center_slice(height, blank_row)
+	end
+
+	defp fit_row(row, w, width, _bpp, _white_px) when w == width, do: row
+
+	defp fit_row(row, w, width, bpp, _white_px) when w > width do
+		offset = div(w - width, 2) * bpp
+		binary_part(row, offset, width * bpp)
+	end
+
+	defp fit_row(row, w, width, _bpp, white_px) do
+		missing = width - w
+		front = div(missing, 2)
+		back = missing - front
+
+		:binary.copy(white_px, front) <> row <> :binary.copy(white_px, back)
+	end
+
+	defp center_slice(items, count, filler) do
+		actual = Kernel.length(items)
+
+		cond do
+			actual == count ->
+				items
+
+			actual > count ->
+				drop = div(actual - count, 2)
+				items |> Enum.drop(drop) |> Enum.take(count)
+
+			true ->
+				missing = count - actual
+				front = div(missing, 2)
+				back = missing - front
+				List.duplicate(filler, front) ++ items ++ List.duplicate(filler, back)
+		end
+	end
+
+	defp border_rows(rows, w, color, pad) do
+		white_px = white_pixel(color)
 		side = :binary.copy(white_px, pad)
 		edge = [0, :binary.copy(white_px, w + pad * 2)]
 		middle = Enum.map(rows, fn row -> [0, side, row, side] end)
@@ -199,8 +290,10 @@ defmodule Janice.Capture do
 
 	def fallback_image do
 		png = [__DIR__, "..", "assets", fallback_filename()] |> Path.join() |> Path.expand() |> File.read!()
-		Janice.Padding.pad(png)
+		png |> Janice.Padding.fit() |> Janice.Padding.pad()
 	end
+
+	def image_size, do: Janice.Padding.image_size()
 
 	def capture(type_id, opts \\ []) when is_integer(type_id) do
 		adapter =
@@ -214,7 +307,7 @@ defmodule Janice.Capture do
 		inner_opts = opts |> Keyword.drop([:adapter, :padding])
 
 		case adapter.capture(type_id, inner_opts) do
-			{:ok, png} -> {:ok, Janice.Padding.pad(png, padding)}
+			{:ok, png} -> {:ok, png |> Janice.Padding.fit() |> Janice.Padding.pad(padding)}
 			other -> other
 		end
 	end
