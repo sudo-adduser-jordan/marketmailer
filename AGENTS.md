@@ -298,10 +298,15 @@ column 0), then pipe to jq:
   Market fetches disable Req retries and cap `pool_timeout`, and a raised request
   (a saturated Finch pool) is rescued into an error instead of killing the page
   worker. `lib/esi/maintenance.ex` - `ESI.Maintenance`: the ESI availability
-  window. Edge-based, not TTL-based: the first 5xx/unanswered request opens it,
-  the first 200/304 closes it, and only the edges are announced
+  window. Edge-based, not TTL-based: the first 5xx opens it in ETS (the pause
+  gate is immediate), announcements are debounced (yellow after
+  `announce_grace_ms` still open, green after `close_grace_ms` still closed,
+  both 5 s defaults; anything faster clears silently), and only the edges are
+  announced
   (`esi_maintenance_down`/`esi_maintenance_up`, plus `esi_maintenance_stale` every
-  10 min once a window outlives 30 min). `:maintenance_mode` in
+  10 min once a window outlives 30 min). Requests that never got an HTTP answer
+  (saturated Finch pool, raised adapter) never open a window — they are
+  client-side saturation, not an ESI outage. `:maintenance_mode` in
   `:esi_error_state` is the cheap pause gate every page worker reads.
   `window_open?/0` is the announced edge (what the broadcaster renders), `down?/0`
   the pause gate. The error-limit gate trips below `@error_limit_threshold` (20 of 100), uses

@@ -115,13 +115,21 @@ defmodule ESI do
 				respond(response, url)
 
 			{:error, error} ->
-				# A transport failure is the network watchdog's call; anything else
-				# (a 5xx-free failure such as a Finch pool that could not hand out a
-				# connection) means ESI is not answering, so the fleet pauses.
-				if network_error?(error) do
-					Marketmailer.Maintenance.report_disconnect(error)
-				else
-					ESI.Maintenance.down(error)
+				# A request that never got an HTTP answer (a saturated Finch pool,
+				# a raised adapter) is client-side saturation, not an ESI outage:
+				# other workers getting 200s in the same second prove ESI is
+				# answering. It used to open a maintenance window here, which
+				# flapped the Discord embeds with ~0s down/up pairs; it now only
+				# backs off via the worker's own retry delay.
+				cond do
+					network_error?(error) ->
+						Marketmailer.Maintenance.report_disconnect(error)
+
+					unanswered?(error) ->
+						:ok
+
+					true ->
+						ESI.Maintenance.down(error)
 				end
 
 				Marketmailer.Log.error(
@@ -145,6 +153,11 @@ defmodule ESI do
 		:exit, reason when reason in [:shutdown, :normal] -> exit(reason)
 		kind, reason -> {:error, %{reason: :request_failed, detail: inspect({kind, reason})}}
 	end
+
+	# A request that never got an HTTP answer never reached ESI, so it says
+	# nothing about ESI availability and must not open a maintenance window.
+	defp unanswered?(%{reason: :request_failed}), do: true
+	defp unanswered?(_reason), do: false
 
 	def network_error?(%{reason: reason}) when reason in @network_reasons, do: true
 

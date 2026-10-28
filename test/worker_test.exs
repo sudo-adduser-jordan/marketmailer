@@ -154,7 +154,9 @@ defmodule Marketmailer.PageWorkerGateTest do
 			end)
 
 		assert Process.alive?(worker)
-		assert ESI.Maintenance.down?()
+		# Pool saturation backs this worker off on its own; it no longer parks
+		# the whole fleet behind a maintenance gate.
+		refute ESI.Maintenance.down?()
 		assert log =~ "page_fetch_error"
 
 		assert_receive {:region_refresh_failed, summary}, 1_000

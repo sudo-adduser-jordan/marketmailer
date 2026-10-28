@@ -239,8 +239,24 @@ defmodule ESI.ClientTest do
 			end)
 
 		assert log =~ "esi_http_error"
-		assert ESI.maintenance_active?()
+		# A request that never got an HTTP answer is client-side pool
+		# saturation, not an ESI outage: it must not open a window.
+		refute ESI.maintenance_active?()
 		refute Marketmailer.Maintenance.down?()
+	end
+
+	test "an unanswered request never opens a maintenance window" do
+		url = "https://esi.evetech.net/v1/markets/990012/orders/?page=1"
+
+		http = fn _url, _opts ->
+			{:error, %{reason: :request_failed, detail: "pool timeout"}}
+		end
+
+		assert {:error, %{reason: :request_failed}} =
+						 ESI.get(url, http_fun: http, conditional: false)
+
+		refute ESI.maintenance_active?()
+		refute ESI.Maintenance.window_open?()
 	end
 
 	test "a success closes the maintenance window" do

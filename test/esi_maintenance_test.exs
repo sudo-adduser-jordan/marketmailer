@@ -8,6 +8,12 @@ defmodule ESI.MaintenanceTest do
 		MarketmailerTest.Fixtures.reset_esi_maintenance()
 		ESI.Maintenance.subscribe(self())
 
+		# The legacy edge tests below assert immediate announcements.
+		Application.put_env(:marketmailer, :esi_maintenance,
+			announce_grace_ms: 0,
+			close_grace_ms: 0
+		)
+
 		on_exit(fn ->
 			MarketmailerTest.Fixtures.reset_esi_maintenance()
 			Application.delete_env(:marketmailer, :esi_maintenance)
@@ -64,6 +70,52 @@ defmodule ESI.MaintenanceTest do
 
 		again = capture_log(fn -> tick(pid) end)
 		refute again =~ "esi_maintenance_stale"
+	end
+
+	test "a window that closes inside the announce grace is never announced" do
+		Application.put_env(:marketmailer, :esi_maintenance,
+			announce_grace_ms: 100,
+			close_grace_ms: 0
+		)
+
+		ESI.Maintenance.down(:timeout)
+		assert ESI.Maintenance.down?()
+		Process.sleep(20)
+		ESI.Maintenance.up()
+
+		refute_receive {:esi_maintenance, :down, _event}, 300
+		refute_receive {:esi_maintenance, :up, _event}, 100
+		refute ESI.Maintenance.down?()
+	end
+
+	test "a window that outlives the announce grace is announced" do
+		Application.put_env(:marketmailer, :esi_maintenance,
+			announce_grace_ms: 50,
+			close_grace_ms: 0
+		)
+
+		ESI.Maintenance.down(%{status: 503, url: "https://esi.evetech.net/v1/markets/1/orders/"})
+
+		assert_receive {:esi_maintenance, :down, %{reason: "HTTP 503"}}, 1_000
+	end
+
+	test "a failure inside the close grace cancels the pending close" do
+		Application.put_env(:marketmailer, :esi_maintenance,
+			announce_grace_ms: 0,
+			close_grace_ms: 100
+		)
+
+		ESI.Maintenance.down(:timeout)
+		assert_receive {:esi_maintenance, :down, _event}, 1_000
+
+		ESI.Maintenance.up()
+		ESI.Maintenance.down(:timeout)
+
+		refute_receive {:esi_maintenance, :up, _event}, 300
+		refute_receive {:esi_maintenance, :down, _event}, 100
+
+		ESI.Maintenance.up()
+		assert_receive {:esi_maintenance, :up, %{downtime_ms: _}}, 1_000
 	end
 
 	defp tick(pid) do

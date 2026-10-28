@@ -18,7 +18,16 @@ defmodule Discord.BroadcasterTest do
 
 		MarketmailerTest.Fixtures.park_page_workers()
 
-		on_exit(fn -> MarketmailerTest.Fixtures.reset_esi_maintenance() end)
+		# The cycle managers started below spawn a real page-1 worker each;
+		# with zero start jitter in test it would fetch live ESI and close the
+		# single-region round with a stray digest mid-test. A downed watchdog
+		# parks workers on their recheck loop so only synthetic reports land.
+		MarketmailerTest.Fixtures.network_down()
+
+		on_exit(fn ->
+			MarketmailerTest.Fixtures.reset_esi_maintenance()
+			MarketmailerTest.Fixtures.reset_network()
+		end)
 
 		unique = System.unique_integer([:positive])
 		task_supervisor = :"broadcaster_tasks_#{unique}"
@@ -180,19 +189,28 @@ defmodule Discord.BroadcasterTest do
 	test "announces the ESI maintenance window with a down and an up embed", %{
 		task_supervisor: task_supervisor
 	} do
+		Application.put_env(:marketmailer, :esi_maintenance,
+			announce_grace_ms: 0,
+			close_grace_ms: 0
+		)
+
+		on_exit(fn -> Application.delete_env(:marketmailer, :esi_maintenance) end)
+
 		test_pid = self()
 		region = 97_000_050
 
-		start_broadcaster(
-			[region],
-			[300],
-			market_list(),
-			fn _channel, payload ->
-				send(test_pid, {:sent, payload})
-				{:ok, :sent}
-			end,
-			task_supervisor: task_supervisor
-		)
+		broadcaster =
+			start_broadcaster(
+				[region],
+				[300],
+				market_list(),
+				fn _channel, payload ->
+					send(test_pid, {:sent, payload})
+					{:ok, :sent}
+				end,
+				task_supervisor: task_supervisor,
+				cycle_timeout: 10_000
+			)
 
 		# No round closes during a maintenance window, so the embed cannot wait for one.
 		ESI.Maintenance.down(%{status: 503, url: "https://esi.evetech.net/v1/markets/1/orders/"})
@@ -205,7 +223,17 @@ defmodule Discord.BroadcasterTest do
 		ESI.Maintenance.down(%{status: 502, url: "https://esi.evetech.net/v1/markets/1/orders/"})
 		refute_receive {:sent, _payload}, 200
 
+		# The window only lived ~200ms, so the close is announced by
+		# maintenance but swallowed by the broadcaster's 5s floor: no "0s"
+		# outage embed.
 		ESI.Maintenance.up()
+		refute_receive {:sent, _payload}, 300
+
+		# A genuine recovery still announces.
+		send(broadcaster, {:esi_maintenance, :down, %{since_ms: 1, reason: "HTTP 503"}})
+		assert_receive {:sent, _down_again}, 1_000
+
+		send(broadcaster, {:esi_maintenance, :up, %{downtime_ms: 6_000}})
 
 		assert_receive {:sent, up_payload}, 1_000
 		assert [up] = up_payload.embeds
@@ -215,6 +243,42 @@ defmodule Discord.BroadcasterTest do
 
 		ESI.Maintenance.up()
 		refute_receive {:sent, _payload}, 200
+	end
+
+	test "suppresses ESI-up embeds for sub-threshold windows", %{task_supervisor: task_supervisor} do
+		test_pid = self()
+		region = 97_000_055
+
+		broadcaster =
+			start_broadcaster(
+				[region],
+				[300],
+				market_list(),
+				fn _channel, payload ->
+					send(test_pid, {:sent, payload})
+					{:ok, :sent}
+				end,
+				task_supervisor: task_supervisor,
+				cycle_timeout: 10_000
+			)
+
+		send(broadcaster, {:esi_maintenance, :down, %{since_ms: 1, reason: "HTTP 503"}})
+		assert_receive {:sent, down_payload}, 1_000
+		assert [down] = down_payload.embeds
+		assert down.title == "ESI is down"
+
+		# A 0s flap flips the flag back without a green embed.
+		send(broadcaster, {:esi_maintenance, :up, %{downtime_ms: 100}})
+		refute_receive {:sent, _payload}, 300
+
+		send(broadcaster, {:esi_maintenance, :down, %{since_ms: 2, reason: "HTTP 503"}})
+		assert_receive {:sent, _down_again}, 1_000
+
+		send(broadcaster, {:esi_maintenance, :up, %{downtime_ms: 6_000}})
+		assert_receive {:sent, up_payload}, 1_000
+		assert [up] = up_payload.embeds
+		assert up.title == "ESI is back"
+		assert up.description =~ "6s"
 	end
 
 	test "closes a stalled round instead of staying silent", %{task_supervisor: task_supervisor} do
@@ -267,7 +331,8 @@ defmodule Discord.BroadcasterTest do
 	end
 
 	defp start_broadcaster(regions, channels, market_result, deliver_fun, opts) do
-		Enum.each(regions, &start_cycle_manager/1)
+		cycle_timeout = Keyword.get(opts, :cycle_timeout, 1_000)
+		Enum.each(regions, &start_cycle_manager(&1, cycle_timeout))
 
 		name = :"broadcaster_#{System.unique_integer([:positive])}"
 		deliver_opts = if deliver_fun, do: [deliver_fun: deliver_fun], else: []
@@ -297,8 +362,8 @@ defmodule Discord.BroadcasterTest do
 		pid
 	end
 
-	defp start_cycle_manager(region) do
-		{:ok, manager} = Marketmailer.RegionManager.start_link(region, cycle_timeout: 1_000)
+	defp start_cycle_manager(region, cycle_timeout) do
+		{:ok, manager} = Marketmailer.RegionManager.start_link(region, cycle_timeout: cycle_timeout)
 
 		on_exit(fn ->
 			for {pid, _} <- Registry.lookup(Marketmailer.Registry, {:page, region, 1}) do

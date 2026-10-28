@@ -852,10 +852,20 @@ defmodule Discord.Broadcaster do
 		deliver_lifecycle(state, %{round: state.round}, "esi_down", payload)
 	end
 
+	# A flap that slips through the maintenance debounce (a down announced just
+	# before the window closes) must not surface as a "0s outage" embed: flip
+	# the flag back silently and stay quiet.
+	@min_uptime_ms 5_000
+
 	def handle_info({:esi_maintenance, :up, info}, %{esi_down: true} = state) do
 		state = %{state | esi_down: false}
-		payload = %{embeds: [Embeds.esi_up_embed(Map.get(info, :downtime_ms))], components: []}
-		deliver_lifecycle(state, %{round: state.round}, "esi_up", payload)
+
+		if Map.get(info, :downtime_ms, 0) < @min_uptime_ms do
+			{:noreply, state}
+		else
+			payload = %{embeds: [Embeds.esi_up_embed(Map.get(info, :downtime_ms))], components: []}
+			deliver_lifecycle(state, %{round: state.round}, "esi_up", payload)
+		end
 	end
 
 	def handle_info({:esi_maintenance, _status, _info}, state), do: {:noreply, state}
