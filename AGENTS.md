@@ -1,3 +1,46 @@
+# User Generated
+
+## Ask
+
+- Always use the ask feature when presenting options, choices, or decisions to the user.
+- Never present options as plain text, markdown lists, or chat output when the ask tool is available.
+
+## Comments
+
+- No comments in source code.
+- Do not create comments in the codebase.
+- Documentation lives in the project's markdown files.
+
+## Logging
+
+Reference: https://loggingsucks.com/
+
+- Default log paths under `./logs/`:
+  - `./logs/errors`
+  - `./logs/test`
+- Use JSONL for log files.
+- Pretty print logs.
+- Color logs, keys, values, and value types.
+
+## Task Automation
+
+Reference: https://taskfile.dev/docs/reference/schema
+
+- Do not use external scripts.
+- Use default command set:
+  - `install`
+  - `update`
+  - `setup`
+  - `start`
+  - `stop`
+  - `dev`
+
+# End User Generated
+
+
+
+
+
 # AGENTS.md
 
 EVE Online market watcher: ESI market-order pollers write to a local SQLite
@@ -5,8 +48,6 @@ database; queries surface arbitrage opportunities ("best order" to flip into
 the Jita buy wall). The Discord bot broadcasts the same data when
 `DISCORD_TOKEN` is set (otherwise it is skipped with a warning and the rest
 of the app keeps running).
-
-## User Generated
 
 
 ## Commands
