@@ -244,7 +244,7 @@ try {
   }
   .also .pill { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 2px; color: var(--accent); border: 1px solid var(--line-strong); padding: 2px 10px; margin-bottom: 10px; text-transform: uppercase; }
 
-  /* ---------- Discord embed gallery (pinned Discord-dark palette) ---------- */
+  /* ---------- Discord embed gallery ---------- */
   .dc-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
   .dc-col { display: grid; gap: 18px; align-content: start; min-width: 0; }
   .dc-card {
@@ -252,8 +252,9 @@ try {
     background: var(--card); border: 1px solid var(--line); padding: 16px;
     clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
   }
+  [data-theme="light"] .dc-card { background: var(--panel-2); }
   .dc-card figcaption { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; }
-  /* Every replica keeps Discord's own colours in both page themes. */
+  /* Discord palettes: dark by default, Discord light when the page is light. */
   .dc-msg {
     --dc-bg: #313338;
     --dc-embed: #2b2d31;
@@ -262,14 +263,37 @@ try {
     --dc-muted: #949ba4;
     --dc-link: #00a8fc;
     --dc-blurple: #5865f2;
+    --dc-avatar-bg: #1e1f22;
+    --dc-thumb-bg: transparent;
+    --dc-btn-bg: #4e5058;
+    --dc-btn-text: #fff;
+    --dc-code-bg: #232428;
+    --dc-quote-bar: #4e5058;
+    --dc-msg-border: rgba(255, 255, 255, 0.05);
     color-scheme: dark;
     display: flex; gap: 12px; min-width: 0;
-    background: var(--dc-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px;
+    background: var(--dc-bg); border: 1px solid var(--dc-msg-border); border-radius: 8px;
     padding: 14px 14px 16px; color: var(--dc-text);
     font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-size: 14px; line-height: 1.4; letter-spacing: 0; text-align: left;
   }
-  .dc-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #1e1f22; }
+  [data-theme="light"] .dc-msg {
+    --dc-bg: #ffffff;
+    --dc-embed: #f2f3f5;
+    --dc-text: #2e3338;
+    --dc-head: #060607;
+    --dc-muted: #5c5e66;
+    --dc-link: #006ce7;
+    --dc-avatar-bg: #e3e5e8;
+    --dc-thumb-bg: transparent;
+    --dc-btn-bg: #e3e5e8;
+    --dc-btn-text: #060607;
+    --dc-code-bg: #ebedef;
+    --dc-quote-bar: #c7ccd1;
+    --dc-msg-border: rgba(0, 0, 0, 0.08);
+    color-scheme: light;
+  }
+  .dc-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--dc-avatar-bg); }
   .dc-avatar img { width: 24px; height: 24px; }
   .dc-body { flex: 1; min-width: 0; }
   .dc-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
@@ -289,7 +313,7 @@ try {
   .dc-embed > .dc-fields, .dc-embed > .dc-image, .dc-embed > .dc-footer { grid-column: 1 / -1; }
   .dc-author { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--dc-head); font-size: 13.5px; font-weight: 600; }
   .dc-author img { flex: none; width: 20px; height: 20px; border-radius: 50%; }
-  .dc-thumb img { display: block; width: 64px; height: 64px; border-radius: 4px; background: #232428; }
+  .dc-thumb img { display: block; width: 64px; height: 64px; border-radius: 4px; background: var(--dc-thumb-bg); }
   .dc-desc { color: var(--dc-text); font-size: 14px; overflow-wrap: anywhere; }
   .dc-desc a { color: var(--dc-link); text-decoration: none; }
   .dc-desc a strong { color: var(--dc-link); }
@@ -303,14 +327,14 @@ try {
   .dc-image { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 4px; }
   .dc-footer { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--dc-muted); font-size: 12px; }
   .dc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .dc-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 14px; border-radius: 3px; background: #4e5058; color: #fff; font-size: 14px; font-weight: 500; line-height: 1; }
+  .dc-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 14px; border-radius: 3px; background: var(--dc-btn-bg); color: var(--dc-btn-text); font-size: 14px; font-weight: 500; line-height: 1; }
   .dc-btn.off { opacity: 0.5; }
 
   .dc-embed .dc-h2 { font-family: inherit; font-size: 19px; font-weight: 700; letter-spacing: 0; line-height: 1.3; text-transform: none; color: var(--dc-head); margin: 12px 0 4px; }
   .dc-embed .dc-h2:first-child { margin-top: 0; }
-  .dc-quote { border-left: 4px solid #4e5058; padding-left: 10px; color: var(--dc-text); font-size: 14px; }
+  .dc-quote { border-left: 4px solid var(--dc-quote-bar); padding-left: 10px; color: var(--dc-text); font-size: 14px; }
   .dc-codes { display: grid; gap: 2px; margin-top: 4px; }
-  .dc-code { display: block; font-family: var(--mono); font-size: 12px; line-height: 1.4; padding: 6px 8px; border-radius: 3px; background: #232428; color: var(--dc-text); }
+  .dc-code { display: block; font-family: var(--mono); font-size: 12px; line-height: 1.4; padding: 6px 8px; border-radius: 3px; background: var(--dc-code-bg); color: var(--dc-text); }
 
   @media (max-width: 600px) {
     .dc-card { padding: 10px; }
@@ -882,7 +906,7 @@ try {
         <!-- <span class="pill">New</span> -->
         <div class="thumb">▤</div>
         <h3>SDE</h3>
-        <p></p>
+        <p>Official JSONL snapshot seeds item, system and station names — no ESI name lookups.</p>
       </div>
       <div class="card">
         <div class="thumb">⟳</div>
