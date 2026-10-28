@@ -244,6 +244,88 @@ try {
   }
   .also .pill { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 2px; color: var(--accent); border: 1px solid var(--line-strong); padding: 2px 10px; margin-bottom: 10px; text-transform: uppercase; }
 
+  /* ---------- Discord embed gallery (pinned Discord-dark palette) ---------- */
+  .dc-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .dc-col { display: grid; gap: 18px; align-content: start; min-width: 0; }
+  .dc-card {
+    display: flex; flex-direction: column; gap: 10px; min-width: 0;
+    background: var(--card); border: 1px solid var(--line); padding: 16px;
+    clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  }
+  .dc-card figcaption { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; }
+  /* Every replica keeps Discord's own colours in both page themes. */
+  .dc-msg {
+    --dc-bg: #313338;
+    --dc-embed: #2b2d31;
+    --dc-text: #dbdee1;
+    --dc-head: #f2f3f5;
+    --dc-muted: #949ba4;
+    --dc-link: #00a8fc;
+    --dc-blurple: #5865f2;
+    color-scheme: dark;
+    display: flex; gap: 12px; min-width: 0;
+    background: var(--dc-bg); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px;
+    padding: 14px 14px 16px; color: var(--dc-text);
+    font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px; line-height: 1.4; letter-spacing: 0; text-align: left;
+  }
+  .dc-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #1e1f22; }
+  .dc-avatar img { width: 24px; height: 24px; }
+  .dc-body { flex: 1; min-width: 0; }
+  .dc-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+  .dc-name { color: var(--dc-head); font-size: 15px; font-weight: 600; }
+  .dc-bot { background: var(--dc-blurple); color: #fff; font-size: 10px; font-weight: 600; line-height: 1; letter-spacing: 0.3px; padding: 2px 4px; border-radius: 3px; }
+  .dc-time { color: var(--dc-muted); font-size: 12px; }
+
+  .dc-embed {
+    display: grid; grid-template-columns: minmax(0, 1fr);
+    background: var(--dc-embed); border-left: 4px solid var(--dc-blurple); border-radius: 4px;
+    padding: 12px 14px 10px; min-width: 0;
+  }
+  .dc-embed.has-thumb { grid-template-columns: minmax(0, 1fr) 64px; column-gap: 12px; }
+  .dc-embed.green { border-left-color: #43b581; }
+  .dc-embed.purple { border-left-color: #7b68ee; }
+  .dc-embed.amber { border-left-color: #faa61a; }
+  .dc-embed > .dc-fields, .dc-embed > .dc-image, .dc-embed > .dc-footer { grid-column: 1 / -1; }
+  .dc-author { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--dc-head); font-size: 13.5px; font-weight: 600; }
+  .dc-author img { flex: none; width: 20px; height: 20px; border-radius: 50%; }
+  .dc-thumb img { display: block; width: 64px; height: 64px; border-radius: 4px; background: #232428; }
+  .dc-desc { color: var(--dc-text); font-size: 14px; overflow-wrap: anywhere; }
+  .dc-desc a { color: var(--dc-link); text-decoration: none; }
+  .dc-desc a strong { color: var(--dc-link); }
+  @media (hover: hover) and (pointer: fine) { .dc-desc a:hover { text-decoration: underline; } }
+
+  .dc-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; margin-top: 8px; }
+  .dc-field { min-width: 0; }
+  .dc-field.wide { grid-column: 1 / -1; }
+  .dc-field .k { color: var(--dc-head); font-size: 12.5px; font-weight: 700; }
+  .dc-field .v { color: var(--dc-text); font-size: 14px; overflow-wrap: anywhere; }
+  .dc-image { display: block; width: 100%; height: auto; margin-top: 10px; border-radius: 4px; }
+  .dc-footer { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--dc-muted); font-size: 12px; }
+  .dc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .dc-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 14px; border-radius: 3px; background: #4e5058; color: #fff; font-size: 14px; font-weight: 500; line-height: 1; }
+  .dc-btn.off { opacity: 0.5; }
+
+  .dc-embed .dc-h2 { font-family: inherit; font-size: 19px; font-weight: 700; letter-spacing: 0; line-height: 1.3; text-transform: none; color: var(--dc-head); margin: 12px 0 4px; }
+  .dc-embed .dc-h2:first-child { margin-top: 0; }
+  .dc-quote { border-left: 4px solid #4e5058; padding-left: 10px; color: var(--dc-text); font-size: 14px; }
+  .dc-codes { display: grid; gap: 2px; margin-top: 4px; }
+  .dc-code { display: block; font-family: var(--mono); font-size: 12px; line-height: 1.4; padding: 6px 8px; border-radius: 3px; background: #232428; color: var(--dc-text); }
+
+  @media (max-width: 600px) {
+    .dc-card { padding: 10px; }
+    .dc-msg { padding: 10px; gap: 8px; }
+    .dc-avatar { width: 32px; height: 32px; }
+    .dc-avatar img { width: 20px; height: 20px; }
+    .dc-embed { padding: 10px 10px 8px; }
+    .dc-embed.has-thumb { grid-template-columns: minmax(0, 1fr) 46px; column-gap: 8px; }
+    .dc-thumb img { width: 46px; height: 46px; }
+    .dc-name { font-size: 14px; }
+    .dc-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .dc-desc, .dc-quote, .dc-field .v { font-size: 13px; }
+    .dc-code { font-size: 11px; }
+  }
+
   footer { border-top: 1px solid var(--line); padding: 36px 0 44px; color: var(--muted); font-size: 13px; }
   footer .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px; margin-bottom: 28px; }
   footer h4 { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink); margin-bottom: 12px; font-weight: 400; }
@@ -389,7 +471,7 @@ try {
   [data-theme="light"] .pack-disc { background: radial-gradient(circle, rgba(3,105,161,.18), transparent 70%); }
 
   .table-scroll { overflow-x: auto; }
-  @media (max-width: 859px) { .hero-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 859px) { .hero-grid { grid-template-columns: 1fr; } .dc-gallery { grid-template-columns: 1fr; } }
   @media (max-width: 720px) {
     :root { --gutter: 18px; --pk: 0.86; }
     .steps { grid-template-columns: 1fr; }
@@ -421,6 +503,7 @@ try {
     <nav>
       <a href="#how">How it works</a>
       <a href="#features">Features</a>
+      <a href="#embeds">Embeds</a>
       <a href="#quickstart">Quick start</a>
       <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false" title="Toggle dark / light">◐ THEME</button>
     </nav>
@@ -577,10 +660,187 @@ try {
   </div>
 </section>
 
+<section id="embeds">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">03 · Discord</div>
+      <h2>Discord embeds</h2>
+      <p>One-for-one previews of what the bot posts: the same author line, colour rail, masked links, fields, image, footer and pager buttons Discord renders.</p>
+    </div>
+    <div class="dc-gallery">
+      <div class="dc-col">
+        <figure class="dc-card">
+          <figcaption>/list_market</figcaption>
+          <div class="dc-msg">
+            <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+            <div class="dc-body">
+              <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+              <div class="dc-embed green has-thumb">
+                <div class="dc-top">
+                  <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>Jita buy wall (1/10)</span></div>
+                  <div class="dc-desc">
+                    <a href="https://evemarketbrowser.com/region/0/type/81951"><strong>Consortium Mobile Tractor Unit</strong></a> +114.7m • Sinq Laison<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/20189"><strong>Fenrir</strong></a> +69.0m • Devoid<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/17740"><strong>Vindicator</strong></a> +66.5m • Fountain<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/20187"><strong>Obelisk</strong></a> +64.0m • Domain<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/20187"><strong>Obelisk</strong></a> +62.0m • Khanid<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/20185"><strong>Charon</strong></a> +61.0m • Khanid<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/20185"><strong>Charon</strong></a> +60.0m • Khanid<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/11995"><strong>Onyx</strong></a> +56.8m • Stain<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/17918"><strong>Rattlesnake</strong></a> +52.6m • Venal<br />
+                    <a href="https://evemarketbrowser.com/region/0/type/17918"><strong>Rattlesnake</strong></a> +52.6m • Khanid
+                  </div>
+                </div>
+                <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="Jita IV - Moon 4 station icon" width="64" height="64" /></div>
+                <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+              </div>
+              <div class="dc-actions" aria-hidden="true"><span class="dc-btn off">Prev</span><span class="dc-btn">Next</span></div>
+            </div>
+          </div>
+        </figure>
+
+        <figure class="dc-card">
+          <figcaption>/check_market</figcaption>
+          <div class="dc-msg">
+            <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+            <div class="dc-body">
+              <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+              <div class="dc-embed green has-thumb">
+                <div class="dc-top">
+                  <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>Proof of Destruction</span></div>
+                  <div class="dc-desc">
+                    <a href="https://janice.e-351.com/i/90565/market/2">Janice</a><br />
+                    <a href="https://everef.net/types/90565">Eve Ref</a><br />
+                    <a href="https://evemarketbrowser.com/region/0/type/90565">Eve Market Browser</a>
+                  </div>
+                </div>
+                <div class="dc-thumb"><img src="https://images.evetech.net/types/90565/icon?size=64" alt="Proof of Destruction icon" width="64" height="64" /></div>
+                <div class="dc-fields">
+                  <div class="dc-field wide"><div class="k">Location</div><div class="v">Jita IV - Moon 4 - Caldari Navy Assembly Plant - Jita - The Forge • 0.9</div></div>
+                  <div class="dc-field"><div class="k">Sell</div><div class="v">1.46m ISK</div></div>
+                  <div class="dc-field"><div class="k">Buy</div><div class="v">1.50m ISK</div></div>
+                  <div class="dc-field wide"><div class="k">Margin</div><div class="v">+39.0k ISK (+2.7%)</div></div>
+                </div>
+                <img class="dc-image" src="assets/expansion/background.png" alt="Expansion banner used when no Janice chart is attached" width="926" height="432" />
+                <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+              </div>
+            </div>
+          </div>
+        </figure>
+
+        <figure class="dc-card">
+          <figcaption>/list_contracts</figcaption>
+          <div class="dc-msg">
+            <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+            <div class="dc-body">
+              <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+              <div class="dc-embed purple">
+                <div class="dc-top">
+                  <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>Contracts (1/2)</span></div>
+                  <div class="dc-desc">
+                    <a href="https://evector.space/contracts/236540025"><strong>Ishtar x 60</strong></a> +1.2b · +24.6% · Jita IV · 236540025<br />
+                    <a href="https://evector.space/contracts/236540139"><strong>Caldari Navy Ballistic Control…</strong></a> +480.0m · +31.2% · Perimeter · 236540139<br />
+                    <a href="https://evector.space/contracts/236540244"><strong>Tengu x 25</strong></a> +350.0m · +12.8% · Jita IV · 236540244<br />
+                    <a href="https://evector.space/contracts/236540311"><strong>Large Skill Injector x 100</strong></a> +280.0m · +7.4% · Amarr VIII · 236540311<br />
+                    <a href="https://evector.space/contracts/236540402"><strong>Hulk x 12</strong></a> +260.0m · +15.1% · Dodixie IX · 236540402<br />
+                    <a href="https://evector.space/contracts/236540517"><strong>Raven x 40</strong></a> +240.0m · +10.3% · Jita IV · 236540517
+                  </div>
+                </div>
+                <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+              </div>
+              <div class="dc-actions" aria-hidden="true"><span class="dc-btn off">Prev</span><span class="dc-btn">Next</span></div>
+            </div>
+          </div>
+        </figure>
+
+      </div>
+      <div class="dc-col">
+        <figure class="dc-card">
+          <figcaption>/database_stats</figcaption>
+          <div class="dc-msg">
+            <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+            <div class="dc-body">
+              <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+              <div class="dc-embed amber has-thumb">
+                <div class="dc-top">
+                  <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>Database Statistics</span></div>
+                  <div class="dc-desc">
+                    <div class="dc-h2">Status</div>
+                    <div class="dc-quote">
+                      <strong>Network</strong>: up<br />
+                      <strong>Regions</strong>: 114<br />
+                      <strong>Workers</strong>: 1,812<br />
+                      <strong>Etags</strong>: 1,812<br />
+                      <strong>ETS cache</strong>: 1,812<br />
+                      <strong>Errors</strong>: 0<br />
+                      <strong>Rate</strong>: 0<br />
+                      <strong>Janice</strong>: 24<br />
+                      <strong>Registered channels</strong>: 1<br />
+                      <strong>Uptime</strong>: 3d 6h<br />
+                      <strong>SDE</strong>: 3654997
+                    </div>
+                    <div class="dc-h2">Storage</div>
+                    <div class="dc-quote">
+                      <strong>Provider</strong>: SQLite<br />
+                      <strong>Size</strong>: 658.6 MB<br />
+                      <strong>Journal Mode</strong>: wal<br />
+                      <strong>Schema Version</strong>: 20261028000000<br />
+                      <strong>Last write</strong>: 2m ago<br />
+                      <strong>Query</strong>: 12 ms
+                    </div>
+                    <div class="dc-h2">Coverage</div>
+                    <div class="dc-quote">
+                      <strong>Names</strong>: 32,522 / systems: 8,490 in the SDE cache<br />
+                      <strong>Types with orders</strong>: 19,560 of 32,522 known names<br />
+                      <strong>Unnamed locations</strong>: 73,240<br />
+                      <strong>4.7%</strong> of orders<br />
+                      <strong>Unknown systems</strong>: 0
+                    </div>
+                    <div class="dc-h2">Orders</div>
+                    <div class="dc-quote">
+                      <strong>Orders</strong>: 1,562,625<br />
+                      <strong>Sell</strong>: 1,123,481<br />
+                      <strong>Buy</strong>: 439,144<br />
+                      <strong>Types</strong>: 19,560<br />
+                      <strong>Systems</strong>: 1,754<br />
+                      <strong>Oldest order</strong>: Oct 27, 2026 23:33 UTC
+                    </div>
+                    <div class="dc-h2">Contracts</div>
+                    <div class="dc-quote">
+                      <strong>Cached</strong>: 49,023<br />
+                      <strong>Regions</strong>: 83<br />
+                      <strong>Rows</strong>: 338,451<br />
+                      <strong>Items</strong>: resolved 49,000 • pending 23 • failed 22<br />
+                      <strong>Workers</strong>: 12<br />
+                      <strong>Active Round</strong>: idle<br />
+                      <strong>Top Round</strong>: ##1,409<br />
+                      <strong>Last Desired</strong>: 12<br />
+                      <strong>Last Seen</strong>: ##1,409
+                    </div>
+                    <div class="dc-h2">Jita Buy Wall</div>
+                    <div class="dc-quote">
+                      <strong>Undercut</strong>: 17,093 orders<br />
+                      <strong>Types</strong>: 17,858
+                    </div>
+                    <div class="dc-h2">Commands</div>
+                    <div class="dc-codes"><code class="dc-code">/check_market</code><code class="dc-code">/list_market</code><code class="dc-code">/list_contracts</code><code class="dc-code">/database_stats</code><code class="dc-code">/add_channel</code><code class="dc-code">/remove_channel</code><code class="dc-code">/list_channel</code></div>
+                  </div>
+                </div>
+                <div class="dc-thumb"><img src="assets/database.png" alt="" width="64" height="64" /></div>
+                <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+              </div>
+            </div>
+          </div>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="quickstart">
   <div class="wrap">
     <div class="sec-head">
-      <div class="kicker">03 · Launch</div>
+      <div class="kicker">04 · Launch</div>
       <h2>Quick start</h2>
       <p>From clone to a running arbitrage feed — three commands get you there.</p>
     </div>
@@ -613,7 +873,7 @@ try {
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <div class="kicker">04 · Also</div>
+      <div class="kicker">05 · Also</div>
       <h2>Support modules</h2>
       <p>Utilities from the same hangar.</p>
     </div>
@@ -641,8 +901,8 @@ try {
 <div class="wrap">
   <footer>
     <div class="cols">
-      <div><h4>Site</h4><a href="#how">How it works</a><a href="#features">Features</a><a href="#quickstart">Quick start</a></div>
-      <div><h4>Intel</h4><a href="#features">Jita spread scanner</a><a href="#features">Undercut radar</a><a href="#features">Discord bot</a></div>
+      <div><h4>Site</h4><a href="#how">How it works</a><a href="#features">Features</a><a href="#embeds">Discord embeds</a><a href="#quickstart">Quick start</a></div>
+      <div><h4>Intel</h4><a href="#features">Jita spread scanner</a><a href="#features">Undercut radar</a><a href="#embeds">Discord bot</a></div>
       <div><h4>Connect</h4><a href="#">ESI status</a><a href="#">GitHub</a><a href="#">Contact</a></div>
       <div><h4>Legal</h4><a href="#">Terms of use</a><a href="#">Privacy policy</a><a href="#">Cookie notice</a></div>
     </div>
