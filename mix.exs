@@ -18,7 +18,7 @@ defmodule Marketmailer.MixProject do
 
 	def application do
 		[
-			extra_applications: [:logger, :inets],
+			extra_applications: [:logger, :inets, :os_mon],
 			mod: {Marketmailer.Application, []}
 		]
 	end
@@ -35,6 +35,7 @@ defmodule Marketmailer.MixProject do
 			{:phoenix_pubsub, "~> 2.1"},
 			{:phoenix_live_view, "~> 1.1"},
 			{:phoenix_live_dashboard, "~> 0.8"},
+			{:ecto_sqlite3_extras, "~> 1.2"},
 			{:telemetry_metrics, "~> 1.0"},
 			{:telemetry_poller, "~> 1.0"},
 			{:bandit, "~> 1.0"},
