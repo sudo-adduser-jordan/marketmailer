@@ -16,8 +16,8 @@
 Reference: https://loggingsucks.com/
 
 - Default log paths under `./logs/`:
-  - `./logs/errors`
   - `./logs/test`
+  - `./logs/errors`
 - Use JSONL for log files.
 - Pretty print logs.
 - Color logs, keys, values, and value types.
@@ -30,15 +30,14 @@ Reference: https://taskfile.dev/docs/reference/schema
 - Use default command set:
   - `install`
   - `update`
+  - `remove`
   - `setup`
+  - `migrate`
   - `start`
   - `stop`
   - `dev`
 
 # End User Generated
-
-
-
 
 
 # AGENTS.md
