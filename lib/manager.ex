@@ -1,5 +1,4 @@
 defmodule Marketmailer.RegionManager do
-	@moduledoc false
 	use GenServer, restart: :permanent
 
 	@cycle_timeout_ms 600_000
@@ -152,9 +151,6 @@ defmodule Marketmailer.RegionManager do
 		{:noreply, reconcile_registry(state)}
 	end
 
-	# A cycle that never completes (a page worker died, was never restarted, or a
-	# report was lost) must not hold the Discord barrier open forever: report the
-	# missing pages as failures and let the next cycle start.
 	def handle_info({:cycle_timeout, cycle_id}, %{cycle_id: cycle_id} = state) do
 		state = emit(state, timeout_event(state))
 		{:noreply, new_cycle(state)}
@@ -198,8 +194,6 @@ defmodule Marketmailer.RegionManager do
 		state
 	end
 
-	# apply_count/2 runs on every page report, so this must not scan the
-	# registry: state.pages tracks the workers we have started or stopped.
 	defp reconcile_pages(count, state) do
 		wanted = MapSet.new(1..count)
 		missing = MapSet.difference(wanted, state.pages)
@@ -258,9 +252,6 @@ defmodule Marketmailer.RegionManager do
 		end
 	end
 
-	# Registry membership is the truth for "is this page polled": the worker set
-	# can disappear underneath a manager (a PageSup restart) without any report to
-	# trigger reconcile_pages/2, and nothing else would ever start them again.
 	defp reconcile_registry(state) do
 		missing =
 			state.pages
@@ -304,7 +295,6 @@ defmodule Marketmailer.RegionManager do
 		end
 	end
 
-	# One summary for every outcome; only the event name and level differ.
 	defp cycle_event(expected_pages, state) do
 		summary = %{
 			region: state.id,

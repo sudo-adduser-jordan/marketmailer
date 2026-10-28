@@ -69,8 +69,6 @@ tasks:
         fi
         echo "start: SDE caches present in $EFF_DB"
       - task: stop
-      # Force-recompile so build-time macros (e.g. the git commit baked into
-      # logs) are always fresh: `mix release` alone reuses stale beams.
       - MIX_ENV=prod mix compile --force
       - MIX_ENV=prod mix release --overwrite
       - |
@@ -176,8 +174,6 @@ tasks:
           return 0
         }
         stage_release() {
-          # Force-recompile so build-time macros (e.g. the git commit baked
-          # into logs) are always fresh: `mix release` alone reuses stale beams.
           MIX_ENV=prod mix compile --force
           stamp "prod recompile done"
           MIX_ENV=prod mix release --overwrite

@@ -28,11 +28,6 @@ defmodule Marketmailer.Log do
 	defp maybe_put(map, _key, nil), do: map
 	defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-	# Boot-time sink: this boot gets a fresh file, and the previous boot's file is
-	# kept once as `errors.previous.jsonl` (a crash loop or a boot-time storm
-	# must not destroy the evidence of the boot before it). Only this sink's file
-	# and rotation archives are touched, so sibling sinks (prod vs dev vs test)
-	# keep theirs.
 	def setup do
 		path = error_log_path()
 		reset_error_log(path)
@@ -64,8 +59,6 @@ defmodule Marketmailer.Log do
 		:ok
 	end
 
-	# Rotation archives share the sink's filename prefix (`errors.jsonl.1.gz`);
-	# the kept previous generation does not, so it survives.
 	defp remove_archives(path) do
 		case File.ls(Path.dirname(path)) do
 			{:ok, entries} ->
@@ -193,9 +186,6 @@ defmodule Marketmailer.Log.Format do
 		base ++ domain ++ maybe_entry("message", redact(message))
 	end
 
-	# Third-party records (Nostrum, Ecto/Exqlite, OTP) bypass Marketmailer.Log,
-	# so they arrive with no event name; give them a stable one plus the module
-	# that emitted them, and strip the credentials those messages can carry.
 	defp source(meta) do
 		case meta[:mfa] do
 			{module, _function, _arity} when is_atom(module) -> source_name(module)

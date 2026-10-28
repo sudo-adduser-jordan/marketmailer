@@ -55,10 +55,6 @@ defmodule Marketmailer.Application do
 		end
 	end
 
-	# An ESI maintenance window saturated the Finch pool and killed 53 page workers
-	# at once; the default 3/5s restart budget turns that into a dead poller, and it
-	# dies silently. Workers are idempotent and cheap, so a full-fleet storm is
-	# absorbed instead.
 	defp page_sup do
 		{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup, max_restarts: 10_000, max_seconds: 60}
 	end

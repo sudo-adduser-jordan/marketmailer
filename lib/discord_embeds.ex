@@ -11,10 +11,6 @@ defmodule Discord.Embeds do
 	@color_contract 0x7B68EE
 
 	@icon_ "https://images.evetech.net/types/52678/icon?size=64"
-	# The placeholder is the expansion banner derived from assets/expansion/banner.jpg
-	# (assets/expansion/background.png) fitted to Janice.Padding.image_size/0 (926x432)
-	# with a blurred copy of itself filling the sides, so it is pixel-identical in size
-	# to the chart and the error graph.
 	@icon_market "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/expansion/background.png"
 	@icon_database "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/database.png"
 	@icon_broadcast "https://raw.githubusercontent.com/sudo-adduser-jordan/marketmailer/refs/heads/main/assets/broadcast.png"

@@ -10,8 +10,6 @@ defmodule ESI do
 	@wait_note_key :pause_noted
 	@rate_table :esi_rate_state
 	@rate_defaults [enabled: true, max_block_ms: 900_000, jitter_ms: 500]
-	# Market fetches only: a maintenance window must fail fast per worker instead
-	# of queueing behind the shared Finch pool.
 	@market_pool_timeout_ms 5_000
 	@network_reasons [
 		:nxdomain,
@@ -42,10 +40,6 @@ defmodule ESI do
 		end
 	end
 
-	# Every worker waiting out the same window would otherwise log its own copy
-	# (thousands per window); one record per window is the signal, the rest is
-	# noise that buries real warnings. insert_new makes the first waiter the
-	# only logger; enforce_pause/2 clears the note when it extends the window.
 	defp note_wait(until, sleep) do
 		if :ets.insert_new(@table, {@wait_note_key, until}) do
 			Marketmailer.Log.warning(
@@ -76,9 +70,6 @@ defmodule ESI do
 	def contract_items_url(contract_id), do: "https://esi.evetech.net/v1/contracts/public/items/#{contract_id}/"
 
 	def fetch(region, page \\ 1, opts \\ []) do
-		# Market polling fans out over ~1.5k page workers, so a maintenance window
-		# must surface as one fast failure per worker, not as four retried requests
-		# queued behind the Finch pool: the fleet pauses on the first 5xx instead.
 		opts =
 			Keyword.merge(
 				[retry: false, pool_timeout: @market_pool_timeout_ms],
@@ -115,12 +106,6 @@ defmodule ESI do
 				respond(response, url)
 
 			{:error, error} ->
-				# A request that never got an HTTP answer (a saturated Finch pool,
-				# a raised adapter) is client-side saturation, not an ESI outage:
-				# other workers getting 200s in the same second prove ESI is
-				# answering. It used to open a maintenance window here, which
-				# flapped the Discord embeds with ~0s down/up pairs; it now only
-				# backs off via the worker's own retry delay.
 				cond do
 					network_error?(error) ->
 						Marketmailer.Maintenance.report_disconnect(error)
@@ -142,9 +127,6 @@ defmodule ESI do
 		end
 	end
 
-	# A raised request never reaches the `{:error, _}` branch: Finch raises when a
-	# saturated pool cannot hand out a connection, and that exception used to kill
-	# the caller mid-fetch (which is what took the market poller down for good).
 	defp request(http_fun, url, opts) do
 		http_fun.(url, opts)
 	rescue
@@ -154,8 +136,6 @@ defmodule ESI do
 		kind, reason -> {:error, %{reason: :request_failed, detail: inspect({kind, reason})}}
 	end
 
-	# A request that never got an HTTP answer never reached ESI, so it says
-	# nothing about ESI availability and must not open a maintenance window.
 	defp unanswered?(%{reason: :request_failed}), do: true
 	defp unanswered?(_reason), do: false
 
@@ -386,11 +366,6 @@ defmodule ESI do
 	defp remain(value), do: parse_int(value) || 999
 	defp first(val, key), do: val |> Map.get(key, []) |> List.first()
 
-	# ESI only reports the error budget on some routes (contracts do, market
-	# orders do not), so a low remainder here parks *every* ESI caller — the
-	# market pollers included. Log the one response that caused it (deduped per
-	# route) so the stall is attributable instead of showing up as a thousand
-	# waiting workers.
 	defp enforce_pause(ttl, cause) do
 		now = System.system_time(:millisecond)
 		pause = pause_ms(cause.reset_s)

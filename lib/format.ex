@@ -1,6 +1,4 @@
 defmodule Marketmailer.Utils do
-	@moduledoc false
-
 	def to_number(nil), do: nil
 	def to_number(number) when is_number(number), do: number * 1.0
 
@@ -13,7 +11,6 @@ defmodule Marketmailer.Utils do
 
 	def to_number(_), do: nil
 
-	# 1234567 -> 1,234,567 (Discord renders thousands separators fine).
 	def group_digits(digits) do
 		sign = if String.starts_with?(digits, "-"), do: "-", else: ""
 		digits = String.trim_leading(digits, "-")
@@ -54,8 +51,6 @@ defmodule Marketmailer.Utils do
 	def format_isk(number) when is_number(number),
 		do: (number * 1.0) |> Float.round(2) |> :erlang.float_to_binary(decimals: 2)
 
-	# One scale for every ISK amount a human reads: millions and billions keep two
-	# decimals (4.99m), thousands one (215.0k), and anything smaller stays exact.
 	def isk_compact(number) when is_number(number) do
 		value = number * 1.0
 		absolute = abs(value)
@@ -115,16 +110,12 @@ defmodule Marketmailer.Utils do
 
 	def margin_value(_), do: "? ISK"
 
-	# Return on the ISK spent at the sell price, the same basis as
-	# `Discord.Embeds.contract_margin_percent/1`.
 	def margin_percent(nil, _cost), do: "?"
 	def margin_percent(_margin, nil), do: "?"
 
 	def margin_percent(margin, cost) when is_number(margin) and is_number(cost) and cost > 0 do
 		sign = if margin < 0, do: "-", else: "+"
 		percent = abs(margin) / cost * 100
-		# float interpolation switches to scientific notation past 1000 ("1.0e3%"),
-		# so the text is built explicitly.
 		value = :erlang.float_to_binary(Float.round(percent, 1), decimals: 1)
 		"#{sign}#{value}%"
 	end
@@ -150,8 +141,6 @@ defmodule Marketmailer.Utils do
 
 	def list_truncate(_, _), do: "?"
 
-	# "Vale of the Silent" -> "Vale of the": a region label never needs more than
-	# three words, and clipping by characters can cut a name mid-word.
 	def first_words(nil, _count), do: "?"
 	def first_words("", _count), do: "?"
 
@@ -203,7 +192,6 @@ defmodule Marketmailer.Utils do
 
 	def format_uptime(_), do: "?"
 
-	# Short durations for user-facing copy ("4m 12s", "38s", "1h 05m").
 	def format_duration_ms(nil), do: "?"
 
 	def format_duration_ms(ms) when is_integer(ms) and ms >= 0 do
@@ -239,8 +227,6 @@ defmodule Marketmailer.Utils do
 		end
 	end
 
-	# SQLite stores NaiveDateTime UTC seconds; a missing/failed parse must not
-	# fall back to "now" the way the footer's DateTime helper does.
 	def format_timestamp(nil), do: "?"
 	def format_timestamp(""), do: "?"
 
@@ -253,7 +239,6 @@ defmodule Marketmailer.Utils do
 
 	def format_timestamp(_), do: "?"
 
-	# The market table stores NaiveDateTime UTC seconds ("2026-10-17T01:34:03").
 	def relative_age(nil), do: "never"
 	def relative_age(""), do: "never"
 

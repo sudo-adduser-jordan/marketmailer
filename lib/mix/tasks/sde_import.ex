@@ -4,8 +4,6 @@ defmodule Mix.Tasks.Sde.Import do
 	@latest_url "https://developers.eveonline.com/static-data/tranquility/latest.jsonl"
 	@zip_url_template "https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-BUILD-jsonl.zip"
 
-	# SQL is embedded at compile time: the text ships in the beam (no runtime
-	# file read) and editing a .sql recompiles this module.
 	@external_resource Path.join(__DIR__, "../../sql/sdeImportsTable.sql")
 	@external_resource Path.join(__DIR__, "../../sql/sdeImportRecord.sql")
 
@@ -25,10 +23,6 @@ defmodule Mix.Tasks.Sde.Import do
 		"mapStars.jsonl"
 	]
 
-	# Capital hulls that cannot enter high sec. Their Jita buy orders can never be
-	# filled there, so every Jita buy-wall query filters these types out through
-	# names.is_capital_ship. Freighters (513) and jump freighters (902) can gate
-	# into Jita and stay in the list, as do capital modules and components.
 	@capital_ship_groups [30, 485, 547, 659, 883, 1538, 4594, 5120]
 
 	@impl true
@@ -223,16 +217,12 @@ defmodule Mix.Tasks.Sde.Import do
 
 	def capital_ship_group?(group_id), do: group_id in @capital_ship_groups
 
-	# Pure mapping so the region seed can be tested without the SDE files.
 	def region_rows(regions) do
 		regions
 		|> Enum.map(fn {id, name} -> %{region_id: id, name: name} end)
 		|> Enum.sort_by(& &1.region_id)
 	end
 
-	# The table is authoritative, not additive: a region removed from the SDE
-	# must stop being polled. One transaction keeps the cache from ever being
-	# seen empty (which would boot the supervisor with no region managers).
 	defp import_regions(regions) do
 		rows = region_rows(regions)
 

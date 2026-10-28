@@ -2,10 +2,6 @@ defmodule Janice.Padding do
 	@signature <<137, 80, 78, 71, 13, 10, 26, 10>>
 	@default_pad 16
 
-	# Janice renders its market chart canvas at 894x400 CSS pixels at the harness
-	# viewport. Every chart, the error graph and the placeholder are normalised to
-	# this size before the border is added, so the embed image never changes size
-	# when it is replaced from the placeholder to the chart.
 	@chart_size {894, 400}
 
 	def default_pad, do: @default_pad
@@ -314,7 +310,6 @@ defmodule Janice.Capture do
 end
 
 defmodule Janice.Supervisor do
-	@moduledoc false
 	use Supervisor
 
 	def start_link(opts \\ []) do
@@ -364,8 +359,6 @@ defmodule Janice.Supervisor do
 end
 
 defmodule Janice.Playwright do
-	@moduledoc false
-
 	@behaviour Janice.Capture
 
 	@default_timeout 20_000
@@ -478,7 +471,6 @@ defmodule Janice.Playwright do
 end
 
 defmodule Janice.ChartPool do
-	@moduledoc false
 	use GenServer
 
 	alias PlaywrightEx.{Browser, BrowserContext, Frame, Page}

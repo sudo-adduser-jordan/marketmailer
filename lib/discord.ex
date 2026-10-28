@@ -108,9 +108,6 @@ defmodule Discord.Consumer do
 	def handle_event(
 				{:INTERACTION_CREATE, %Interaction{type: 3, data: %{custom_id: "contract_list:page:" <> _}} = interaction, _}
 			) do
-		# The page query (top_desired + item names) can exceed Discord's 3s
-		# interaction window, so ack immediately and edit async. Without a
-		# running bot there is nothing to edit with, so answer inline.
 		case active_bot_name() do
 			nil ->
 				page = contract_page_from_custom_id(interaction)
@@ -522,8 +519,6 @@ defmodule Discord.Consumer do
 		end
 	end
 
-	# The embed is the only response shape: an unavailable cache replies with the
-	# error embed instead of failing the interaction.
 	defp stats_payload(interaction) do
 		case Marketmailer.Stats.stats() do
 			{:ok, stats} -> Embeds.database_stats_embed(stats)
@@ -695,8 +690,6 @@ defmodule Discord.Consumer do
 	end
 
 	defp edit_response(bot_name, interaction, payload) do
-		# A bare embed must be wrapped or Discord rejects the PATCH with 400 50006
-		# and the deferred reply stays on "Bot is thinking..." (see Embeds.payload/1).
 		payload = Embeds.payload(payload)
 
 		Bot.with_bot(bot_name, fn -> Api.Interaction.edit_response(interaction, payload) end)
@@ -731,8 +724,6 @@ defmodule Discord.Consumer do
 		)
 	end
 
-	# Application commands carry a name; component interactions (the pager buttons)
-	# do not, and log as nil.
 	defp interaction_command(%{data: %{name: name}}) when is_binary(name), do: name
 	defp interaction_command(_interaction), do: nil
 
@@ -843,18 +834,12 @@ defmodule Discord.Broadcaster do
 		{:noreply, state}
 	end
 
-	# The two edges of an ESI maintenance window are announced directly: no round
-	# closes while polling is paused, so a round-based warning can never fire
-	# during the one outage users need to hear about.
 	def handle_info({:esi_maintenance, :down, _info}, %{esi_down: false} = state) do
 		state = %{state | esi_down: true}
 		payload = %{embeds: [Embeds.esi_down_embed()], components: []}
 		deliver_lifecycle(state, %{round: state.round}, "esi_down", payload)
 	end
 
-	# A flap that slips through the maintenance debounce (a down announced just
-	# before the window closes) must not surface as a "0s outage" embed: flip
-	# the flag back silently and stay quiet.
 	@min_uptime_ms 5_000
 
 	def handle_info({:esi_maintenance, :up, info}, %{esi_down: true} = state) do
@@ -926,8 +911,6 @@ defmodule Discord.Broadcaster do
 		}
 	end
 
-	# One region that never reports must not silence the channel forever: the
-	# round closes with the missing regions as failures.
 	defp stall_round(state) do
 		missing = Enum.reject(state.regions, &Map.has_key?(state.reports, &1))
 
@@ -949,8 +932,6 @@ defmodule Discord.Broadcaster do
 			missing == [] ->
 				{:noreply, state}
 
-			# During a maintenance window the yellow embed already says why the
-			# channel is quiet; a red "no market updates" on top of it is noise.
 			ESI.Maintenance.window_open?() ->
 				Marketmailer.Log.info(
 					"broadcast_suppressed",
@@ -1050,8 +1031,6 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
-	# The lifecycle embeds own the ESI warning; a round that closes mid-window
-	# must not repeat it.
 	defp maintenance_suppressed?(snapshot), do: esi_down?(snapshot) and ESI.Maintenance.window_open?()
 
 	defp deliver(snapshot, kind, payload, state) do

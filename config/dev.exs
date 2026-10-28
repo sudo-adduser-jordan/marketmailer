@@ -31,7 +31,5 @@ config :marketmailer, MarketmailerWeb.Endpoint,
 	secret_key_base: "dev-secret-key-base-at-least-64-bytes-long-for-live-dashboard-only-0123456789"
 
 config :marketmailer, :dashboard_enabled, dashboard_enabled
-# Dev runs beside the prod daemon on the same host, so it must not share the
-# sink that boot wipes: prod keeps logs/errors.jsonl.
 config :marketmailer, :error_log_path, "logs/dev.jsonl"
 config :marketmailer, :start_pollers, start_pollers

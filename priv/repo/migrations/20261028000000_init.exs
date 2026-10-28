@@ -1,13 +1,6 @@
 defmodule Database.Migrations.Schema do
 	use Ecto.Migration
 
-	# Squashed init (replaces 20261017000000..20261027000000): the full schema
-	# in one migration and the only migration the project has. It assumes an
-	# empty database and creates every table, index and view directly; there
-	# are no compatibility guards and no data repairs, so an existing database
-	# from the old chain must be discarded (its data is derived cache).
-	#
-	# Name data itself comes only from `mix sde.import`, never from seeds here.
 	def up do
 		create table(:market, primary_key: false) do
 			add :order_id, :bigint, primary_key: true
@@ -29,7 +22,6 @@ defmodule Database.Migrations.Schema do
 		create index(:market, [:type_id, :system_id, :is_buy_order])
 		create index(:market, [:price])
 
-		# Jita buy wall (30000142) and remote sell scans
 		create index(:market, [:type_id], where: "system_id = 30000142 AND is_buy_order = 1")
 		create index(:market, [:type_id, :price], where: "is_buy_order = 0")
 		create index(:market, [:updated_at, :order_id])
@@ -37,7 +29,6 @@ defmodule Database.Migrations.Schema do
 
 		create index(:market, [:type_id, :price, :volume_remain], where: "system_id = 30000142 AND is_buy_order = 1")
 
-		# Per-page stale sweep deletes by the fetched page url.
 		create index(:market, [:url])
 
 		create table(:etags, primary_key: false) do
@@ -53,9 +44,6 @@ defmodule Database.Migrations.Schema do
 			timestamps()
 		end
 
-		# Published SDE types plus composed NPC station names. Capital hulls
-		# that cannot enter high sec are flagged by `mix sde.import` so every
-		# Jita buy-wall query can filter them out.
 		create table(:names, primary_key: false) do
 			add :id, :integer, primary_key: true
 			add :name, :string, null: false
@@ -71,9 +59,6 @@ defmodule Database.Migrations.Schema do
 			add :region_name, :string, null: false
 		end
 
-		# SDE region cache: the poller list is derived from mapRegions.jsonl
-		# instead of a hardcoded id range, so a missing region (e.g. Exordium
-		# 10001004) can never be silently skipped again.
 		create table(:regions, primary_key: false) do
 			add :region_id, :integer, primary_key: true
 			add :name, :string, null: false

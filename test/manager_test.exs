@@ -24,7 +24,6 @@ defmodule Marketmailer.RegionManagerTest do
 			start_supervised!({DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup})
 		end
 
-		# Park every worker and hold the maintenance ping so no test fetches.
 		MarketmailerTest.Fixtures.park_page_workers()
 		:ets.insert(:esi_error_state, {:maintenance_ping, System.system_time(:millisecond) + 60_000})
 		MarketmailerTest.Fixtures.reset_network()
@@ -199,8 +198,6 @@ defmodule Marketmailer.RegionManagerTest do
 		for page <- 1..8, Registry.lookup(Marketmailer.Registry, {:page, region, page}) != [], do: page
 	end
 
-	# terminate_child/2 returns once the worker exits, but the Registry removes
-	# its entry asynchronously; poll until the registry reflects the page set.
 	defp await_pages(region, expected, attempts \\ 100) do
 		case page_ids(region) do
 			^expected ->
@@ -221,8 +218,6 @@ defmodule Marketmailer.RegionManagerTest do
 		pid
 	end
 
-	# The registry drops a dead worker's entry asynchronously, so a replacement is
-	# only identifiable by a different pid than the one that was stopped.
 	defp await_replacement(region, page, original, attempts \\ 100) do
 		replacement =
 			case Registry.lookup(Marketmailer.Registry, {:page, region, page}) do

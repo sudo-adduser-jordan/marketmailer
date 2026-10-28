@@ -1,40 +1,12 @@
 defmodule ESI.Maintenance do
-	@moduledoc false
-	# ESI availability, edge-based instead of TTL-based.
-	#
-	# `ESI.get/2` reports every 5xx and every request that never got an answer
-	# (pool exhaustion, timeout) here; the first one turns the fleet's pause gate
-	# on and the first 200/304 afterwards turns it off. The gate used to expire on
-	# its own after @maint_ping_ms, so a window that lasted longer than one probe
-	# interval let every worker fetch again — this process owns the window instead,
-	# including the "still down" watchdog and the events `Discord.Broadcaster`
-	# turns into the yellow/green embeds.
-	#
-	# The flag lives in `:esi_error_state` (`:maintenance_mode` is a deadline so
-	# `maintenance_active?/0` stays a cheap ETS read for thousands of workers,
-	# `:maintenance_since` carries the cause). `down/1` and `up/0` write ETS
-	# themselves — no GenServer round trip in the hot path — while the GenServer
-	# owns the announcements: the yellow edge waits out `announce_grace_ms`
-	# with the window still open, the green edge waits out `close_grace_ms`
-	# with it still closed, and anything faster clears silently. Only requests
-	# that got an HTTP answer can open a window — a request that never got one
-	# (saturated Finch pool, raised adapter) is client-side saturation, not an
-	# ESI outage, and `ESI.get/2` keeps those out of here.
 	use GenServer
 
 	@table :esi_error_state
 	@mode_key :maintenance_mode
 	@since_key :maintenance_since
 
-	# The gate is refreshed on every report while ESI answers with 5xx; it only
-	# exists to answer "is ESI down right now" without a process call.
 	@gate_ms 86_400_000
 
-	# Announcements are debounced: a window must stay open for
-	# `announce_grace_ms` before the yellow embed goes out, and a closed
-	# window must stay closed for `close_grace_ms` before the green one does.
-	# A flap that opens and closes inside the grace (one slow page among
-	# hundreds of 200s) clears silently — no log, no embed.
 	@defaults [
 		stale_after_ms: 30 * 60_000,
 		stale_every_ms: 10 * 60_000,
@@ -61,7 +33,6 @@ defmodule ESI.Maintenance do
 		end
 	end
 
-	# Cheap read for the page workers: one ETS lookup, no call.
 	def down? do
 		now = now_ms()
 
@@ -71,8 +42,6 @@ defmodule ESI.Maintenance do
 		end
 	end
 
-	# A window that was announced (a real down edge) as opposed to the pause gate
-	# alone, which tests and operators also park workers with.
 	def window_open? do
 		lookup(@since_key) != []
 	end
@@ -87,10 +56,6 @@ defmodule ESI.Maintenance do
 		end
 	end
 
-	# First failure of a window opens it in ETS (the pause gate is immediate);
-	# the announcement waits out `announce_grace_ms` so a sub-second flap
-	# never reaches the log or Discord. Every later failure only extends the
-	# gate and cancels a pending close.
 	def down(reason) do
 		ensure_table()
 		now = now_ms()
@@ -105,10 +70,6 @@ defmodule ESI.Maintenance do
 		:ok
 	end
 
-	# A success clears the ETS window and the gate right away so polling
-	# resumes, but the `:up` edge is only announced once the window stays
-	# closed for `close_grace_ms`. A failure inside that quiet period cancels
-	# the pending close and the window carries on silently.
 	def up do
 		ensure_table()
 
@@ -123,7 +84,6 @@ defmodule ESI.Maintenance do
 		end
 	end
 
-	# Test/operator helper: clear the window without announcing it.
 	def reset do
 		ensure_table()
 		:ets.delete(@table, @since_key)
@@ -289,8 +249,6 @@ defmodule ESI.Maintenance do
 		:ok
 	end
 
-	# State keys are read with Map.get defaults (instead of pattern matching)
-	# so a hot-upgraded GenServer carrying pre-change state keeps working.
 	defp announced?(state), do: Map.get(state, :down_announced, false) == true
 
 	defp cancel_down_timer(state) do

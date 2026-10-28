@@ -170,8 +170,6 @@ defmodule Marketmailer.PageWorker do
 		{:noreply, %{state | errors: errs + 1}}
 	end
 
-	# A request that never got an answer (saturated pool, raised adapter) means
-	# ESI is not serving: wait for the pause window instead of the long backoff.
 	defp pause_reason?(%{reason: :request_failed}), do: true
 	defp pause_reason?(_reason), do: false
 

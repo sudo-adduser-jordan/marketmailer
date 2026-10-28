@@ -5,8 +5,6 @@ defmodule Database do
 end
 
 defmodule Database.Migrations do
-	# Boot-time schema setup. Runs before the supervision tree starts, so every
-	# entry point (`mix run`, the release, containers) boots a migrated DB.
 	@unmigrated_tables ["systems", "names", "discord", "etags", "market"]
 
 	@external_resource Path.join(__DIR__, "sql/schemaTables.sql")
@@ -55,11 +53,6 @@ end
 defmodule Database.Queue do
 	use GenServer
 
-	# SQLite has a single writer. Funneling every write through this one
-	# process means write statements never contend on the database lock and
-	# are never dropped by the connection pool: a caller blocks until its
-	# write is persisted (or a real error is returned). Reads keep using the
-	# full connection pool.
 	def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
 	def write(fun) when is_function(fun, 0) do
@@ -77,21 +70,15 @@ defmodule Database.Queue do
 		{:reply, Database.Writer.run(fun), state}
 	end
 
-	# Absorb stray messages so a wayward send can never take the writer down.
 	@impl true
 	def handle_info(_message, state), do: {:noreply, state}
 end
 
 defmodule Database.Writer do
-	# Bounded backoff. Serialization absorbs contention; this is the last
-	# line of defence for a transient SQLite/DBConnection error.
 	@retry_delays [10, 25, 50, 100, 200, 400, 800, 1_600, 3_200]
 
 	def write(fun) when is_function(fun, 0), do: Database.Queue.write(fun)
 
-	# Runs a write closure, retrying transient contention, and returns
-	# {:ok, result} or {:error, exception}. Never raises, never drops
-	# silently: an exhausted retry surfaces the error to the caller.
 	def run(fun) when is_function(fun, 0), do: attempt(fun, @retry_delays)
 
 	defp attempt(fun, delays) do
@@ -259,8 +246,6 @@ defmodule Etag.Database do
 		_ -> :ok
 	end
 
-	# One query for both readers: the cache is authoritative when present,
-	# otherwise the DB row is read and cached back.
 	defp fetch(url) do
 		query = from(tag in "etags", where: tag.url == ^url, select: {tag.etag, tag.expires_at})
 
@@ -285,8 +270,6 @@ defmodule Etag.Database do
 						 conflict_target: :url
 					 )
 				 end) do
-			# Only cache the etag once the row is durable, so a failed write can
-			# never mask a page the database has not seen.
 			{:ok, _} ->
 				:ets.insert(:market_cache, {url, etag, expires_at})
 				:ok

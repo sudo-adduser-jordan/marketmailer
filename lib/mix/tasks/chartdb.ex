@@ -9,8 +9,6 @@ defmodule Mix.Tasks.Chartdb do
 	@view_row_h 19
 	@canvas_w 1560
 
-	# SQL is embedded at compile time: the text ships in the beam (no runtime
-	# file read) and editing a .sql recompiles this module.
 	@external_resource Path.join(__DIR__, "../../sql/sqliteDatabaseList.sql")
 	@external_resource Path.join(__DIR__, "../../sql/schemaObjects.sql")
 	@external_resource Path.join(__DIR__, "../../sql/marketIndexes.sql")

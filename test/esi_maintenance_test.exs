@@ -8,7 +8,6 @@ defmodule ESI.MaintenanceTest do
 		MarketmailerTest.Fixtures.reset_esi_maintenance()
 		ESI.Maintenance.subscribe(self())
 
-		# The legacy edge tests below assert immediate announcements.
 		Application.put_env(:marketmailer, :esi_maintenance,
 			announce_grace_ms: 0,
 			close_grace_ms: 0

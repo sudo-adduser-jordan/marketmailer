@@ -1,5 +1,4 @@
 defmodule Marketmailer.Maintenance do
-	@moduledoc false
 	use GenServer
 
 	@table :network_state
@@ -75,7 +74,6 @@ defmodule Marketmailer.Maintenance do
 		:ok
 	end
 
-	# Test/operator helper: clear the state and any probe already scheduled.
 	def reset do
 		case Process.whereis(__MODULE__) do
 			nil ->

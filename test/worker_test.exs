@@ -30,13 +30,9 @@ defmodule Marketmailer.PageWorkerGateTest do
 			start_supervised!({DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup})
 		end
 
-		# Park every worker by default and hold the maintenance ping, so a worker
-		# only fetches when a test explicitly lets it through.
 		MarketmailerTest.Fixtures.park_page_workers()
 		:ets.insert(:esi_error_state, {:maintenance_ping, System.system_time(:millisecond) + 60_000})
 
-		# Any watchdog probe already in flight must report the network up, or it
-		# would flip the state back down after the reset below.
 		:persistent_term.put({:marketmailer_test, :probe_result}, :ok)
 		on_exit(fn -> :persistent_term.erase({:marketmailer_test, :probe_result}) end)
 
@@ -154,8 +150,6 @@ defmodule Marketmailer.PageWorkerGateTest do
 			end)
 
 		assert Process.alive?(worker)
-		# Pool saturation backs this worker off on its own; it no longer parks
-		# the whole fleet behind a maintenance gate.
 		refute ESI.Maintenance.down?()
 		assert log =~ "page_fetch_error"
 

@@ -27,8 +27,6 @@ config :marketmailer, :bot_options, %{
 	wrapped_token: &Discord.BotSupervisor.token!/0
 }
 
-# Public-contract pollers; contracts with an item value minus price at or above
-# `min_margin` (100m ISK) are surfaced. See `Contracts` for the full defaults.
 config :marketmailer, :contracts,
 	enabled: true,
 	excluded_types: ["courier", "auction", "loan", "unknown"]
@@ -37,15 +35,11 @@ config :marketmailer, :dashboard_enabled, true
 config :marketmailer, :dashboard_password, nil
 config :marketmailer, :dashboard_user, nil
 
-# ESI bucket limiting: a 429 pauses the whole rate-limit group for Retry-After
-# (capped at max_block_ms); every request in the group waits it out.
 config :marketmailer, :esi_rate_limit,
 	enabled: true,
 	max_block_ms: 900_000,
 	jitter_ms: 500
 
-# Network watchdog: a transport failure pauses all polling; a DNS+TCP connect
-# to the probe target checks whether the link is back (no ESI budget used).
 config :marketmailer, :maintenance,
 	probe_host: "esi.evetech.net",
 	probe_port: 443,

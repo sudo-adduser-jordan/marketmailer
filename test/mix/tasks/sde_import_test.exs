@@ -2,8 +2,6 @@ defmodule Mix.Tasks.Sde.ImportTest do
 	use ExUnit.Case, async: false
 
 	test "sde checksum" do
-		# The build number is the SDE checksum: an explicit build must be used
-		# verbatim and never resolved over the network.
 		assert Mix.Tasks.Sde.Import.resolve_build(["3569502"]) == "3569502"
 		assert Mix.Tasks.Sde.Import.resolve_build([" 3569502 "]) == "3569502"
 
@@ -37,8 +35,6 @@ defmodule Mix.Tasks.Sde.ImportTest do
 						 %{region_id: 10_000_043, name: "Domain"}
 					 ]
 
-		# Only hulls that cannot enter high sec are flagged; freighters can gate
-		# into Jita and stay in the buy wall.
 		assert Mix.Tasks.Sde.Import.capital_ship_group?(485)
 		assert Mix.Tasks.Sde.Import.capital_ship_group?(30)
 		refute Mix.Tasks.Sde.Import.capital_ship_group?(513)

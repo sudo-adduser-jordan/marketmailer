@@ -1,6 +1,4 @@
 defmodule Marketmailer.Stats do
-	@moduledoc false
-
 	@cache_key {__MODULE__, :cache}
 	@cache_ttl_ms 60_000
 
@@ -38,7 +36,6 @@ defmodule Marketmailer.Stats do
 
 		case result do
 			{:ok, stats} ->
-				# A failed lookup is never cached: the next command retries.
 				stats =
 					stats
 					|> Map.merge(runtime())

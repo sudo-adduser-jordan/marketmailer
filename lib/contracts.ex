@@ -1,6 +1,4 @@
 defmodule Contracts do
-	@moduledoc false
-
 	@defaults [
 		enabled: true,
 		period_ms: 1_800_000,
@@ -37,8 +35,6 @@ defmodule Contracts do
 
 	def now_ms, do: System.system_time(:millisecond)
 
-	# Contract-side runtime facts for /database_stats; private persistent-term
-	# keys stay encapsulated here. Missing processes/tables degrade to zero/nil.
 	def runtime do
 		last_round = :persistent_term.get({Contracts, :round_stats}, nil)
 
@@ -121,11 +117,8 @@ defmodule Contracts do
 end
 
 defmodule Contracts.Database do
-	@moduledoc false
 	import Ecto.Query
 
-	# SQL is embedded at compile time: the text ships in the beam (no runtime
-	# file read) and editing a .sql recompiles this module.
 	@external_resource Path.join(__DIR__, "sql/contractTopDesired.sql")
 	@external_resource Path.join(__DIR__, "sql/contractClaimItem.sql")
 	@external_resource Path.join(__DIR__, "sql/contractReleaseItemClaim.sql")
@@ -437,7 +430,6 @@ defmodule Contracts.Database do
 end
 
 defmodule Contracts.ItemGate do
-	@moduledoc false
 	use GenServer
 
 	def start_link(opts \\ []) do
@@ -512,7 +504,6 @@ defmodule Contracts.ItemGate do
 end
 
 defmodule Contracts.PageWorker do
-	@moduledoc false
 	use GenServer, restart: :transient
 
 	def start_link({region, page}) do
@@ -784,7 +775,6 @@ defmodule Contracts.PageWorker do
 end
 
 defmodule Contracts.RegionManager do
-	@moduledoc false
 	use GenServer, restart: :permanent
 
 	@max_page_retries 3
@@ -1086,7 +1076,6 @@ defmodule Contracts.RegionManager do
 end
 
 defmodule Contracts.RegionManagerSupervisor do
-	@moduledoc false
 	use Supervisor
 
 	def start_link(_opts), do: Supervisor.start_link(__MODULE__, [], name: __MODULE__)
@@ -1119,7 +1108,6 @@ defmodule Contracts.RegionManagerSupervisor do
 end
 
 defmodule Contracts.Manager do
-	@moduledoc false
 	use GenServer
 
 	@active_round_key {Contracts, :active_round}
@@ -1380,8 +1368,6 @@ defmodule Contracts.Manager do
 end
 
 defmodule Contracts.Broadcast do
-	@moduledoc false
-
 	alias Contracts.Database
 	alias Discord.Embeds
 
@@ -1457,10 +1443,6 @@ defmodule Contracts.Broadcast do
 		end)
 	end
 
-	# The finalized snapshot is reused for paging so a page turn never re-runs
-	# the top-desired query (seconds on a warm book) and pages stay consistent
-	# while the next round re-stamps rows underneath. A round mismatch (fresh
-	# boot, warm DB) falls back to a live query.
 	defp resolve_top(round, config) do
 		limit = Keyword.fetch!(config, :broadcast_limit)
 

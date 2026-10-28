@@ -18,10 +18,6 @@ defmodule Discord.BroadcasterTest do
 
 		MarketmailerTest.Fixtures.park_page_workers()
 
-		# The cycle managers started below spawn a real page-1 worker each;
-		# with zero start jitter in test it would fetch live ESI and close the
-		# single-region round with a stray digest mid-test. A downed watchdog
-		# parks workers on their recheck loop so only synthetic reports land.
 		MarketmailerTest.Fixtures.network_down()
 
 		on_exit(fn ->
@@ -212,7 +208,6 @@ defmodule Discord.BroadcasterTest do
 				cycle_timeout: 10_000
 			)
 
-		# No round closes during a maintenance window, so the embed cannot wait for one.
 		ESI.Maintenance.down(%{status: 503, url: "https://esi.evetech.net/v1/markets/1/orders/"})
 
 		assert_receive {:sent, down_payload}, 1_000
@@ -223,13 +218,9 @@ defmodule Discord.BroadcasterTest do
 		ESI.Maintenance.down(%{status: 502, url: "https://esi.evetech.net/v1/markets/1/orders/"})
 		refute_receive {:sent, _payload}, 200
 
-		# The window only lived ~200ms, so the close is announced by
-		# maintenance but swallowed by the broadcaster's 5s floor: no "0s"
-		# outage embed.
 		ESI.Maintenance.up()
 		refute_receive {:sent, _payload}, 300
 
-		# A genuine recovery still announces.
 		send(broadcaster, {:esi_maintenance, :down, %{since_ms: 1, reason: "HTTP 503"}})
 		assert_receive {:sent, _down_again}, 1_000
 
@@ -267,7 +258,6 @@ defmodule Discord.BroadcasterTest do
 		assert [down] = down_payload.embeds
 		assert down.title == "ESI is down"
 
-		# A 0s flap flips the flag back without a green embed.
 		send(broadcaster, {:esi_maintenance, :up, %{downtime_ms: 100}})
 		refute_receive {:sent, _payload}, 300
 
