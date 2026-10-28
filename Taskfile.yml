@@ -15,18 +15,33 @@ tasks:
     cmds:
       - task --list
 
+  install:
+    desc: Fetch all dependencies (mix deps.get)
+    cmds:
+      - mix deps.get
+
+  update:
+    desc: Update all dependencies to latest allowed versions (mix deps.update --all)
+    cmds:
+      - mix deps.update --all
+
+  remove:
+    desc: Remove all dependencies and build artifacts (mix deps.clean + mix clean)
+    cmds:
+      - mix deps.clean --all
+      - mix clean
+
   setup:
     desc: Install deps, migrate the DB and load the SDE name/system caches (idempotent; SDE_BUILD pins a build, default is the latest published)
-    deps: [playwright:install]
+    deps: [install, playwright:install]
+    env:
+      SDE_DB: '{{.DEV_DB}}'
     cmds:
       - |
-        SDE_DB="${MARKETMAILER_DB:-{{.DEV_DB}}}"
-        MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix setup
-        if [ -n "${SDE_BUILD:-}" ]; then
-          MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import "$SDE_BUILD"
-        else
-          MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB" mix sde.import
-        fi
+        SDE_DB="${MARKETMAILER_DB:-$SDE_DB}"
+        export MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB"
+        mix setup
+        mix sde.import ${SDE_BUILD:-}
 
   playwright:install:
     desc: Install the Chromium build matching the `playwright` CLI on PATH (no-op when current)
@@ -40,31 +55,11 @@ tasks:
         DEV_DB="{{.DEV_DB}}"
         PROD_DB="${MARKETMAILER_DB:-$DEV_DB}"
         EFF_DB="$DEV_DB"
-        if [ -f "$PROD_DB" ]; then EFF_DB="$PROD_DB"; fi
-        if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
-          if ! mkdir -p "$(dirname "$PROD_DB")" 2>/dev/null || [ ! -w "$(dirname "$PROD_DB")" ]; then
-            echo "start: cannot write prod DB dir $(dirname "$PROD_DB") — unset MARKETMAILER_DB to use $DEV_DB, or point it at a writable path"
-            exit 1
-          fi
-        fi
-        if ! command -v sqlite3 >/dev/null 2>&1; then
-          echo "start: sqlite3 CLI not found — cannot verify SDE load"
-          exit 1
-        fi
-        if [ ! -f "$EFF_DB" ]; then
-          echo "start: $EFF_DB missing — run task setup first (migrate + SDE load)"
-          exit 1
-        fi
-        SDE_OK=1
-        for q in "SELECT COUNT(*) FROM sde_imports" "SELECT COUNT(*) FROM names" "SELECT COUNT(*) FROM systems" "SELECT COUNT(*) FROM regions"; do
-          n=$(sqlite3 "$EFF_DB" "$q" 2>/dev/null) || SDE_OK=0
-          if [ -z "$n" ] || [ "$n" = "0" ]; then SDE_OK=0; fi
-        done
-        if [ "$SDE_OK" != "1" ]; then
+        [ -f "$PROD_DB" ] && EFF_DB="$PROD_DB"
+        command -v sqlite3 >/dev/null || { echo "start: sqlite3 CLI not found — cannot verify SDE load"; exit 1; }
+        [ -f "$EFF_DB" ] || { echo "start: $EFF_DB missing — run task setup first (migrate + SDE load)"; exit 1; }
+        if ! n=$(sqlite3 "$EFF_DB" "SELECT MIN(c) FROM (SELECT COUNT(*) c FROM sde_imports UNION ALL SELECT COUNT(*) FROM names UNION ALL SELECT COUNT(*) FROM systems UNION ALL SELECT COUNT(*) FROM regions);" 2>/dev/null) || [ -z "$n" ] || [ "$n" = "0" ]; then
           echo "start: SDE not loaded in $EFF_DB (sde_imports/names/systems/regions empty or missing) — run task setup first"
-          if [ "$EFF_DB" = "$PROD_DB" ] && [ "$PROD_DB" != "$DEV_DB" ]; then
-            echo "start: note: setup loads $DEV_DB; a stale prod file keeps failing — load it directly: MARKETMAILER_DB=\"$PROD_DB\" mix sde.import${SDE_BUILD:+ \"$SDE_BUILD\"}"
-          fi
           exit 1
         fi
         echo "start: SDE caches present in $EFF_DB"
@@ -75,11 +70,10 @@ tasks:
         DEV_DB="{{.DEV_DB}}"
         PROD_DB="${MARKETMAILER_DB:-$DEV_DB}"
         if [ "$PROD_DB" != "$DEV_DB" ] && [ ! -f "$PROD_DB" ] && [ -f "$DEV_DB" ]; then
-          for suffix in "" "-wal" "-shm"; do
-            if [ -f "$DEV_DB$suffix" ]; then
-              cp "$DEV_DB$suffix" "$PROD_DB$suffix"
-            fi
-          done
+          mkdir -p "$(dirname "$PROD_DB")"
+          cp -n "$DEV_DB" "$PROD_DB" 2>/dev/null || true
+          cp -n "$DEV_DB-wal" "$PROD_DB-wal" 2>/dev/null || true
+          cp -n "$DEV_DB-shm" "$PROD_DB-shm" 2>/dev/null || true
           echo "start: seeded $PROD_DB from $DEV_DB"
         fi
       - |
@@ -94,30 +88,17 @@ tasks:
     cmds:
       - |
         BIN={{.BIN}}
-        ROOT="$PWD/_build"
-        if [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; then
-          LIVE=$("$BIN" pid 2>/dev/null || echo unknown)
-          "$BIN" stop >/dev/null 2>&1 || true
-          echo "stop: asked prod release to stop (was pid $LIVE)"
-        fi
-        targets() {
-          pgrep -f "$ROOT/prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)" 2>/dev/null || true
-          pgrep -f "$ROOT/dev/" 2>/dev/null || true
-        }
-        pids=$(targets | sort -u)
+        [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1 && { echo "stop: asked prod release to stop (was pid $("$BIN" pid 2>/dev/null || echo unknown))"; "$BIN" stop >/dev/null 2>&1 || true; }
+        pids=$(pgrep -f "$PWD/_build/(prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)|dev/)" 2>/dev/null | grep -v -e "^$$$" -e "^$PPID$" | sort -u || true)
         if [ -n "$pids" ]; then
           echo "stop: terminating leftovers: $(echo $pids | tr '\n' ' ')"
           kill $pids 2>/dev/null || true
           for _ in $(seq 1 20); do
-            pids=$(targets | sort -u)
+            pids=$(pgrep -f "$PWD/_build/(prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)|dev/)" 2>/dev/null | grep -v -e "^$$$" -e "^$PPID$" | sort -u || true)
             [ -z "$pids" ] && break
             sleep 0.5
           done
-          pids=$(targets | sort -u)
-          if [ -n "$pids" ]; then
-            echo "stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' ')"
-            kill -9 $pids 2>/dev/null || true
-          fi
+          [ -n "$pids" ] && { echo "stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' ')"; kill -9 $pids 2>/dev/null || true; }
         fi
         rm -f priv/data/marketmailer.pid
 
@@ -284,20 +265,12 @@ tasks:
       - |
         DEV_DB="${MARKETMAILER_DEV_DB:-priv/data/dev.db}"
         DEV_PORT="${DASHBOARD_PORT:-4001}"
-        BIN={{.BIN}}
-        if [ "$DEV_DB" = "{{.DEV_DB}}" ] && [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; then
-          echo "dev: refusing: $DEV_DB is the live prod file held by the daemon (see \`ps aux | grep -F marketmailer\`)"
-          echo "dev: run plain \`task dev\` for the isolated priv/data/dev.db, or \`task stop\` first"
+        if [ "$DEV_DB" = "{{.DEV_DB}}" ] && [ -x {{.BIN}} ] && {{.BIN}} pid >/dev/null 2>&1; then
+          echo "dev: refusing: $DEV_DB is the live prod file held by the daemon — run plain \`task dev\` or \`task stop\` first"
           exit 1
         fi
-        mkdir -p "$(dirname "$DEV_DB")"
-        mkdir -p logs
-        if command -v sqlite3 >/dev/null 2>&1 && [ -f "$DEV_DB" ]; then
-          if [ "$(sqlite3 "$DEV_DB" 'SELECT COUNT(*) FROM regions' 2>/dev/null || echo 0)" = "0" ]; then
-            echo "dev: warning: no SDE regions in $DEV_DB — market pollers will not start (regions_missing)"
-            echo "dev: load them with \`mix sde.import\` (dev targets priv/data/dev.db), then re-run task dev"
-          fi
-        fi
+        mkdir -p "$(dirname "$DEV_DB")" logs
+        command -v sqlite3 >/dev/null 2>&1 && [ -f "$DEV_DB" ] && [ "$(sqlite3 "$DEV_DB" 'SELECT COUNT(*) FROM regions' 2>/dev/null || echo 0)" = "0" ] && echo "dev: warning: no SDE regions in $DEV_DB — pollers will not start (run mix sde.import, then re-run task dev)"
         MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" ERL_CRASH_DUMP="$PWD/logs/dev_erl_crash.dump" iex -S mix run
     interactive: true
 
@@ -345,11 +318,6 @@ tasks:
     desc: Assemble the prod OTP release with Castle hot-upgrade support
     cmds:
       - MIX_ENV=prod mix release
-
-  update:
-    desc: Update all dependencies to latest allowed versions (mix deps.update --all)
-    cmds:
-      - mix deps.update --all
 
   update:hex:
     desc: Update Hex and Rebar themselves (mix local.hex)
