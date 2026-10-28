@@ -93,7 +93,7 @@ defmodule ESI do
 
 		request_opts = [
 			headers: headers,
-			pool_timeout: Keyword.get(opts, :pool_timeout, timeout),
+			finch: [pool_timeout: Keyword.get(opts, :pool_timeout, timeout)],
 			receive_timeout: timeout,
 			connect_options: [timeout: timeout],
 			retry: Keyword.get(opts, :retry, :safe_transient),

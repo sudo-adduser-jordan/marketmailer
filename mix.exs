@@ -25,11 +25,11 @@ defmodule Marketmailer.MixProject do
 
 	defp deps do
 		[
-			{:req, "~> 0.5.0"},
+			{:req, "~> 0.7"},
 			{:ecto_sql, "~> 3.0"},
 			{:ecto_sqlite3, "~> 0.18"},
 			{:nostrum, github: "Kraigie/nostrum"},
-			{:playwright_ex, "~> 0.12.1"},
+			{:playwright_ex, "~> 0.15.0"},
 			{:castle, "~> 1.0"},
 			{:phoenix, "~> 1.8"},
 			{:phoenix_pubsub, "~> 2.1"},
