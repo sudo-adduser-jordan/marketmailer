@@ -1,5 +1,8 @@
 # User Generated
 
+## Tools
+- never use sleep
+
 ## Ask
 
 - Always use the ask feature when presenting options, choices, or decisions to the user.
