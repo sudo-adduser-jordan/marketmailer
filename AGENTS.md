@@ -37,6 +37,10 @@ Reference: https://taskfile.dev/docs/reference/schema
   - `stop`
   - `dev`
 
+- add colored logging
+- [command] content
+
+
 # End User Generated
 
 
