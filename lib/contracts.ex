@@ -114,6 +114,13 @@ defmodule Contracts do
 	defp number(nil), do: nil
 	defp number(value) when is_number(value), do: value
 	defp number(_value), do: nil
+
+	def error_reason(%{__struct__: module}) when is_atom(module), do: module |> Module.split() |> List.last()
+	def error_reason(reason) when is_atom(reason) or is_binary(reason), do: reason
+	def error_reason(_reason), do: :unknown
+
+	def error_detail(%{__exception__: true} = error), do: Exception.message(error)
+	def error_detail(error), do: inspect(error)
 end
 
 defmodule Contracts.Database do
@@ -322,7 +329,7 @@ defmodule Contracts.Database do
 			{:error, error} ->
 				Marketmailer.Log.warning(
 					"contracts_query_failed",
-					%{query: "top_desired", reason: inspect(error)},
+					%{query: "top_desired", reason: Contracts.error_reason(error), detail: Contracts.error_detail(error)},
 					"Contract top-100 query failed"
 				)
 
@@ -702,7 +709,7 @@ defmodule Contracts.PageWorker do
 					{:error, error} ->
 						Marketmailer.Log.warning(
 							"contracts_item_persist_failed",
-							%{contract_id: contract_id, reason: inspect(error)},
+							%{contract_id: contract_id, reason: Contracts.error_reason(error), detail: Contracts.error_detail(error)},
 							"Contract items persist failed"
 						)
 

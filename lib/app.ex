@@ -4,7 +4,7 @@ defmodule Marketmailer.Application do
 	@impl true
 	def start(_type, _args) do
 		Marketmailer.Log.setup()
-		Marketmailer.Log.info("app_start", %{booted_at: DateTime.utc_now()}, "marketmailer starting")
+		Marketmailer.Log.info("app_start", %{booted_at: rfc3339_ms(DateTime.utc_now())}, "marketmailer starting")
 		create_cache_if_not_exists(:market_cache, [:named_table, :set, :public, read_concurrency: true])
 		create_cache_if_not_exists(:esi_error_state, [:named_table, :set, :public, read_concurrency: true])
 		create_cache_if_not_exists(:esi_rate_state, [:named_table, :set, :public, read_concurrency: true])
@@ -101,5 +101,9 @@ defmodule Marketmailer.Application do
 			:undefined -> :ets.new(name, opts)
 			_tid -> :ok
 		end
+	end
+
+	defp rfc3339_ms(datetime) do
+		datetime |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
 	end
 end

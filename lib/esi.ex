@@ -119,8 +119,8 @@ defmodule ESI do
 
 				Marketmailer.Log.error(
 					"esi_http_error",
-					Map.merge(context, %{url: url, error: inspect(error)}),
-					"#{url} HTTP error: #{inspect(error)}"
+					Map.merge(context, %{url: url, reason: http_error_reason(error), detail: http_error_detail(error)}),
+					"ESI HTTP request failed"
 				)
 
 				{:error, error}
@@ -138,6 +138,14 @@ defmodule ESI do
 
 	defp unanswered?(%{reason: :request_failed}), do: true
 	defp unanswered?(_reason), do: false
+
+	defp http_error_reason(%{reason: inner}) when is_atom(inner) or is_binary(inner), do: inner
+	defp http_error_reason(%{__struct__: module}) when is_atom(module), do: module |> Module.split() |> List.last()
+	defp http_error_reason(reason) when is_atom(reason) or is_binary(reason), do: reason
+	defp http_error_reason(_reason), do: :unknown
+
+	defp http_error_detail(%{__exception__: true} = error), do: Exception.message(error)
+	defp http_error_detail(error), do: inspect(error)
 
 	def network_error?(%{reason: reason}) when reason in @network_reasons, do: true
 
