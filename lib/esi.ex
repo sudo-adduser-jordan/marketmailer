@@ -1,7 +1,5 @@
 defmodule ESI do
 	@user_agent "lostcoastwizard > BEAM me up, Scotty!"
-	@maint_key :maintenance_mode
-	@maint_ping_ms 10_000
 	@error_limit_threshold 20
 	@pause_ms 61_000
 	@pause_min_ms 5_000
@@ -12,6 +10,9 @@ defmodule ESI do
 	@wait_note_key :pause_noted
 	@rate_table :esi_rate_state
 	@rate_defaults [enabled: true, max_block_ms: 900_000, jitter_ms: 500]
+	# Market fetches only: a maintenance window must fail fast per worker instead
+	# of queueing behind the shared Finch pool.
+	@market_pool_timeout_ms 5_000
 	@network_reasons [
 		:nxdomain,
 		:econnrefused,
@@ -75,6 +76,15 @@ defmodule ESI do
 	def contract_items_url(contract_id), do: "https://esi.evetech.net/v1/contracts/public/items/#{contract_id}/"
 
 	def fetch(region, page \\ 1, opts \\ []) do
+		# Market polling fans out over ~1.5k page workers, so a maintenance window
+		# must surface as one fast failure per worker, not as four retried requests
+		# queued behind the Finch pool: the fleet pauses on the first 5xx instead.
+		opts =
+			Keyword.merge(
+				[retry: false, pool_timeout: @market_pool_timeout_ms],
+				opts
+			)
+
 		get(page_url(region, page), Keyword.put(opts, :context, %{region: region, page: page}))
 	end
 
@@ -92,19 +102,27 @@ defmodule ESI do
 
 		request_opts = [
 			headers: headers,
-			pool_timeout: timeout,
+			pool_timeout: Keyword.get(opts, :pool_timeout, timeout),
 			receive_timeout: timeout,
 			connect_options: [timeout: timeout],
+			retry: Keyword.get(opts, :retry, :safe_transient),
 			retry_log_level: :info
 		]
 
-		case http_fun.(url, request_opts) do
+		case request(http_fun, url, request_opts) do
 			{:ok, response} ->
 				Marketmailer.Maintenance.report_connected()
 				respond(response, url)
 
 			{:error, error} ->
-				if network_error?(error), do: Marketmailer.Maintenance.report_disconnect(error)
+				# A transport failure is the network watchdog's call; anything else
+				# (a 5xx-free failure such as a Finch pool that could not hand out a
+				# connection) means ESI is not answering, so the fleet pauses.
+				if network_error?(error) do
+					Marketmailer.Maintenance.report_disconnect(error)
+				else
+					ESI.Maintenance.down(error)
+				end
 
 				Marketmailer.Log.error(
 					"esi_http_error",
@@ -114,6 +132,18 @@ defmodule ESI do
 
 				{:error, error}
 		end
+	end
+
+	# A raised request never reaches the `{:error, _}` branch: Finch raises when a
+	# saturated pool cannot hand out a connection, and that exception used to kill
+	# the caller mid-fetch (which is what took the market poller down for good).
+	defp request(http_fun, url, opts) do
+		http_fun.(url, opts)
+	rescue
+		error -> {:error, %{reason: :request_failed, detail: Exception.message(error)}}
+	catch
+		:exit, reason when reason in [:shutdown, :normal] -> exit(reason)
+		kind, reason -> {:error, %{reason: :request_failed, detail: inspect({kind, reason})}}
 	end
 
 	def network_error?(%{reason: reason}) when reason in @network_reasons, do: true
@@ -154,7 +184,7 @@ defmodule ESI do
 	defp respond(%{status: 429} = response, url), do: {:error, :rate_limited, meta(response, url)}
 
 	defp respond(%{status: status} = response, url) when status in [420, 500, 502, 503, 504] do
-		activate_maintenance()
+		activate_maintenance(status, url)
 		{:error, :service_unavailable, meta(response, url)}
 	end
 
@@ -165,16 +195,11 @@ defmodule ESI do
 		{:error, response.status}
 	end
 
-	defp activate_maintenance, do: :ets.insert(@table, {@maint_key, System.system_time(:millisecond) + @maint_ping_ms})
+	defp activate_maintenance(status, url), do: ESI.Maintenance.down(%{status: status, url: url})
 
-	defp clear_maintenance, do: :ets.delete(@table, @maint_key)
+	defp clear_maintenance, do: ESI.Maintenance.up()
 
-	def maintenance_active? do
-		case :ets.lookup(@table, @maint_key) do
-			[{@maint_key, t}] -> t > System.system_time(:millisecond)
-			_ -> false
-		end
-	end
+	def maintenance_active?, do: ESI.Maintenance.down?()
 
 	defp meta(response, url) do
 		error_rem = first(response.headers, "x-esi-error-limit-remain")

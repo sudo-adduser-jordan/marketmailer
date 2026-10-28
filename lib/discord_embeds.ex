@@ -363,6 +363,29 @@ defmodule Discord.Embeds do
 		|> with_version()
 	end
 
+	def esi_up_embed(downtime_ms \\ nil) do
+		description =
+			case downtime_ms do
+				ms when is_integer(ms) and ms > 0 ->
+					"Polling resumed; ESI was unavailable for #{Utils.format_duration_ms(ms)}."
+
+				_ ->
+					"Polling resumed; ESI is answering again."
+			end
+
+		%Embed{
+			title: "ESI is back",
+			description: description,
+			color: @color_success,
+			timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+			author: %Embed.Author{name: "\u200B", icon_url: @icon_broadcast},
+			thumbnail: %Embed.Thumbnail{
+				url: @icon_
+			}
+		}
+		|> with_version()
+	end
+
 	def no_update_embed(failures \\ %{}) do
 		description =
 			if failures == %{} do

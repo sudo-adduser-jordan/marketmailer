@@ -2,6 +2,9 @@ defmodule Marketmailer.RegionManager do
 	@moduledoc false
 	use GenServer, restart: :permanent
 
+	@cycle_timeout_ms 600_000
+	@heartbeat_ms 60_000
+
 	def start_link(id, opts \\ []) when is_integer(id) and is_list(opts) do
 		GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
 	end
@@ -30,7 +33,7 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	@impl true
-	def init({id, _opts}) do
+	def init({id, opts}) do
 		pages = [1 | Etag.Database.pages_for_region(id)] |> Enum.uniq()
 		Enum.each(pages, &start_page(id, &1))
 
@@ -40,10 +43,16 @@ defmodule Marketmailer.RegionManager do
 				pid -> MapSet.new([pid])
 			end
 
+		heartbeat_ms = Keyword.get(opts, :heartbeat_ms, @heartbeat_ms)
+
 		{:ok,
 		 %{
 			 id: id,
 			 cycle_id: nil,
+			 cycle_timer: nil,
+			 cycle_timeout: Keyword.get(opts, :cycle_timeout, @cycle_timeout_ms),
+			 heartbeat_ms: heartbeat_ms,
+			 heartbeat_timer: Process.send_after(self(), :heartbeat, heartbeat_ms),
 			 started: MapSet.new(),
 			 results: %{},
 			 expected_pages: nil,
@@ -74,6 +83,7 @@ defmodule Marketmailer.RegionManager do
 		state =
 			if is_nil(state.cycle_id) do
 				%{state | cycle_id: System.unique_integer([:positive, :monotonic])}
+				|> arm_cycle_timeout()
 			else
 				state
 			end
@@ -137,6 +147,22 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	@impl true
+	def handle_info(:heartbeat, state) do
+		state = %{state | heartbeat_timer: Process.send_after(self(), :heartbeat, state.heartbeat_ms)}
+		{:noreply, reconcile_registry(state)}
+	end
+
+	# A cycle that never completes (a page worker died, was never restarted, or a
+	# report was lost) must not hold the Discord barrier open forever: report the
+	# missing pages as failures and let the next cycle start.
+	def handle_info({:cycle_timeout, cycle_id}, %{cycle_id: cycle_id} = state) do
+		state = emit(state, timeout_event(state))
+		{:noreply, new_cycle(state)}
+	end
+
+	def handle_info({:cycle_timeout, _cycle_id}, state), do: {:noreply, state}
+
+	@impl true
 	def handle_info(_message, state), do: {:noreply, state}
 
 	defp handle_page_count(count, state) do
@@ -194,7 +220,64 @@ defmodule Marketmailer.RegionManager do
 	end
 
 	defp new_cycle(state) do
-		%{state | cycle_id: nil, started: MapSet.new(), results: %{}}
+		cancel_timer(state.cycle_timer)
+		%{state | cycle_id: nil, cycle_timer: nil, started: MapSet.new(), results: %{}}
+	end
+
+	defp arm_cycle_timeout(state) do
+		cancel_timer(state.cycle_timer)
+
+		%{
+			state
+			| cycle_timer: Process.send_after(self(), {:cycle_timeout, state.cycle_id}, state.cycle_timeout)
+		}
+	end
+
+	defp cancel_timer(nil), do: :ok
+	defp cancel_timer(ref), do: Process.cancel_timer(ref)
+
+	defp timeout_event(state) do
+		pages = state.expected_pages || 1
+
+		missing =
+			for page <- 1..pages, not Map.has_key?(state.results, page), do: %{page: page, reason: :timeout}
+
+		if missing == [] do
+			cycle_event(pages, state)
+		else
+			summary = %{
+				region: state.id,
+				cycle_id: state.cycle_id,
+				pages: pages,
+				updated_pages: updated_pages(state.results),
+				failures: missing
+			}
+
+			log_failure(summary)
+			{:region_refresh_failed, summary}
+		end
+	end
+
+	# Registry membership is the truth for "is this page polled": the worker set
+	# can disappear underneath a manager (a PageSup restart) without any report to
+	# trigger reconcile_pages/2, and nothing else would ever start them again.
+	defp reconcile_registry(state) do
+		missing =
+			state.pages
+			|> Enum.reject(fn page -> Registry.lookup(Marketmailer.Registry, {:page, state.id, page}) != [] end)
+			|> Enum.sort()
+
+		Enum.each(missing, &start_page(state.id, &1))
+
+		if missing != [] do
+			Marketmailer.Log.info(
+				"region_pages_reconciled",
+				%{region: state.id, pages: MapSet.size(state.pages), missing: length(missing)},
+				"Region #{state.id}: restarted #{length(missing)} missing page workers"
+			)
+		end
+
+		state
 	end
 
 	defp set_expected_pages(%{expected_pages: previous} = state, count) when is_integer(previous) and previous > count do

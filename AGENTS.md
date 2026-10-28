@@ -295,7 +295,16 @@ column 0), then pipe to jq:
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
   (types, regions, systems, composed NPC station names)
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling.
-  The error-limit gate trips below `@error_limit_threshold` (20 of 100), uses
+  Market fetches disable Req retries and cap `pool_timeout`, and a raised request
+  (a saturated Finch pool) is rescued into an error instead of killing the page
+  worker. `lib/esi/maintenance.ex` - `ESI.Maintenance`: the ESI availability
+  window. Edge-based, not TTL-based: the first 5xx/unanswered request opens it,
+  the first 200/304 closes it, and only the edges are announced
+  (`esi_maintenance_down`/`esi_maintenance_up`, plus `esi_maintenance_stale` every
+  10 min once a window outlives 30 min). `:maintenance_mode` in
+  `:esi_error_state` is the cheap pause gate every page worker reads.
+  `window_open?/0` is the announced edge (what the broadcaster renders), `down?/0`
+  the pause gate. The error-limit gate trips below `@error_limit_threshold` (20 of 100), uses
   `X-Esi-Error-Limit-Reset` for the pause (5–65 s, 61 s default), logs the
   triggering response once per route as `esi_error_limit_low` and the stall
   once per window as `esi_error_limit_pause`. Only some ESI routes report the
@@ -313,12 +322,23 @@ column 0), then pipe to jq:
   each page polls on its own ESI TTL/ETag so unchanged pages stay cheap
   `304`s; every region emits exactly one event per cycle, including a
   zero-order region and a page-1 failure, so the broadcast barrier always
-  closes)
+  closes; a 60 s heartbeat reconciles the worker set against the Registry, so
+  a `PageSup` restart (or a worker that stopped without a report) is rebuilt
+  instead of leaving the region silently unpolled; a cycle that never completes
+  emits `region_refresh_failed` with the missing pages after `cycle_timeout`
+  (10 min), so one lost report cannot wedge the barrier)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
 - `lib/discord.ex` - nostrum consumer, slash commands,
   `Discord.Broadcaster` (starts only with the pollers; collects one report
   per configured region and broadcasts when every one has reported, logging
-  `round_closed`, `broadcast_delivered`/`broadcast_no_channels` at info),
+  `round_closed`, `broadcast_delivered`/`broadcast_no_channels` at info). It
+  also subscribes to `ESI.Maintenance` and posts the two window edges outside
+  the barrier — a yellow "ESI is down" embed on the first failure and a green
+  "ESI is back" embed (with the downtime) on the first success — because no
+  round closes while polling is paused; a round that stalls for `round_timeout`
+  (10 min) is closed with the missing regions as failures (`round_stalled`)
+  instead of leaving the channel silent, unless an ESI window already explained
+  the silence,
   `Discord.BotSupervisor`. The broadcast ships the exact `/list_market`
   message (`Discord.Embeds.market_list_message/1`: page 1 of `list_per_page`
   = 10 rows plus Prev/Next buttons), so the command and the broadcast can

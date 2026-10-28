@@ -203,6 +203,24 @@ defmodule Marketmailer.Utils do
 
 	def format_uptime(_), do: "?"
 
+	# Short durations for user-facing copy ("4m 12s", "38s", "1h 05m").
+	def format_duration_ms(nil), do: "?"
+
+	def format_duration_ms(ms) when is_integer(ms) and ms >= 0 do
+		seconds = div(ms, 1_000)
+		hours = div(seconds, 3_600)
+		minutes = div(rem(seconds, 3_600), 60)
+		rest = rem(seconds, 60)
+
+		cond do
+			hours > 0 -> "#{hours}h #{String.pad_leading("#{minutes}", 2, "0")}m"
+			minutes > 0 -> "#{minutes}m #{rest}s"
+			true -> "#{rest}s"
+		end
+	end
+
+	def format_duration_ms(_), do: "?"
+
 	def format_ttl(ttl_ms) do
 		total_seconds = div(ttl_ms, 1_000)
 		minutes = div(total_seconds, 60)

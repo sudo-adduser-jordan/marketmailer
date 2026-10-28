@@ -18,6 +18,7 @@ defmodule Marketmailer.Application do
 				Database,
 				Database.Queue,
 				Marketmailer.Maintenance,
+				ESI.Maintenance,
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
 				{Task.Supervisor, name: Marketmailer.TaskSup}
@@ -42,7 +43,7 @@ defmodule Marketmailer.Application do
 	defp poller_core_children do
 		if pollers_enabled?() do
 			[
-				{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup},
+				page_sup(),
 				Marketmailer.RegionManagerSupervisor
 			] ++
 				contracts_children() ++
@@ -52,6 +53,14 @@ defmodule Marketmailer.Application do
 		else
 			[]
 		end
+	end
+
+	# An ESI maintenance window saturated the Finch pool and killed 53 page workers
+	# at once; the default 3/5s restart budget turns that into a dead poller, and it
+	# dies silently. Workers are idempotent and cheap, so a full-fleet storm is
+	# absorbed instead.
+	defp page_sup do
+		{DynamicSupervisor, strategy: :one_for_one, name: Marketmailer.PageSup, max_restarts: 10_000, max_seconds: 60}
 	end
 
 	defp contracts_children do

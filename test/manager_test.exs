@@ -12,6 +12,7 @@ defmodule Marketmailer.RegionManagerTest do
 		MarketmailerTest.Fixtures.ensure_ets(:esi_rate_state)
 
 		for key <- [:maintenance_mode, :maintenance_ping, :blocked_until], do: :ets.delete(:esi_error_state, key)
+		MarketmailerTest.Fixtures.reset_esi_maintenance()
 		:ets.match_delete(:esi_rate_state, {{:rate_block, :_}, :_})
 		:ets.match_delete(:esi_rate_state, {{:rate_group, :_}, :_})
 
@@ -135,6 +136,36 @@ defmodule Marketmailer.RegionManagerTest do
 		assert summary.updated_pages == [1, 2, 3]
 	end
 
+	test "a cycle that never completes is reported as a failure" do
+		start_manager(@region)
+		RegionManager.subscribe(@region)
+
+		RegionManager.page_started(@region, 1)
+		RegionManager.page_result(@region, 1, :updated, %{pages: 2})
+		RegionManager.page_started(@region, 2)
+
+		assert_receive {:region_refresh_failed, summary}, 2_000
+		assert summary.pages == 2
+		assert summary.updated_pages == [1]
+		assert %{page: 2, reason: :timeout} in summary.failures
+	end
+
+	test "heartbeat restarts a page worker that disappeared" do
+		{:ok, manager} = RegionManager.start_link(@region, cycle_timeout: 5_000, heartbeat_ms: 50)
+		on_exit(fn -> stop_region(@region) end)
+
+		RegionManager.page_count(@region, 2)
+		:sys.get_state(manager)
+		assert page_ids(@region) == [1, 2]
+
+		original = page_worker(@region, 2)
+		GenServer.stop(original, :normal)
+
+		replacement = await_replacement(@region, 2, original)
+		assert is_pid(replacement)
+		assert Process.alive?(replacement)
+	end
+
 	defp start_manager(region) do
 		{:ok, manager} = RegionManager.start_link(region, cycle_timeout: 1_000)
 		on_exit(fn -> stop_region(region) end)
@@ -188,5 +219,27 @@ defmodule Marketmailer.RegionManagerTest do
 	defp page_worker(region, page) do
 		[{pid, _}] = Registry.lookup(Marketmailer.Registry, {:page, region, page})
 		pid
+	end
+
+	# The registry drops a dead worker's entry asynchronously, so a replacement is
+	# only identifiable by a different pid than the one that was stopped.
+	defp await_replacement(region, page, original, attempts \\ 100) do
+		replacement =
+			case Registry.lookup(Marketmailer.Registry, {:page, region, page}) do
+				[{pid, _}] when pid != original -> pid
+				_ -> nil
+			end
+
+		cond do
+			is_pid(replacement) ->
+				replacement
+
+			attempts <= 0 ->
+				nil
+
+			true ->
+				Process.sleep(10)
+				await_replacement(region, page, original, attempts - 1)
+		end
 	end
 end

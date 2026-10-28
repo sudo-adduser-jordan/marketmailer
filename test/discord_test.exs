@@ -6,7 +6,7 @@ defmodule Discord.BroadcasterTest do
 	setup do
 		MarketmailerTest.Fixtures.ensure_ets(:esi_error_state)
 		MarketmailerTest.Fixtures.ensure_ets(:market_cache)
-		:ets.delete(:esi_error_state, :maintenance_mode)
+		MarketmailerTest.Fixtures.reset_esi_maintenance()
 
 		if !Process.whereis(Marketmailer.Registry) do
 			start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
@@ -17,6 +17,8 @@ defmodule Discord.BroadcasterTest do
 		end
 
 		MarketmailerTest.Fixtures.park_page_workers()
+
+		on_exit(fn -> MarketmailerTest.Fixtures.reset_esi_maintenance() end)
 
 		unique = System.unique_integer([:positive])
 		task_supervisor = :"broadcaster_tasks_#{unique}"
@@ -175,6 +177,71 @@ defmodule Discord.BroadcasterTest do
 		assert embed.title == "ESI is down"
 	end
 
+	test "announces the ESI maintenance window with a down and an up embed", %{
+		task_supervisor: task_supervisor
+	} do
+		test_pid = self()
+		region = 97_000_050
+
+		start_broadcaster(
+			[region],
+			[300],
+			market_list(),
+			fn _channel, payload ->
+				send(test_pid, {:sent, payload})
+				{:ok, :sent}
+			end,
+			task_supervisor: task_supervisor
+		)
+
+		# No round closes during a maintenance window, so the embed cannot wait for one.
+		ESI.Maintenance.down(%{status: 503, url: "https://esi.evetech.net/v1/markets/1/orders/"})
+
+		assert_receive {:sent, down_payload}, 1_000
+		assert [down] = down_payload.embeds
+		assert down.title == "ESI is down"
+		assert down.color == 0xFAA61A
+
+		ESI.Maintenance.down(%{status: 502, url: "https://esi.evetech.net/v1/markets/1/orders/"})
+		refute_receive {:sent, _payload}, 200
+
+		ESI.Maintenance.up()
+
+		assert_receive {:sent, up_payload}, 1_000
+		assert [up] = up_payload.embeds
+		assert up.title == "ESI is back"
+		assert up.color == 0x43B581
+		assert up.description =~ "Polling resumed"
+
+		ESI.Maintenance.up()
+		refute_receive {:sent, _payload}, 200
+	end
+
+	test "closes a stalled round instead of staying silent", %{task_supervisor: task_supervisor} do
+		test_pid = self()
+		first = 97_000_060
+		second = 97_000_061
+
+		start_broadcaster(
+			[first, second],
+			[300],
+			market_list(),
+			fn _channel, payload ->
+				send(test_pid, {:sent, payload})
+				{:ok, :sent}
+			end,
+			task_supervisor: task_supervisor,
+			round_timeout: 100
+		)
+
+		complete_cycle(first, :unchanged)
+
+		assert_receive {:sent, payload}, 1_000
+		assert [no_update | _rest] = payload.embeds
+		assert no_update.title == "No market updates"
+		assert no_update.description =~ "no_report"
+	end
+
 	test "does nothing when no channels are registered", %{task_supervisor: task_supervisor} do
 		test_pid = self()
 		region = 97_000_040
@@ -208,6 +275,12 @@ defmodule Discord.BroadcasterTest do
 		market_fun =
 			if is_function(market_result, 0), do: market_result, else: fn -> market_result end
 
+		extra =
+			case Keyword.fetch(opts, :round_timeout) do
+				{:ok, timeout} -> [round_timeout: timeout]
+				:error -> []
+			end
+
 		pid =
 			start_supervised!(
 				{Discord.Broadcaster,
@@ -218,7 +291,7 @@ defmodule Discord.BroadcasterTest do
 					 task_supervisor: Keyword.get(opts, :task_supervisor, Marketmailer.TaskSup),
 					 channels_fun: fn -> channels end,
 					 market_fun: market_fun
-				 ] ++ deliver_opts}
+				 ] ++ deliver_opts ++ extra}
 			)
 
 		pid
@@ -344,6 +417,22 @@ defmodule Discord.EmbedsTest do
 		items = [%{item: "Zarmazd", margin: 1.0}]
 
 		assert Discord.Embeds.market_list_embed(items).description == "**Zarmazd** +1.00 • ?"
+	end
+
+	test "the ESI up embed is green and names the downtime" do
+		embed = Discord.Embeds.esi_up_embed(252_000)
+
+		assert embed.title == "ESI is back"
+		assert embed.color == 0x43B581
+		assert embed.description =~ "4m 12s"
+		assert embed.footer.text =~ "• v"
+	end
+
+	test "the ESI down embed stays a yellow warning" do
+		embed = Discord.Embeds.esi_down_embed()
+
+		assert embed.title == "ESI is down"
+		assert embed.color == 0xFAA61A
 	end
 
 	defp market_list do

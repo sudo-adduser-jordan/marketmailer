@@ -150,7 +150,14 @@ defmodule Marketmailer.PageWorker do
 
 	defp handle_error(reason, errs, state) do
 		%{id: id, page: page} = state
-		delay = if ESI.network_error?(reason), do: Marketmailer.Maintenance.recheck_ms(), else: backoff_ms(errs)
+
+		delay =
+			if ESI.network_error?(reason) or pause_reason?(reason) do
+				Marketmailer.Maintenance.recheck_ms()
+			else
+				backoff_ms(errs)
+			end
+
 		schedule_next(delay)
 
 		Marketmailer.Log.warning(
@@ -162,6 +169,11 @@ defmodule Marketmailer.PageWorker do
 		Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: failure_reason(reason)})
 		{:noreply, %{state | errors: errs + 1}}
 	end
+
+	# A request that never got an answer (saturated pool, raised adapter) means
+	# ESI is not serving: wait for the pause window instead of the long backoff.
+	defp pause_reason?(%{reason: :request_failed}), do: true
+	defp pause_reason?(_reason), do: false
 
 	defp persist_orders(data, ctx) do
 		case Market.Database.upsert_orders(data, ctx.url) do

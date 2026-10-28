@@ -18,6 +18,7 @@ defmodule Marketmailer.PageWorkerGateTest do
 		MarketmailerTest.Fixtures.ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
 
 		for key <- [:maintenance_mode, :maintenance_ping, :blocked_until], do: :ets.delete(:esi_error_state, key)
+		MarketmailerTest.Fixtures.reset_esi_maintenance()
 		:ets.match_delete(:esi_rate_state, {{:rate_block, :_}, :_})
 		:ets.match_delete(:esi_rate_state, {{:rate_group, :_}, :_})
 
@@ -131,6 +132,33 @@ defmodule Marketmailer.PageWorkerGateTest do
 
 		assert_receive {:http, url}, 1_000
 		assert url =~ "markets/#{@region}/orders/?page=1"
+	end
+
+	test "a raised request pauses instead of killing the worker" do
+		MarketmailerTest.Fixtures.reset_esi_maintenance()
+		MarketmailerTest.Fixtures.reset_network()
+
+		Application.put_env(:marketmailer, :esi_http_fun, fn _url, _opts ->
+			raise "Finch was unable to provide a connection within the timeout due to excess queuing"
+		end)
+
+		manager = start_manager(@region)
+		_ = manager
+		RegionManager.subscribe(@region)
+		worker = page_worker(@region, 1)
+
+		log =
+			ExUnit.CaptureLog.capture_log(fn ->
+				send(worker, :work)
+				Process.sleep(200)
+			end)
+
+		assert Process.alive?(worker)
+		assert ESI.Maintenance.down?()
+		assert log =~ "page_fetch_error"
+
+		assert_receive {:region_refresh_failed, summary}, 1_000
+		assert %{page: 1, reason: :request_failed} in summary.failures
 	end
 
 	defp start_manager(region) do

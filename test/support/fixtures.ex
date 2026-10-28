@@ -18,6 +18,12 @@ defmodule MarketmailerTest.Fixtures do
 		:ok
 	end
 
+	# ESI availability is edge-based (`ESI.Maintenance`): a window left over from a
+	# previous test would swallow the next down/up edge, so both keys go.
+	def reset_esi_maintenance do
+		ESI.Maintenance.reset()
+	end
+
 	def network_down(reason \\ :econnrefused) do
 		ensure_ets(:network_state, [:named_table, :set, :public, read_concurrency: true])
 

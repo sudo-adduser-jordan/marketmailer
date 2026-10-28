@@ -760,6 +760,7 @@ defmodule Discord.Broadcaster do
 	alias Nostrum.Bot
 
 	@seen_limit 10_000
+	@round_timeout_ms 600_000
 
 	def start_link(opts \\ []) do
 		name = Keyword.get(opts, :name, __MODULE__)
@@ -770,6 +771,7 @@ defmodule Discord.Broadcaster do
 	def init(opts) do
 		regions = Keyword.get(opts, :regions, Marketmailer.RegionManagerSupervisor.region_ids())
 		Enum.each(regions, &subscribe_region/1)
+		ESI.Maintenance.subscribe(self())
 
 		state = %{
 			async: Keyword.get(opts, :async, true),
@@ -781,7 +783,10 @@ defmodule Discord.Broadcaster do
 			regions: regions,
 			round: Keyword.get(opts, :round, 1),
 			reports: %{},
-			seen: MapSet.new()
+			seen: MapSet.new(),
+			esi_down: ESI.Maintenance.window_open?(),
+			round_timeout: Keyword.get(opts, :round_timeout, @round_timeout_ms),
+			round_timer: nil
 		}
 
 		{:ok, state}
@@ -791,12 +796,15 @@ defmodule Discord.Broadcaster do
 	def code_change(_vsn, state, _extra) when is_map(state) do
 		state =
 			state
-			|> Map.drop([:pending, :round_timer, :round_timeout])
+			|> Map.drop([:pending, :round_timer])
 			|> Map.merge(%{
 				regions: Map.get(state, :regions, Marketmailer.RegionManagerSupervisor.region_ids()),
 				round: Map.get(state, :round, 1),
 				reports: %{},
-				seen: Map.get(state, :seen, MapSet.new())
+				seen: Map.get(state, :seen, MapSet.new()),
+				esi_down: Map.get(state, :esi_down, ESI.Maintenance.window_open?()),
+				round_timeout: Map.get(state, :round_timeout, @round_timeout_ms),
+				round_timer: nil
 			})
 			|> Map.new(fn
 				{key, fun} when key in [:channels_fun, :market_fun, :deliver_fun, :prune_fun] and is_function(fun) ->
@@ -835,6 +843,26 @@ defmodule Discord.Broadcaster do
 		{:noreply, state}
 	end
 
+	# The two edges of an ESI maintenance window are announced directly: no round
+	# closes while polling is paused, so a round-based warning can never fire
+	# during the one outage users need to hear about.
+	def handle_info({:esi_maintenance, :down, _info}, %{esi_down: false} = state) do
+		state = %{state | esi_down: true}
+		payload = %{embeds: [Embeds.esi_down_embed()], components: []}
+		deliver_lifecycle(state, %{round: state.round}, "esi_down", payload)
+	end
+
+	def handle_info({:esi_maintenance, :up, info}, %{esi_down: true} = state) do
+		state = %{state | esi_down: false}
+		payload = %{embeds: [Embeds.esi_up_embed(Map.get(info, :downtime_ms))], components: []}
+		deliver_lifecycle(state, %{round: state.round}, "esi_up", payload)
+	end
+
+	def handle_info({:esi_maintenance, _status, _info}, state), do: {:noreply, state}
+
+	def handle_info({:round_deadline, round}, %{round: round} = state), do: stall_round(state)
+	def handle_info({:round_deadline, _round}, state), do: {:noreply, state}
+
 	def handle_info(_message, state), do: {:noreply, state}
 
 	@impl true
@@ -868,6 +896,7 @@ defmodule Discord.Broadcaster do
 
 			true ->
 				state = note_seen(state, key)
+				state = if map_size(state.reports) == 0, do: arm_round_deadline(state), else: state
 				state = %{state | reports: Map.put(state.reports, region, {cycle_id, outcome})}
 
 				if Enum.all?(state.regions, &Map.has_key?(state.reports, &1)) do
@@ -878,9 +907,58 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
+	defp arm_round_deadline(state) do
+		cancel_timer(state.round_timer)
+
+		%{
+			state
+			| round_timer: Process.send_after(self(), {:round_deadline, state.round}, state.round_timeout)
+		}
+	end
+
+	# One region that never reports must not silence the channel forever: the
+	# round closes with the missing regions as failures.
+	defp stall_round(state) do
+		missing = Enum.reject(state.regions, &Map.has_key?(state.reports, &1))
+
+		Marketmailer.Log.warning(
+			"round_stalled",
+			%{round: state.round, reported: map_size(state.reports), missing: length(missing)},
+			"Round #{state.round} stalled: #{length(missing)} region(s) never reported"
+		)
+
+		reports =
+			Map.new(missing, fn region ->
+				{region, {nil, {:failed, [%{page: nil, reason: :no_report}], []}}}
+			end)
+
+		snapshot = %{round: state.round, reports: Map.merge(state.reports, reports), pending: missing}
+		state = %{state | round: state.round + 1, reports: %{}, round_timer: nil}
+
+		cond do
+			missing == [] ->
+				{:noreply, state}
+
+			# During a maintenance window the yellow embed already says why the
+			# channel is quiet; a red "no market updates" on top of it is noise.
+			ESI.Maintenance.window_open?() ->
+				Marketmailer.Log.info(
+					"broadcast_suppressed",
+					%{round: snapshot.round, reason: "esi_maintenance"},
+					"Round #{snapshot.round} stalled during an ESI maintenance window"
+				)
+
+				{:noreply, state}
+
+			true ->
+				deliver_lifecycle(state, snapshot, "round_stalled", error_payload(snapshot))
+		end
+	end
+
 	defp close_round(state) do
+		cancel_timer(state.round_timer)
 		snapshot = %{round: state.round, reports: state.reports, pending: []}
-		state = %{state | round: state.round + 1, reports: %{}}
+		state = %{state | round: state.round + 1, reports: %{}, round_timer: nil}
 		log_round_closed(snapshot)
 
 		if state.async do
@@ -933,6 +1011,40 @@ defmodule Discord.Broadcaster do
 	end
 
 	defp process_digest(snapshot, state) do
+		if maintenance_suppressed?(snapshot) do
+			Marketmailer.Log.info(
+				"broadcast_suppressed",
+				%{round: snapshot.round, reason: "esi_maintenance"},
+				"Round #{snapshot.round}: ESI maintenance warning already announced"
+			)
+
+			{:ok, :maintenance}
+		else
+			{kind, payload} = digest_message(snapshot, state)
+			deliver(snapshot, kind, payload, state)
+		end
+	end
+
+	defp digest_message(snapshot, state) do
+		cond do
+			esi_down?(snapshot) ->
+				{:esi_down, warning_payload(snapshot)}
+
+			any_updated?(snapshot.reports) ->
+				items = fetch_market_list(state)
+				failures = digest_failures(snapshot.reports)
+				{:market_list, digest_payload(items, failures)}
+
+			true ->
+				{:no_update, error_payload(snapshot)}
+		end
+	end
+
+	# The lifecycle embeds own the ESI warning; a round that closes mid-window
+	# must not repeat it.
+	defp maintenance_suppressed?(snapshot), do: esi_down?(snapshot) and ESI.Maintenance.window_open?()
+
+	defp deliver(snapshot, kind, payload, state) do
 		case fetch_channels(state) do
 			{:ok, []} ->
 				Marketmailer.Log.info(
@@ -944,20 +1056,6 @@ defmodule Discord.Broadcaster do
 				{:ok, :no_channels}
 
 			{:ok, channels} ->
-				{kind, payload} =
-					cond do
-						esi_down?(snapshot) ->
-							{:esi_down, warning_payload(snapshot)}
-
-						any_updated?(snapshot.reports) ->
-							items = fetch_market_list(state)
-							failures = digest_failures(snapshot.reports)
-							{:market_list, digest_payload(items, failures)}
-
-						true ->
-							{:no_update, error_payload(snapshot)}
-					end
-
 				result = deliver_all(channels, payload, state)
 				log_delivery(snapshot, kind, payload, result)
 				result
@@ -966,6 +1064,42 @@ defmodule Discord.Broadcaster do
 				{:error, reason}
 		end
 	end
+
+	defp deliver_lifecycle(state, snapshot, kind, payload) do
+		if state.async do
+			owner = self()
+
+			case Task.Supervisor.start_child(state.task_supervisor, fn ->
+						 result = safely_deliver(snapshot, kind, payload, state)
+						 send(owner, {:broadcast_done, kind, result})
+					 end) do
+				{:ok, _pid} ->
+					{:noreply, state}
+
+				{:error, reason} ->
+					log_broadcast_failure("broadcast_task_failed", reason)
+					{:noreply, state}
+			end
+		else
+			case safely_deliver(snapshot, kind, payload, state) do
+				{:ok, _value} -> :ok
+				{:error, reason} -> log_broadcast_failure("broadcast_failed", reason)
+			end
+
+			{:noreply, state}
+		end
+	end
+
+	defp safely_deliver(snapshot, kind, payload, state) do
+		deliver(snapshot, kind, payload, state)
+	rescue
+		error -> {:error, Exception.message(error)}
+	catch
+		:exit, reason -> {:error, inspect(reason)}
+	end
+
+	defp cancel_timer(nil), do: :ok
+	defp cancel_timer(ref), do: Process.cancel_timer(ref)
 
 	defp log_round_closed(snapshot) do
 		reports = Map.get(snapshot, :reports, %{})

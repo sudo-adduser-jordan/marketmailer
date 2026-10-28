@@ -23,11 +23,11 @@ defmodule ESI.ClientTest do
 		:ets.match_delete(:esi_error_state, {{:pause_note, :_}, :_})
 		:ets.delete(:esi_error_state, :pause_noted)
 		:ets.delete(:esi_error_state, :blocked_until)
-		:ets.delete(:esi_error_state, :maintenance_mode)
+		MarketmailerTest.Fixtures.reset_esi_maintenance()
 		MarketmailerTest.Fixtures.reset_network()
 
 		ExUnit.Callbacks.on_exit(fn ->
-			:ets.delete(:esi_error_state, :maintenance_mode)
+			MarketmailerTest.Fixtures.reset_esi_maintenance()
 			:ets.delete(:esi_error_state, :blocked_until)
 			:ets.delete(:esi_error_state, :pause_noted)
 			:ets.match_delete(:esi_error_state, {{:pause_note, :_}, :_})
@@ -222,6 +222,36 @@ defmodule ESI.ClientTest do
 			end)
 
 		assert log |> String.split("esi_error_limit_pause") |> length() == 2
+	end
+
+	test "a raised request pauses the fleet instead of killing the caller" do
+		url = "https://esi.evetech.net/v1/markets/990010/orders/?page=1"
+		:persistent_term.put({:marketmailer_test, :probe_result}, :ok)
+		on_exit(fn -> :persistent_term.erase({:marketmailer_test, :probe_result}) end)
+
+		http = fn _url, _opts ->
+			raise "Finch was unable to provide a connection within the timeout due to excess queuing for connections"
+		end
+
+		log =
+			ExUnit.CaptureLog.capture_log(fn ->
+				assert {:error, %{reason: :request_failed}} = ESI.get(url, http_fun: http, conditional: false)
+			end)
+
+		assert log =~ "esi_http_error"
+		assert ESI.maintenance_active?()
+		refute Marketmailer.Maintenance.down?()
+	end
+
+	test "a success closes the maintenance window" do
+		url = "https://esi.evetech.net/v1/markets/990011/orders/?page=1"
+
+		ESI.Maintenance.down(%{status: 503, url: url})
+		assert ESI.maintenance_active?()
+
+		ok = fn _url, _opts -> {:ok, response(200, %{})} end
+		assert {:ok, _body, _meta} = ESI.get(url, http_fun: ok, conditional: false)
+		refute ESI.maintenance_active?()
 	end
 
 	defp response(status, headers, body \\ "") do
