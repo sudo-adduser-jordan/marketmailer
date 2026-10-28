@@ -4,10 +4,19 @@ dotenv: [".env"]
 
 silent: true
 
+output: prefixed
+
 vars:
   DEV_DB: priv/data/marketmailer.db
   BIN: _build/prod/rel/marketmailer/bin/marketmailer
   CASTLE: _build/prod/rel/marketmailer/bin/castle
+  BOLD: "\e[1m"
+  DIM: "\e[2m"
+  RED: "\e[31m"
+  GREEN: "\e[32m"
+  YELLOW: "\e[33m"
+  BLUE: "\e[34m"
+  RESET: "\e[0m"
 
 tasks:
   default:
@@ -42,6 +51,7 @@ tasks:
         export MARKETMAILER_DB="$SDE_DB" MARKETMAILER_DEV_DB="$SDE_DB"
         mix setup
         mix sde.import ${SDE_BUILD:-}
+        echo "{{.GREEN}}setup: done (database $SDE_DB){{.RESET}}"
 
   playwright:install:
     desc: Install the Chromium build matching the `playwright` CLI on PATH (no-op when current)
@@ -56,13 +66,13 @@ tasks:
         PROD_DB="${MARKETMAILER_DB:-$DEV_DB}"
         EFF_DB="$DEV_DB"
         [ -f "$PROD_DB" ] && EFF_DB="$PROD_DB"
-        command -v sqlite3 >/dev/null || { echo "start: sqlite3 CLI not found — cannot verify SDE load"; exit 1; }
-        [ -f "$EFF_DB" ] || { echo "start: $EFF_DB missing — run task setup first (migrate + SDE load)"; exit 1; }
+        command -v sqlite3 >/dev/null || { echo "{{.RED}}start: sqlite3 CLI not found — cannot verify SDE load{{.RESET}}" >&2; exit 1; }
+        [ -f "$EFF_DB" ] || { echo "{{.RED}}start: $EFF_DB missing — run task setup first (migrate + SDE load){{.RESET}}" >&2; exit 1; }
         if ! n=$(sqlite3 "$EFF_DB" "SELECT MIN(c) FROM (SELECT COUNT(*) c FROM sde_imports UNION ALL SELECT COUNT(*) FROM names UNION ALL SELECT COUNT(*) FROM systems UNION ALL SELECT COUNT(*) FROM regions);" 2>/dev/null) || [ -z "$n" ] || [ "$n" = "0" ]; then
-          echo "start: SDE not loaded in $EFF_DB (sde_imports/names/systems/regions empty or missing) — run task setup first"
+          echo "{{.RED}}start: SDE not loaded in $EFF_DB (sde_imports/names/systems/regions empty or missing) — run task setup first{{.RESET}}" >&2
           exit 1
         fi
-        echo "start: SDE caches present in $EFF_DB"
+        echo "{{.GREEN}}start: SDE caches present in $EFF_DB{{.RESET}}"
       - task: stop
       - MIX_ENV=prod mix compile --force
       - MIX_ENV=prod mix release --overwrite
@@ -74,31 +84,31 @@ tasks:
           cp -n "$DEV_DB" "$PROD_DB" 2>/dev/null || true
           cp -n "$DEV_DB-wal" "$PROD_DB-wal" 2>/dev/null || true
           cp -n "$DEV_DB-shm" "$PROD_DB-shm" 2>/dev/null || true
-          echo "start: seeded $PROD_DB from $DEV_DB"
+          echo "{{.BLUE}}start: seeded $PROD_DB from $DEV_DB{{.RESET}}"
         fi
       - |
         PROD_DB="$(realpath -m "${MARKETMAILER_DB:-{{.DEV_DB}}}")"
         rm -f priv/data/marketmailer.pid
         mkdir -p logs
         MARKETMAILER_DB="$PROD_DB" ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" RUN_ERL_LOG_MAXSIZE=10485760 {{.BIN}} daemon
-        echo "started prod release (daemon, database $PROD_DB)"
+        echo "{{.GREEN}}started prod release (daemon, database $PROD_DB){{.RESET}}"
 
   stop:
     desc: Kill every marketmailer process on this host
     cmds:
       - |
         BIN={{.BIN}}
-        [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1 && { echo "stop: asked prod release to stop (was pid $("$BIN" pid 2>/dev/null || echo unknown))"; "$BIN" stop >/dev/null 2>&1 || true; }
+        [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1 && { echo "{{.BLUE}}stop: asked prod release to stop (was pid $("$BIN" pid 2>/dev/null || echo unknown)){{.RESET}}"; "$BIN" stop >/dev/null 2>&1 || true; }
         pids=$(pgrep -f "$PWD/_build/(prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)|dev/)" 2>/dev/null | grep -v -e "^$$$" -e "^$PPID$" | sort -u || true)
         if [ -n "$pids" ]; then
-          echo "stop: terminating leftovers: $(echo $pids | tr '\n' ' ')"
+          echo "{{.YELLOW}}stop: terminating leftovers: $(echo $pids | tr '\n' ' '){{.RESET}}"
           kill $pids 2>/dev/null || true
           for _ in $(seq 1 20); do
             pids=$(pgrep -f "$PWD/_build/(prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)|dev/)" 2>/dev/null | grep -v -e "^$$$" -e "^$PPID$" | sort -u || true)
             [ -z "$pids" ] && break
             sleep 0.5
           done
-          [ -n "$pids" ] && { echo "stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' ')"; kill -9 $pids 2>/dev/null || true; }
+          [ -n "$pids" ] && { echo "{{.YELLOW}}stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' '){{.RESET}}"; kill -9 $pids 2>/dev/null || true; }
         fi
         rm -f priv/data/marketmailer.pid
 
@@ -107,19 +117,19 @@ tasks:
     cmds:
       - |
         VSN=$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\(.*\)".*/\1/p' mix.exs | head -n 1)
-        test -n "$VSN" || (echo "could not read version from mix.exs" && exit 1)
+        test -n "$VSN" || { echo "{{.RED}}live:update: could not read version from mix.exs{{.RESET}}" >&2; exit 1; }
         BIN={{.BIN}}
         CASTLE={{.CASTLE}}
         ALL_TARS=$(ls releases/marketmailer-*.tar.gz 2>/dev/null | sort -V || true)
         T0=$SECONDS
-        stamp() { echo "live:update: [$((SECONDS - T0))s] $1"; }
+        stamp() { echo "{{.DIM}}live:update: [$((SECONDS - T0))s] $1{{.RESET}}"; }
         DIRTY=$(git status --porcelain || true)
         if ! { [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1; }; then
-          echo "live:update: no living prod process to update — run task start"
+          echo "{{.RED}}live:update: no living prod process to update — run task start{{.RESET}}" >&2
           exit 1
         fi
         if [ -n "$DIRTY" ]; then
-          echo "live:update: uncommitted changes — commit everything first:"
+          echo "{{.RED}}live:update: uncommitted changes — commit everything first:{{.RESET}}" >&2
           echo "$DIRTY" | head -n 20
           exit 1
         fi
@@ -134,9 +144,9 @@ tasks:
             sleep 1
           done
           if [ "$live" != "1" ]; then
-            echo "live:update: daemon is down — restarting on $VSN"
+            echo "{{.YELLOW}}live:update: daemon is down — restarting on $VSN{{.RESET}}"
             task stop >/dev/null 2>&1 || true
-            "$BIN" daemon || { echo "live:update: could not restart the daemon — run task start"; return 1; }
+            "$BIN" daemon || { echo "{{.RED}}live:update: could not restart the daemon — run task start{{.RESET}}" >&2; return 1; }
             live=0
             for _ in $(seq 1 30); do
               if up; then live=1; break; fi
@@ -144,12 +154,12 @@ tasks:
             done
           fi
           if [ "$live" != "1" ]; then
-            echo "live:update: daemon did not come back up — run task start"
+            echo "{{.RED}}live:update: daemon did not come back up — run task start{{.RESET}}" >&2
             return 1
           fi
           RUN_NOW=$("$BIN" version 2>/dev/null | awk '{print $NF}')
           if [ "$RUN_NOW" != "$VSN" ]; then
-            echo "live:update: daemon is up on $RUN_NOW, expected $VSN — run task start"
+            echo "{{.RED}}live:update: daemon is up on $RUN_NOW, expected $VSN — run task start{{.RESET}}" >&2
             return 1
           fi
           return 0
@@ -161,10 +171,10 @@ tasks:
           stamp "prod release assembled"
           mkdir -p releases
           cp "_build/prod/marketmailer-$VSN.tar.gz" releases/
-          echo "live:update: staged releases/marketmailer-$VSN.tar.gz"
+          echo "{{.GREEN}}live:update: staged releases/marketmailer-$VSN.tar.gz{{.RESET}}"
         }
         if [ -z "$ALL_TARS" ]; then
-          echo "live:update: no shipped baseline — first build, no upgrade path"
+          echo "{{.BLUE}}live:update: no shipped baseline — first build, no upgrade path{{.RESET}}"
           stage_release
           ensure_up || exit 1
           exit 0
@@ -182,38 +192,38 @@ tasks:
           if [ "$NEWEST_VER" = "$VSN" ]; then
             FROM_TAR="$NEWEST_TAR"
           else
-            echo "live:update: no baseline older than $VSN — building without upgrade path"
+            echo "{{.BLUE}}live:update: no baseline older than $VSN — building without upgrade path{{.RESET}}"
             stage_release
             ensure_up || exit 1
             exit 0
           fi
         fi
         FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
-        mix compile >/dev/null 2>&1 || (echo "live:update: compile failed" && exit 1)
+        mix compile >/dev/null 2>&1 || { echo "{{.RED}}live:update: compile failed{{.RESET}}" >&2; exit 1; }
         stamp "dev compile ok"
         if mix castle.appup --from "tar:$FROM_TAR" >/dev/null 2>&1; then
           stamp "appup coverage holds for $FROM_VER -> $VSN"
           if [ ! -f "releases/marketmailer-$VSN.tar.gz" ]; then
-            echo "live:update: version $VSN not built yet — building (no version change needed)"
+            echo "{{.BLUE}}live:update: version $VSN not built yet — building (no version change needed){{.RESET}}"
             stage_release
           else
             RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
             if [ "$RUN_VSN" = "$VSN" ]; then
-              echo "live:update: no changes (version $VSN matches $FROM_TAR) — nothing to do"
+              echo "{{.GREEN}}live:update: no changes (version $VSN matches $FROM_TAR) — nothing to do{{.RESET}}"
               ensure_up || exit 1
               exit 0
             fi
-            echo "live:update: $VSN staged but daemon runs ${RUN_VSN:-unknown} — resuming upgrade"
+            echo "{{.YELLOW}}live:update: $VSN staged but daemon runs ${RUN_VSN:-unknown} — resuming upgrade{{.RESET}}"
           fi
         else
-          echo "live:update: code differs from $FROM_TAR"
+          echo "{{.YELLOW}}live:update: code differs from $FROM_TAR{{.RESET}}"
           if [ -f "releases/marketmailer-$VSN.tar.gz" ]; then
             NEW_VSN=$(echo "$VSN" | awk -F. '{printf "%s.%s.%d", $1, $2, $3+1}')
             case "$NEW_VSN" in
               *.*.*) ;;
-              *) echo "live:update: cannot bump version '$VSN'" && exit 1 ;;
+              *) { echo "{{.RED}}live:update: cannot bump version '$VSN'{{.RESET}}" >&2; exit 1; } ;;
             esac
-            echo "live:update: $VSN already shipped — bumping mix.exs to $NEW_VSN"
+            echo "{{.YELLOW}}live:update: $VSN already shipped — bumping mix.exs to $NEW_VSN{{.RESET}}"
             sed -i "s/^\([[:space:]]*version:[[:space:]]*\)\".*\"/\1\"$NEW_VSN\"/" mix.exs
             VSN="$NEW_VSN"
           fi
@@ -221,56 +231,57 @@ tasks:
           FROM_VER=$(basename "$FROM_TAR" .tar.gz | sed 's/^marketmailer-//')
           TOP_TAG=$(sed -n 's/^  ~c"\(.*\)",$/\1/p' appup.exs | head -n 1)
           if [ -n "$TOP_TAG" ] && [ "$TOP_TAG" != "$VSN" ]; then
-            echo "live:update: retargeting appup.exs $TOP_TAG -> $VSN"
+            echo "{{.BLUE}}live:update: retargeting appup.exs $TOP_TAG -> $VSN{{.RESET}}"
             sed -i "s/^  ~c\"$TOP_TAG\",$/  ~c\"$VSN\",/" appup.exs
           fi
-          mix castle.appup.gen --from "tar:$FROM_TAR" || (echo "live:update: appup gen failed for $FROM_TAR" && exit 1)
+          mix castle.appup.gen --from "tar:$FROM_TAR" || { echo "{{.RED}}live:update: appup gen failed for $FROM_TAR{{.RESET}}" >&2; exit 1; }
           stamp "appup edge drafted"
           if ! mix castle.appup --from "tar:$FROM_TAR" >/dev/null 2>&1; then
-            echo "live:update: appup coverage check failed for $FROM_TAR"
+            echo "{{.RED}}live:update: appup coverage check failed for $FROM_TAR{{.RESET}}" >&2
             mix castle.appup --from "tar:$FROM_TAR" || true
-            echo "change needs manual review (migration, state-shape change, or restart_emulator?)"
-            echo "hot upgrade impossible: revert the bump with 'git checkout -- mix.exs appup.exs',"
-            echo "commit the code, and restart instead: task stop + task start"
+            echo "{{.YELLOW}}change needs manual review (migration, state-shape change, or restart_emulator?){{.RESET}}"
+            echo "{{.YELLOW}}hot upgrade impossible: revert the bump with 'git checkout -- mix.exs appup.exs',{{.RESET}}"
+            echo "{{.YELLOW}}commit the code, and restart instead: task stop + task start{{.RESET}}"
             exit 1
           fi
           stamp "appup coverage verified"
           if [ -n "$(git status --porcelain)" ]; then
-            echo "live:update: prepared $VSN (tree now holds the bump + edge) — commit mix.exs + appup.exs,"
-            echo "then re-run task live:update; the upgrade itself runs only on a clean tree"
+            echo "{{.GREEN}}live:update: prepared $VSN (tree now holds the bump + edge) — commit mix.exs + appup.exs,{{.RESET}}"
+            echo "{{.GREEN}}then re-run task live:update; the upgrade itself runs only on a clean tree{{.RESET}}"
             exit 0
           fi
-          echo "live:update: bump + edge already committed — building prod release $VSN"
+          echo "{{.BLUE}}live:update: bump + edge already committed — building prod release $VSN{{.RESET}}"
           stage_release
         fi
         RUN_VSN=$("$BIN" version 2>/dev/null | awk '{print $NF}' || true)
         if [ -n "$RUN_VSN" ] && [ "$RUN_VSN" != "$FROM_VER" ] && [ "$RUN_VSN" != "$VSN" ]; then
-          echo "live:update: prod runs $RUN_VSN but the relup spans $FROM_VER -> $VSN"
-          echo "step through $FROM_VER first, or restart: task stop + task start"
+          echo "{{.RED}}live:update: prod runs $RUN_VSN but the relup spans $FROM_VER -> $VSN{{.RESET}}" >&2
+          echo "{{.RED}}step through $FROM_VER first, or restart: task stop + task start{{.RESET}}" >&2
           exit 1
         fi
-        echo "live:update: hot-upgrading to $VSN"
+        echo "{{.GREEN}}live:update: hot-upgrading to $VSN{{.RESET}}"
         cp "releases/marketmailer-$VSN.tar.gz" "_build/prod/rel/marketmailer/releases/"
         "$CASTLE" unpack "$VSN" && "$CASTLE" install "$VSN" && "$CASTLE" commit || (
-          echo "live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start)"
+          echo "{{.RED}}live:update: hot-upgrade failed (restart_emulator upgrades exit the emulator — run task start){{.RESET}}" >&2
           exit 1
         )
         stamp "hot-upgrade installed"
         ensure_up || exit 1
-        echo "live:update: now on $VSN (tree clean; nothing left to commit)"
+        echo "{{.GREEN}}live:update: now on $VSN (tree clean; nothing left to commit){{.RESET}}"
 
   dev:
     desc: Interactive shell with the app started (isolated DB/port; coexists with prod)
+    output: interleaved
     cmds:
       - |
         DEV_DB="${MARKETMAILER_DEV_DB:-priv/data/dev.db}"
         DEV_PORT="${DASHBOARD_PORT:-4001}"
         if [ "$DEV_DB" = "{{.DEV_DB}}" ] && [ -x {{.BIN}} ] && {{.BIN}} pid >/dev/null 2>&1; then
-          echo "dev: refusing: $DEV_DB is the live prod file held by the daemon — run plain \`task dev\` or \`task stop\` first"
+          echo "{{.RED}}dev: refusing: $DEV_DB is the live prod file held by the daemon — run plain \`task dev\` or \`task stop\` first{{.RESET}}" >&2
           exit 1
         fi
         mkdir -p "$(dirname "$DEV_DB")" logs
-        command -v sqlite3 >/dev/null 2>&1 && [ -f "$DEV_DB" ] && [ "$(sqlite3 "$DEV_DB" 'SELECT COUNT(*) FROM regions' 2>/dev/null || echo 0)" = "0" ] && echo "dev: warning: no SDE regions in $DEV_DB — pollers will not start (run mix sde.import, then re-run task dev)"
+        command -v sqlite3 >/dev/null 2>&1 && [ -f "$DEV_DB" ] && [ "$(sqlite3 "$DEV_DB" 'SELECT COUNT(*) FROM regions' 2>/dev/null || echo 0)" = "0" ] && echo "{{.YELLOW}}dev: warning: no SDE regions in $DEV_DB — pollers will not start (run mix sde.import, then re-run task dev){{.RESET}}"
         MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" ERL_CRASH_DUMP="$PWD/logs/dev_erl_crash.dump" iex -S mix run
     interactive: true
 
