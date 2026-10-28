@@ -64,6 +64,63 @@ defmodule Marketmailer.LogTest do
 		assert File.exists?(prod_rotated)
 	end
 
+	@tag :tmp_dir
+	test "a boot keeps the previous generation instead of deleting it", %{tmp_dir: dir} do
+		path = Path.join(dir, "errors.jsonl")
+		rotated = Path.join(dir, "errors.jsonl.1.gz")
+		previous = Marketmailer.Log.previous_error_log_path(path)
+
+		File.write!(path, "boot one")
+		File.write!(rotated, "x")
+
+		assert :ok = Marketmailer.Log.reset_error_log(path)
+
+		refute File.exists?(path)
+		refute File.exists?(rotated)
+		assert File.read!(previous) == "boot one"
+
+		File.write!(path, "boot two")
+
+		assert :ok = Marketmailer.Log.reset_error_log(path)
+
+		assert File.read!(previous) == "boot two"
+	end
+
+	describe "the JSON formatter" do
+		test "gives third-party records an event and the emitting module" do
+			json =
+				format(%{
+					level: :warning,
+					msg: {:string, "Request to \"/interactions/123/abc/callback\" was closed"},
+					meta: %{time: System.system_time(:microsecond), mfa: {Nostrum.Shard, :handle, 1}}
+				})
+
+			assert json =~ ~s("event":"external_log")
+			assert json =~ ~s("logger":"Nostrum.Shard")
+			refute json =~ "abc/callback"
+			assert json =~ "/interactions/123/<redacted>"
+		end
+
+		test "leaves structured records alone and adds no logger field" do
+			json =
+				format(%{
+					level: :warning,
+					msg: {:report, %{event: "esi_error_limit_pause", message: "ESI limit low"}},
+					meta: %{time: System.system_time(:microsecond), mfa: {ESI, :note_wait, 2}}
+				})
+
+			assert json =~ ~s("event":"esi_error_limit_pause")
+			refute json =~ "external_log"
+			refute json =~ "logger"
+		end
+	end
+
+	defp format(event) do
+		event
+		|> Marketmailer.Log.Format.format(pretty: false, color: false)
+		|> IO.iodata_to_binary()
+	end
+
 	test "the default error log path stays the production file" do
 		configured = Application.get_env(:marketmailer, :error_log_path)
 		Application.delete_env(:marketmailer, :error_log_path)

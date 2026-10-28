@@ -88,7 +88,7 @@ tasks:
         PROD_DB="$(realpath -m "${MARKETMAILER_DB:-{{.DEV_DB}}}")"
         rm -f priv/data/marketmailer.pid
         mkdir -p logs
-        MARKETMAILER_DB="$PROD_DB" ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" {{.BIN}} daemon
+        MARKETMAILER_DB="$PROD_DB" ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" RUN_ERL_LOG_MAXSIZE=10485760 {{.BIN}} daemon
         echo "started prod release (daemon, database $PROD_DB)"
 
   stop:
@@ -296,7 +296,13 @@ tasks:
         fi
         mkdir -p "$(dirname "$DEV_DB")"
         mkdir -p logs
-        MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" ERL_CRASH_DUMP="$PWD/logs/erl_crash.dump" iex -S mix run
+        if command -v sqlite3 >/dev/null 2>&1 && [ -f "$DEV_DB" ]; then
+          if [ "$(sqlite3 "$DEV_DB" 'SELECT COUNT(*) FROM regions' 2>/dev/null || echo 0)" = "0" ]; then
+            echo "dev: warning: no SDE regions in $DEV_DB — market pollers will not start (regions_missing)"
+            echo "dev: load them with \`mix sde.import\` (dev targets priv/data/dev.db), then re-run task dev"
+          fi
+        fi
+        MARKETMAILER_DB="$DEV_DB" DASHBOARD_PORT="$DEV_PORT" DISCORD_TOKEN="${DEV_DISCORD_TOKEN:-}" ERL_CRASH_DUMP="$PWD/logs/dev_erl_crash.dump" iex -S mix run
     interactive: true
 
   compile:

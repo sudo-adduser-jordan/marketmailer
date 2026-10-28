@@ -20,6 +20,8 @@ defmodule ESI.ClientTest do
 
 		:ets.match_delete(:esi_rate_state, {{:rate_block, :_}, :_})
 		:ets.match_delete(:esi_rate_state, {{:rate_group, :_}, :_})
+		:ets.match_delete(:esi_error_state, {{:pause_note, :_}, :_})
+		:ets.delete(:esi_error_state, :pause_noted)
 		:ets.delete(:esi_error_state, :blocked_until)
 		:ets.delete(:esi_error_state, :maintenance_mode)
 		MarketmailerTest.Fixtures.reset_network()
@@ -27,6 +29,8 @@ defmodule ESI.ClientTest do
 		ExUnit.Callbacks.on_exit(fn ->
 			:ets.delete(:esi_error_state, :maintenance_mode)
 			:ets.delete(:esi_error_state, :blocked_until)
+			:ets.delete(:esi_error_state, :pause_noted)
+			:ets.match_delete(:esi_error_state, {{:pause_note, :_}, :_})
 			:ets.match_delete(:esi_rate_state, {{:rate_block, :_}, :_})
 			:ets.match_delete(:esi_rate_state, {{:rate_group, :_}, :_})
 			MarketmailerTest.Fixtures.reset_network()
@@ -165,6 +169,59 @@ defmodule ESI.ClientTest do
 		assert {:ok, _body, meta} = ESI.get(url, http_fun: healthy, conditional: false)
 		assert meta.ttl == 60_000
 		assert :ets.lookup(:esi_error_state, :blocked_until) == []
+	end
+
+	test "a single error does not park the poller while the budget is healthy" do
+		url = "https://esi.evetech.net/v1/markets/990008/orders/?page=1"
+
+		mostly_healthy = fn _url, _opts ->
+			{:ok, response(200, %{"x-esi-error-limit-remain" => ["50"]})}
+		end
+
+		assert {:ok, _body, meta} = ESI.get(url, http_fun: mostly_healthy, conditional: false)
+		assert meta.ttl == 60_000
+		assert :ets.lookup(:esi_error_state, :blocked_until) == []
+
+		low = fn _url, _opts ->
+			{:ok, response(200, %{"x-esi-error-limit-remain" => ["19"]})}
+		end
+
+		assert {:ok, _body, _meta} = ESI.get(url, http_fun: low, conditional: false)
+		assert [{:blocked_until, until}] = :ets.lookup(:esi_error_state, :blocked_until)
+		assert until > System.system_time(:millisecond)
+	end
+
+	test "the pause follows the error-limit reset window" do
+		url = "https://esi.evetech.net/v1/contracts/public/items/990009/"
+
+		not_found = fn _url, _opts ->
+			{:ok,
+			 response(404, %{
+				 "x-esi-error-limit-remain" => ["10"],
+				 "x-esi-error-limit-reset" => ["4"]
+			 })}
+		end
+
+		now = System.system_time(:millisecond)
+		assert {:error, :not_found, _meta} = ESI.get(url, http_fun: not_found, conditional: false)
+
+		assert [{:blocked_until, until}] = :ets.lookup(:esi_error_state, :blocked_until)
+		assert until >= now + 5_000
+		assert until <= now + 6_000
+	end
+
+	test "every waiter on one window logs a single pause record" do
+		until = System.system_time(:millisecond) + 300
+		:ets.insert(:esi_error_state, {:blocked_until, until})
+
+		log =
+			ExUnit.CaptureLog.capture_log(fn ->
+				1..5
+				|> Enum.map(fn _ -> Task.async(fn -> ESI.wait_for_error_window() end) end)
+				|> Enum.each(&Task.await/1)
+			end)
+
+		assert log |> String.split("esi_error_limit_pause") |> length() == 2
 	end
 
 	defp response(status, headers, body \\ "") do

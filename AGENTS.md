@@ -239,12 +239,20 @@ queryable fields, no sensitive data in fields). Everything funnels through
   owns this sink (`error_log_path/0`, `reset_error_log/1`,
   `install_file_logger/2`), and `Application.start/2` calls it first. The sink
   path is `config :marketmailer, :error_log_path`; on every boot only that
-  sink's file and rotation archives are removed and recreated, never the whole
-  `logs/` directory. `config/test.exs` points the sink at `logs/test.jsonl`,
-  so `mix test` can never delete or append to the live `logs/errors.jsonl`.
+  sink's file and rotation archives are touched, never the whole `logs/`
+  directory: the previous boot's file is kept once as `errors.previous.jsonl`
+  (a crash loop or a boot-time storm must not destroy the evidence of the boot
+  before it). `config/dev.exs` points dev at `logs/dev.jsonl` — dev runs beside
+  the prod daemon on the same host, and a shared sink would be wiped by
+  whichever node boots last. `config/test.exs` points the sink at
+  `logs/test.jsonl`, so `mix test` can never delete or append to the live
+  `logs/errors.jsonl`.
   `ERL_CRASH_DUMP=logs/erl_crash.dump` (`.env`, `Taskfile.yml`) now also
   survives restarts instead of being wiped at boot: delete a dump by hand
-  once you have read it.
+  once you have read it (dev uses `logs/dev_erl_crash.dump`). `task start`
+  sets `RUN_ERL_LOG_MAXSIZE=10 MiB` so the run_erl console log
+  (`_build/prod/rel/marketmailer/tmp/log/`) keeps ~15 min instead of the
+  100 KB default (~2 min at the current info volume).
 
 Records on both sinks are back-to-back (no blank line) and share a stable
 field order: `level`, `commit`, `ts`, `pid`, `event`, then domain fields
@@ -253,9 +261,13 @@ event carries `ts` (RFC3339 ms UTC) and `commit` (git short hash baked in at
 compile time). A startup marker (`app_start` info event) logs the boot
 timestamp and commit. `Marketmailer.Log.Format` renders both sinks with OTP's
 `:json` (no extra deps). Debug events are dropped by both sinks; the single
-previous debug call (page counts) is now info-level. To query console output,
-strip ANSI and collect each record (every record starts with `{` at column 0),
-then pipe to jq:
+previous debug call (page counts) is now info-level. Third-party records that
+bypass `Marketmailer.Log` (Nostrum, Ecto/Exqlite, OTP) are rendered with
+`event: "external_log"` plus a `logger` field naming the emitting module, and
+Discord credential paths (`/interactions/<id>/<token>`,
+`/webhooks/<id>/<token>`) are redacted to `<redacted>`. To query console
+output, strip ANSI and collect each record (every record starts with `{` at
+column 0), then pipe to jq:
 `mix run 2>&1 | sed 's/\e\[[0-9;]*m//g' | awk '/^{/{if(r!=""){print r;r=""}r=$0;next}{r=r"\n"$0}END{if(r!="")print r}' | jq -c 'select(.level != "info")'`.
 
 ## Architecture map
@@ -282,7 +294,14 @@ then pipe to jq:
   `Etag.Database`, `Discord.Database`, `Market.Database` (reads + writes)
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
   (types, regions, systems, composed NPC station names)
-- `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling
+- `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling.
+  The error-limit gate trips below `@error_limit_threshold` (20 of 100), uses
+  `X-Esi-Error-Limit-Reset` for the pause (5–65 s, 61 s default), logs the
+  triggering response once per route as `esi_error_limit_low` and the stall
+  once per window as `esi_error_limit_pause`. Only some ESI routes report the
+  budget (contracts do, market orders do not), so a contract-side 404 parks
+  every caller including the market pollers — hence the threshold and the
+  per-window logging.
 - `lib/manager.ex`, `lib/supervisor.ex`, `lib/worker.ex` - per-region fan-out
   and refresh cycles (one `RegionManager` per SDE region, i.e. per `regions`
   row read at boot; the started set is cached in `:persistent_term` so the

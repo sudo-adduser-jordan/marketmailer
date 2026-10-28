@@ -28,8 +28,11 @@ defmodule Marketmailer.Log do
 	defp maybe_put(map, _key, nil), do: map
 	defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-	# Boot-time sink: a fresh file per boot, removing only this sink's file and
-	# its rotation archives so sibling sinks (prod vs test) keep theirs.
+	# Boot-time sink: this boot gets a fresh file, and the previous boot's file is
+	# kept once as `errors.previous.jsonl` (a crash loop or a boot-time storm
+	# must not destroy the evidence of the boot before it). Only this sink's file
+	# and rotation archives are touched, so sibling sinks (prod vs dev vs test)
+	# keep theirs.
 	def setup do
 		path = error_log_path()
 		reset_error_log(path)
@@ -38,9 +41,32 @@ defmodule Marketmailer.Log do
 
 	def error_log_path, do: Application.get_env(:marketmailer, :error_log_path, @default_error_log_path)
 
-	def reset_error_log(path) do
-		_ = File.rm(path)
+	def previous_error_log_path(path) do
+		dir = Path.dirname(path)
+		base = Path.basename(path, Path.extname(path))
+		Path.join(dir, base <> ".previous" <> Path.extname(path))
+	end
 
+	def reset_error_log(path) do
+		keep_previous(path)
+		remove_archives(path)
+		:ok
+	end
+
+	defp keep_previous(path) do
+		previous = previous_error_log_path(path)
+
+		if File.exists?(path) do
+			_ = File.rm(previous)
+			_ = File.rename(path, previous)
+		end
+
+		:ok
+	end
+
+	# Rotation archives share the sink's filename prefix (`errors.jsonl.1.gz`);
+	# the kept previous generation does not, so it survives.
+	defp remove_archives(path) do
 		case File.ls(Path.dirname(path)) do
 			{:ok, entries} ->
 				prefix = Path.basename(path)
@@ -51,8 +77,6 @@ defmodule Marketmailer.Log do
 			_ ->
 				:ok
 		end
-
-		:ok
 	end
 
 	def install_file_logger(path \\ error_log_path(), handler \\ @file_handler) do
@@ -143,6 +167,8 @@ defmodule Marketmailer.Log.Format do
 
 	defp ordered_fields(%{level: level, msg: msg, meta: meta}) do
 		{report, message, event} = split_message(msg)
+		source = if is_nil(event), do: source(meta)
+		event = event || "external_log"
 
 		base =
 			[
@@ -151,7 +177,8 @@ defmodule Marketmailer.Log.Format do
 				{"ts", timestamp(meta[:time])},
 				{"pid", normalize(meta[:pid])}
 			] ++
-				maybe_entry("event", event)
+				maybe_entry("event", event) ++
+				maybe_entry("logger", source)
 
 		domain =
 			if is_map(report) do
@@ -163,8 +190,31 @@ defmodule Marketmailer.Log.Format do
 				[]
 			end
 
-		base ++ domain ++ maybe_entry("message", message)
+		base ++ domain ++ maybe_entry("message", redact(message))
 	end
+
+	# Third-party records (Nostrum, Ecto/Exqlite, OTP) bypass Marketmailer.Log,
+	# so they arrive with no event name; give them a stable one plus the module
+	# that emitted them, and strip the credentials those messages can carry.
+	defp source(meta) do
+		case meta[:mfa] do
+			{module, _function, _arity} when is_atom(module) -> source_name(module)
+			_ -> nil
+		end
+	end
+
+	defp source_name(module) do
+		case Atom.to_string(module) do
+			"Elixir." <> name -> name
+			name -> name
+		end
+	end
+
+	@credential_path ~r{/(interactions|webhooks)/(\d+)/[A-Za-z0-9._~-]+}
+
+	defp redact(text) when is_binary(text), do: Regex.replace(@credential_path, text, "/\\1/\\2/<redacted>")
+
+	defp redact(other), do: other
 
 	defp split_message({:report, report}) when is_map(report) do
 		message = report[:message] || report["message"] || nil

@@ -2,10 +2,14 @@ defmodule ESI do
 	@user_agent "lostcoastwizard > BEAM me up, Scotty!"
 	@maint_key :maintenance_mode
 	@maint_ping_ms 10_000
-	@error_limit_threshold 100
+	@error_limit_threshold 20
 	@pause_ms 61_000
+	@pause_min_ms 5_000
+	@pause_max_ms 65_000
+	@low_remain_note_ms 5_000
 	@table :esi_error_state
 	@key :blocked_until
+	@wait_note_key :pause_noted
 	@rate_table :esi_rate_state
 	@rate_defaults [enabled: true, max_block_ms: 900_000, jitter_ms: 500]
 	@network_reasons [
@@ -28,18 +32,29 @@ defmodule ESI do
 		case :ets.lookup(@table, @key) do
 			[{@key, t}] when t > now ->
 				sleep = t - now
-
-				Marketmailer.Log.warning(
-					"esi_error_limit_pause",
-					%{pause_ms: sleep},
-					"ESI limit low, pausing #{div(sleep, 1000)}s"
-				)
+				note_wait(t, sleep)
 
 				Process.sleep(sleep)
 
 			_ ->
 				:ok
 		end
+	end
+
+	# Every worker waiting out the same window would otherwise log its own copy
+	# (thousands per window); one record per window is the signal, the rest is
+	# noise that buries real warnings. insert_new makes the first waiter the
+	# only logger; enforce_pause/2 clears the note when it extends the window.
+	defp note_wait(until, sleep) do
+		if :ets.insert_new(@table, {@wait_note_key, until}) do
+			Marketmailer.Log.warning(
+				"esi_error_limit_pause",
+				%{pause_ms: sleep},
+				"ESI limit low, pausing #{div(sleep, 1000)}s"
+			)
+		end
+
+		:ok
 	end
 
 	def wait_for_rate_window(url) do
@@ -163,8 +178,21 @@ defmodule ESI do
 
 	defp meta(response, url) do
 		error_rem = first(response.headers, "x-esi-error-limit-remain")
+		error_reset = first(response.headers, "x-esi-error-limit-reset")
 		ttl = calc_ttl(first(response.headers, "expires"))
-		ttl = if remain(error_rem) < @error_limit_threshold, do: enforce_pause(ttl), else: ttl
+
+		ttl =
+			if remain(error_rem) < @error_limit_threshold do
+				enforce_pause(ttl, %{
+					url: url,
+					status: response.status,
+					remain: remain(error_rem),
+					reset_s: parse_int(error_reset)
+				})
+			else
+				ttl
+			end
+
 		now = System.system_time(:millisecond)
 		retry_after = retry_after_ms(response.headers)
 		rate = rate_meta(response.headers)
@@ -320,10 +348,59 @@ defmodule ESI do
 	defp remain(value), do: parse_int(value) || 999
 	defp first(val, key), do: val |> Map.get(key, []) |> List.first()
 
-	defp enforce_pause(ttl) do
+	# ESI only reports the error budget on some routes (contracts do, market
+	# orders do not), so a low remainder here parks *every* ESI caller — the
+	# market pollers included. Log the one response that caused it (deduped per
+	# route) so the stall is attributable instead of showing up as a thousand
+	# waiting workers.
+	defp enforce_pause(ttl, cause) do
 		now = System.system_time(:millisecond)
-		:ets.insert(@table, {@key, now + @pause_ms})
-		max(ttl, @pause_ms)
+		pause = pause_ms(cause.reset_s)
+		current = blocked_until()
+		until = max(now + pause, current)
+		:ets.insert(@table, {@key, until})
+		if until > current, do: :ets.delete(@table, @wait_note_key)
+		note_low_remain(cause, pause, until)
+		max(ttl, pause)
+	end
+
+	defp blocked_until do
+		case :ets.lookup(@table, @key) do
+			[{@key, until}] when is_integer(until) -> until
+			_ -> 0
+		end
+	end
+
+	defp pause_ms(reset_s) when is_integer(reset_s) do
+		(reset_s * 1_000 + 1_000) |> max(@pause_min_ms) |> min(@pause_max_ms)
+	end
+
+	defp pause_ms(_reset_s), do: @pause_ms
+
+	defp note_low_remain(cause, pause, until) do
+		now = System.system_time(:millisecond)
+		key = {:pause_note, route_key(cause.url)}
+
+		case :ets.lookup(@table, key) do
+			[{^key, at}] when is_integer(at) and now - at < @low_remain_note_ms ->
+				:ok
+
+			_ ->
+				:ets.insert(@table, {key, now})
+
+				Marketmailer.Log.warning(
+					"esi_error_limit_low",
+					%{
+						url: cause.url,
+						status: cause.status,
+						remain: cause.remain,
+						reset_s: cause.reset_s,
+						pause_ms: pause,
+						window_ms: until - now
+					},
+					"ESI error limit at #{cause.remain} (#{cause.url}); pausing polling #{div(pause, 1000)}s"
+				)
+		end
 	end
 
 	defp calc_ttl(nil), do: 60_000
