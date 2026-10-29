@@ -191,6 +191,16 @@ defmodule Discord.Embeds do
 	def payload(%Embed{} = embed), do: %{embeds: [embed]}
 	def payload(payload), do: payload
 
+	@message_char_limit 6000
+
+	def fit_payload(%Embed{} = embed), do: fit_payload(payload(embed))
+
+	def fit_payload(%{embeds: embeds} = payload) when is_list(embeds) do
+		%{payload | embeds: fit_embeds(embeds)}
+	end
+
+	def fit_payload(payload), do: payload
+
 	def list_per_page, do: 10
 
 	def market_list_message(items), do: market_list_payload(items, 1, list_per_page())
@@ -536,6 +546,82 @@ defmodule Discord.Embeds do
 	end
 
 	defp more_line(dropped), do: "… +#{dropped} more"
+
+	defp fit_embeds(embeds) do
+		excess = Enum.sum(Enum.map(embeds, &embed_chars/1)) - @message_char_limit
+
+		if excess > 0 do
+			embeds |> Enum.reverse() |> trim_embeds(excess) |> Enum.reverse()
+		else
+			embeds
+		end
+	end
+
+	defp trim_embeds([embed | rest], excess) when excess > 0 do
+		description = embed.description || ""
+		trimmed = %{embed | description: cut_description(description, String.length(description) - excess)}
+		saved = String.length(description) - String.length(trimmed.description)
+
+		[trimmed | trim_embeds(rest, excess - saved)]
+	end
+
+	defp trim_embeds(embeds, _excess), do: embeds
+
+	defp cut_description(_text, budget) when budget <= 0, do: ""
+
+	defp cut_description(text, budget) do
+		if String.length(text) <= budget do
+			text
+		else
+			kept =
+				text
+				|> String.split("\n")
+				|> Enum.reduce_while({[], 0}, fn line, {acc, used} ->
+					size = used + String.length(line) + if(acc == [], do: 0, else: 1)
+
+					if size <= budget - 2 do
+						{:cont, {[line | acc], size}}
+					else
+						{:halt, {acc, used}}
+					end
+				end)
+				|> elem(0)
+				|> Enum.reverse()
+				|> Enum.join("\n")
+
+			if kept == "" do
+				String.slice(text, 0, max(budget - 2, 0)) <> "…"
+			else
+				kept <> "\n…"
+			end
+		end
+	end
+
+	defp embed_chars(%Embed{} = embed) do
+		String.length(embed.title || "") +
+			String.length(embed.description || "") +
+			author_chars(embed.author) +
+			footer_chars(embed.footer) +
+			field_chars(embed.fields)
+	end
+
+	defp author_chars(%Embed.Author{name: name}), do: String.length(name || "")
+	defp author_chars(_author), do: 0
+
+	defp footer_chars(%Embed.Footer{text: text}), do: String.length(text || "")
+	defp footer_chars(_footer), do: 0
+
+	defp field_chars(fields) when is_list(fields) do
+		Enum.reduce(fields, 0, fn
+			%Embed.Field{name: name, value: value}, acc ->
+				acc + String.length(name || "") + String.length(value || "")
+
+			_field, acc ->
+				acc
+		end)
+	end
+
+	defp field_chars(_fields), do: 0
 
 	defp location_value(item) do
 		"#{Utils.or_unknown(item.location_name)} - #{Utils.or_unknown(item.system_name)} - #{Utils.or_unknown(item.region_name)} • #{Utils.format_security(item.security_status)}"

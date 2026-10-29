@@ -1152,14 +1152,7 @@ defmodule Discord.Broadcaster do
 	defp error_payload(snapshot) do
 		failures = digest_failures(Map.get(snapshot, :reports, %{}))
 
-		embeds =
-			if failures == %{} do
-				[Embeds.no_update_embed()]
-			else
-				[Embeds.no_update_embed(failures), Embeds.round_status_embed(failures, [])]
-			end
-
-		%{embeds: embeds, components: []}
+		%{embeds: [Embeds.no_update_embed(failures)], components: []}
 	end
 
 	defp esi_down?(snapshot) do
@@ -1251,7 +1244,7 @@ defmodule Discord.Broadcaster do
 	end
 
 	defp deliver_all(channels, payload, state) do
-		message = Map.put(payload, :allowed_mentions, :none)
+		message = payload |> Embeds.fit_payload() |> Map.put(:allowed_mentions, :none)
 
 		Enum.reduce(channels, {:ok, 0}, fn channel, {:ok, delivered} ->
 			case invoke_resolve(state, :deliver_fun, {__MODULE__, :deliver, [channel, message]}) do

@@ -243,6 +243,31 @@ defmodule ESI.ClientTest do
 		refute Marketmailer.Maintenance.down?()
 	end
 
+	test "invalid request options are reported as such instead of swallowed" do
+		url = "https://esi.evetech.net/v1/markets/990013/orders/?page=1"
+
+		http = fn _url, _opts ->
+			raise ArgumentError, "cannot set both :finch and :connect_options"
+		end
+
+		log =
+			ExUnit.CaptureLog.capture_log(fn ->
+				assert {:error, %{reason: :invalid_request}} = ESI.get(url, http_fun: http, conditional: false)
+			end)
+
+		assert log =~ "esi_request_invalid"
+		refute ESI.maintenance_active?()
+		refute ESI.Maintenance.window_open?()
+	end
+
+	test "request options never combine finch with connect_options" do
+		opts = ESI.request_options([])
+
+		refute Keyword.has_key?(opts, :finch) and Keyword.has_key?(opts, :connect_options)
+		assert opts[:connect_options] == [timeout: Marketmailer.Maintenance.request_timeout_ms()]
+		assert opts[:receive_timeout] == Marketmailer.Maintenance.request_timeout_ms()
+	end
+
 	test "an unanswered request never opens a maintenance window" do
 		url = "https://esi.evetech.net/v1/markets/990012/orders/?page=1"
 

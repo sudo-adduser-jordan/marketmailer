@@ -10,7 +10,6 @@ defmodule ESI do
 	@wait_note_key :pause_noted
 	@rate_table :esi_rate_state
 	@rate_defaults [enabled: true, max_block_ms: 900_000, jitter_ms: 500]
-	@market_pool_timeout_ms 5_000
 	@network_reasons [
 		:nxdomain,
 		:econnrefused,
@@ -70,11 +69,7 @@ defmodule ESI do
 	def contract_items_url(contract_id), do: "https://esi.evetech.net/v1/contracts/public/items/#{contract_id}/"
 
 	def fetch(region, page \\ 1, opts \\ []) do
-		opts =
-			Keyword.merge(
-				[retry: false, pool_timeout: @market_pool_timeout_ms],
-				opts
-			)
+		opts = Keyword.merge([retry: false], opts)
 
 		get(page_url(region, page), Keyword.put(opts, :context, %{region: region, page: page}))
 	end
@@ -85,20 +80,12 @@ defmodule ESI do
 		conditional = Keyword.get(opts, :conditional, true)
 		etag = if conditional, do: Etag.Database.get_etag(url)
 		context = Keyword.get(opts, :context, %{})
-		timeout = Marketmailer.Maintenance.request_timeout_ms()
 
 		headers =
 			[{"User-Agent", @user_agent}] ++
 				if etag, do: [{"If-None-Match", etag}], else: []
 
-		request_opts = [
-			headers: headers,
-			finch: [pool_timeout: Keyword.get(opts, :pool_timeout, timeout)],
-			receive_timeout: timeout,
-			connect_options: [timeout: timeout],
-			retry: Keyword.get(opts, :retry, :safe_transient),
-			retry_log_level: :info
-		]
+		request_opts = request_options(headers, opts)
 
 		case request(http_fun, url, request_opts) do
 			{:ok, response} ->
@@ -106,35 +93,62 @@ defmodule ESI do
 				respond(response, url)
 
 			{:error, error} ->
-				cond do
-					network_error?(error) ->
-						Marketmailer.Maintenance.report_disconnect(error)
+				if invalid_request?(error) do
+					Marketmailer.Log.error(
+						"esi_request_invalid",
+						Map.merge(context, %{url: url, detail: http_error_detail(error)}),
+						"ESI request options were rejected; every poll fails until the caller is fixed"
+					)
+				else
+					cond do
+						network_error?(error) ->
+							Marketmailer.Maintenance.report_disconnect(error)
 
-					unanswered?(error) ->
-						:ok
+						unanswered?(error) ->
+							:ok
 
-					true ->
-						ESI.Maintenance.down(error)
+						true ->
+							ESI.Maintenance.down(error)
+					end
+
+					Marketmailer.Log.error(
+						"esi_http_error",
+						Map.merge(context, %{url: url, reason: http_error_reason(error), detail: http_error_detail(error)}),
+						"ESI HTTP request failed"
+					)
 				end
-
-				Marketmailer.Log.error(
-					"esi_http_error",
-					Map.merge(context, %{url: url, reason: http_error_reason(error), detail: http_error_detail(error)}),
-					"ESI HTTP request failed"
-				)
 
 				{:error, error}
 		end
 	end
 
+	def request_options(headers, opts \\ []) do
+		timeout = Marketmailer.Maintenance.request_timeout_ms()
+
+		[
+			headers: headers,
+			receive_timeout: timeout,
+			connect_options: [timeout: timeout],
+			retry: Keyword.get(opts, :retry, :safe_transient),
+			retry_log_level: :info
+		]
+	end
+
 	defp request(http_fun, url, opts) do
 		http_fun.(url, opts)
 	rescue
-		error -> {:error, %{reason: :request_failed, detail: Exception.message(error)}}
+		error in ArgumentError ->
+			{:error, %{reason: :invalid_request, detail: Exception.message(error)}}
+
+		error ->
+			{:error, %{reason: :request_failed, detail: Exception.message(error)}}
 	catch
 		:exit, reason when reason in [:shutdown, :normal] -> exit(reason)
 		kind, reason -> {:error, %{reason: :request_failed, detail: inspect({kind, reason})}}
 	end
+
+	defp invalid_request?(%{reason: :invalid_request}), do: true
+	defp invalid_request?(_error), do: false
 
 	defp unanswered?(%{reason: :request_failed}), do: true
 	defp unanswered?(_reason), do: false

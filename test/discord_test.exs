@@ -490,6 +490,46 @@ defmodule Discord.EmbedsTest do
 		assert embed.color == 0xFAA61A
 	end
 
+	test "a market round with every region failing fits the Discord character budget" do
+		failures = failure_map(114)
+		list = Discord.Embeds.market_list_embed(market_list())
+		status = Discord.Embeds.round_status_embed(failures, [])
+
+		fitted = Discord.Embeds.fit_payload(%{embeds: [list, status], components: []})
+
+		assert payload_chars(fitted) <= 6_000
+		assert [%{description: list_description}, %{description: status_description}] = fitted.embeds
+		assert list_description == list.description
+		assert status_description =~ "… +"
+		assert fitted.components == []
+	end
+
+	test "a failure list rendered twice is trimmed to the Discord character budget" do
+		failures = failure_map(114)
+
+		payload = %{
+			embeds: [
+				Discord.Embeds.no_update_embed(failures),
+				Discord.Embeds.round_status_embed(failures, [])
+			]
+		}
+
+		refute payload_chars(payload) <= 6_000
+
+		fitted = Discord.Embeds.fit_payload(payload)
+
+		assert payload_chars(fitted) <= 6_000
+		assert length(fitted.embeds) == 2
+		assert Enum.all?(fitted.embeds, &(String.length(&1.description || "") > 0))
+	end
+
+	test "single embeds and payloads without embeds pass through the budget unchanged" do
+		embed = Discord.Embeds.no_update_embed()
+
+		assert Discord.Embeds.fit_payload(embed) == %{embeds: [embed]}
+		assert Discord.Embeds.fit_payload(%{content: "hi"}) == %{content: "hi"}
+	end
+
 	defp market_list do
 		[
 			%{
@@ -543,5 +583,25 @@ defmodule Discord.EmbedsTest do
 		after
 			:zlib.close(z)
 		end
+	end
+
+	defp failure_map(count) do
+		Map.new(90_000_000..(90_000_000 + count - 1), fn region ->
+			{region, [%{page: 1, reason: :request_failed}]}
+		end)
+	end
+
+	defp payload_chars(%{embeds: embeds}), do: Enum.sum(Enum.map(embeds, &embed_chars/1))
+
+	defp embed_chars(embed) do
+		String.length(embed.title || "") +
+			String.length(embed.description || "") +
+			String.length((embed.author && embed.author.name) || "") +
+			String.length((embed.footer && embed.footer.text) || "") +
+			Enum.sum(
+				Enum.map(embed.fields || [], fn field ->
+					String.length(field.name || "") + String.length(field.value || "")
+				end)
+			)
 	end
 end
