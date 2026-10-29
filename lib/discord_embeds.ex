@@ -494,6 +494,13 @@ defmodule Discord.Embeds do
 					%{
 						type: 2,
 						style: 2,
+						label: "<",
+						custom_id: "#{prefix}:page:1",
+						disabled: page <= 1
+					},
+					%{
+						type: 2,
+						style: 2,
 						label: "Prev",
 						custom_id: "#{prefix}:page:#{page - 1}",
 						disabled: page <= 1
@@ -503,6 +510,13 @@ defmodule Discord.Embeds do
 						style: 2,
 						label: "Next",
 						custom_id: "#{prefix}:page:#{page + 1}",
+						disabled: page >= total_pages
+					},
+					%{
+						type: 2,
+						style: 2,
+						label: ">",
+						custom_id: "#{prefix}:page:#{total_pages}",
 						disabled: page >= total_pages
 					}
 				]
