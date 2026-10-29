@@ -687,10 +687,6 @@ defmodule Discord.Embeds do
 
 	defp field_chars(_fields), do: 0
 
-	defp location_value(item) do
-		"#{Utils.or_unknown(item.location_name)} - #{Utils.or_unknown(item.system_name)} - #{Utils.or_unknown(item.region_name)} • #{Utils.format_security(item.security_status)}"
-	end
-
 	defp per_unit_margin(item) do
 		with buy when not is_nil(buy) <- Utils.to_number(item.buy_price),
 				 sell when not is_nil(sell) <- Utils.to_number(item.price) do
@@ -729,11 +725,6 @@ defmodule Discord.Embeds do
 				url: image_url || @icon_market
 			},
 			fields: [
-				%Embed.Field{
-					name: "Location",
-					value: location_value(item),
-					inline: false
-				},
 				%Embed.Field{
 					name: "Sell",
 					value: Utils.price_value(item.price),
