@@ -495,7 +495,7 @@ defmodule Discord.Embeds do
 						type: 2,
 						style: 2,
 						label: "<",
-						custom_id: "#{prefix}:page:1",
+						custom_id: "#{prefix}:page:first",
 						disabled: page <= 1
 					},
 					%{
@@ -516,13 +516,17 @@ defmodule Discord.Embeds do
 						type: 2,
 						style: 2,
 						label: ">",
-						custom_id: "#{prefix}:page:#{total_pages}",
+						custom_id: "#{prefix}:page:last",
 						disabled: page >= total_pages
 					}
 				]
 			}
 		]
 	end
+
+	defp clamp_page(:first, _total_pages), do: 1
+
+	defp clamp_page(:last, total_pages), do: total_pages
 
 	defp clamp_page(page, total_pages) when is_integer(page), do: page |> max(1) |> min(total_pages)
 

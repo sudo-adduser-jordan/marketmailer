@@ -536,22 +536,32 @@ defmodule Discord.Consumer do
 	end
 
 	defp list_page_from_custom_id(%{data: %{custom_id: "market_list:page:" <> page}}) do
-		case Integer.parse(String.trim(page)) do
-			{number, _} -> max(number, 1)
-			:error -> 1
-		end
+		parse_page(page)
 	end
 
 	defp list_page_from_custom_id(_), do: 1
 
 	defp contract_page_from_custom_id(%{data: %{custom_id: "contract_list:page:" <> page}}) do
-		case Integer.parse(String.trim(page)) do
-			{number, _} -> max(number, 1)
-			:error -> 1
-		end
+		parse_page(page)
 	end
 
 	defp contract_page_from_custom_id(_), do: 1
+
+	defp parse_page(page) do
+		case String.trim(page) do
+			"first" ->
+				1
+
+			"last" ->
+				:last
+
+			number ->
+				case Integer.parse(number) do
+					{page, _} -> max(page, 1)
+					:error -> 1
+				end
+		end
+	end
 
 	defp start_contracts_task(bot_name, interaction) do
 		task =
