@@ -108,7 +108,10 @@ tasks:
             [ -z "$pids" ] && break
             sleep 0.5
           done
-          [ -n "$pids" ] && { echo "{{.YELLOW}}stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' '){{.RESET}}"; kill -9 $pids 2>/dev/null || true; }
+          if [ -n "$pids" ]; then
+            echo "{{.YELLOW}}stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' '){{.RESET}}"
+            kill -9 $pids 2>/dev/null || true
+          fi
         fi
         rm -f priv/data/marketmailer.pid
 
