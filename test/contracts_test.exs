@@ -70,6 +70,14 @@ defmodule ContractsTest do
 		assert MapSet.member?(tables, "contract_items")
 	end
 
+	test "contract rounds are not concurrency capped" do
+		config = Contracts.config()
+
+		refute Keyword.has_key?(config, :region_concurrency)
+		refute Keyword.has_key?(config, :item_concurrency)
+		refute Code.ensure_loaded?(Contracts.ItemGate)
+	end
+
 	test "contracts exits" do
 		assert :ok = Contracts.Database.upsert_page([contract(1_001), contract(1_002)], @region, 1, @round)
 

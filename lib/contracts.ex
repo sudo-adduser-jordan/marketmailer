@@ -3,10 +3,8 @@ defmodule Contracts do
 		enabled: true,
 		period_ms: 1_800_000,
 		initial_delay_ms: 30_000,
-		region_concurrency: 4,
 		excluded_types: ["courier", "auction", "loan", "unknown"],
 		min_margin: 100_000_000,
-		item_concurrency: 8,
 		item_retry_ms: 1_800_000,
 		item_retry_max_ms: 14_400_000,
 		region_timeout_ms: 600_000,
@@ -436,80 +434,6 @@ defmodule Contracts.Database do
 	defp integer_boolean(_value, default), do: default
 end
 
-defmodule Contracts.ItemGate do
-	use GenServer
-
-	def start_link(opts \\ []) do
-		GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-	end
-
-	def run(fun) when is_function(fun, 0) do
-		case Process.whereis(__MODULE__) do
-			nil ->
-				fun.()
-
-			_pid ->
-				GenServer.call(__MODULE__, :acquire, :infinity)
-
-				try do
-					fun.()
-				after
-					GenServer.cast(__MODULE__, {:release, self()})
-				end
-		end
-	end
-
-	@impl true
-	def init(_opts) do
-		max = Contracts.config() |> Keyword.fetch!(:item_concurrency) |> max(1)
-		{:ok, %{active: %{}, max: max, waiters: :queue.new()}}
-	end
-
-	@impl true
-	def handle_call(:acquire, {pid, _tag} = from, state) do
-		if map_size(state.active) < state.max do
-			ref = Process.monitor(pid)
-			{:reply, :ok, %{state | active: Map.put(state.active, pid, ref)}}
-		else
-			{:noreply, %{state | waiters: :queue.in({from, pid}, state.waiters)}}
-		end
-	end
-
-	@impl true
-	def handle_cast({:release, pid}, state) do
-		case Map.pop(state.active, pid) do
-			{nil, _active} ->
-				{:noreply, state}
-
-			{ref, active} ->
-				Process.demonitor(ref, [:flush])
-				{:noreply, promote(%{state | active: active})}
-		end
-	end
-
-	@impl true
-	def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
-		case Map.get(state.active, pid) do
-			^ref -> {:noreply, promote(%{state | active: Map.delete(state.active, pid)})}
-			_ -> {:noreply, state}
-		end
-	end
-
-	def handle_info(_message, state), do: {:noreply, state}
-
-	defp promote(state) do
-		case :queue.out(state.waiters) do
-			{{:value, {from, pid}}, rest} ->
-				ref = Process.monitor(pid)
-				GenServer.reply(from, :ok)
-				%{state | active: Map.put(state.active, pid, ref), waiters: rest}
-
-			{:empty, _} ->
-				state
-		end
-	end
-end
-
 defmodule Contracts.PageWorker do
 	use GenServer, restart: :transient
 
@@ -664,10 +588,7 @@ defmodule Contracts.PageWorker do
 
 				Contracts.Manager.active_round?(round) and
 						Contracts.Database.claim_item(candidate.contract_id, round) ->
-					result =
-						Contracts.ItemGate.run(fn ->
-							fetch_items(candidate.contract_id, candidate.items_attempts, config)
-						end)
+					result = fetch_items(candidate.contract_id, candidate.items_attempts, config)
 
 					acc =
 						case result do
@@ -1283,41 +1204,28 @@ defmodule Contracts.Manager do
 	end
 
 	defp dispatch(state) do
-		max_regions = Keyword.fetch!(state.config, :region_concurrency)
 		now = Contracts.now_ms()
 
 		state =
-			Enum.reduce_while(1..max_regions, state, fn _, state ->
-				cond do
-					map_size(state.active) >= max_regions ->
-						{:halt, state}
+			Enum.reduce(state.queue, %{state | queue: []}, fn region, state ->
+				case Registry.lookup(Marketmailer.Registry, {:contract_region, region}) do
+					[{_pid, _}] ->
+						Contracts.RegionManager.start_round(region, state.round)
+						%{state | active: Map.put(state.active, region, now)}
 
-					state.queue == [] ->
-						{:halt, state}
+					[] ->
+						summary = %{
+							region: region,
+							round: state.round,
+							pages: 0,
+							updated_pages: [],
+							failures: [%{page: 1, reason: :region_missing}],
+							item_fetches: 0,
+							item_failures: 0,
+							dropped: 0
+						}
 
-					true ->
-						[region | rest] = state.queue
-						state = %{state | queue: rest}
-
-						case Registry.lookup(Marketmailer.Registry, {:contract_region, region}) do
-							[{_pid, _}] ->
-								Contracts.RegionManager.start_round(region, state.round)
-								{:cont, %{state | active: Map.put(state.active, region, now)}}
-
-							[] ->
-								summary = %{
-									region: region,
-									round: state.round,
-									pages: 0,
-									updated_pages: [],
-									failures: [%{page: 1, reason: :region_missing}],
-									item_fetches: 0,
-									item_failures: 0,
-									dropped: 0
-								}
-
-								{:cont, %{state | results: Map.put(state.results, region, summary)}}
-						end
+						%{state | results: Map.put(state.results, region, summary)}
 				end
 			end)
 

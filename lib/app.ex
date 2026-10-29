@@ -21,7 +21,22 @@ defmodule Marketmailer.Application do
 				ESI.Maintenance,
 				EtagCache,
 				{Registry, keys: :unique, name: Marketmailer.Registry},
-				{Task.Supervisor, name: Marketmailer.TaskSup}
+				{Task.Supervisor, name: Marketmailer.TaskSup},
+				{Finch,
+				 name: ESI.Finch,
+				 pools: %{
+					 default: [
+						 size: 256,
+						 count: 8,
+						 conn_opts: [
+							 transport_opts: [
+								 keepalive: true,
+								 nodelay: true,
+								 timeout: Marketmailer.Maintenance.request_timeout_ms()
+							 ]
+						 ]
+					 ]
+				 }}
 			] ++
 				poller_core_children() ++
 				[Janice.Supervisor] ++
@@ -64,7 +79,6 @@ defmodule Marketmailer.Application do
 			[
 				{DynamicSupervisor, strategy: :one_for_one, name: Contracts.PageSup},
 				Contracts.RegionManagerSupervisor,
-				Contracts.ItemGate,
 				Contracts.Manager
 			]
 		else

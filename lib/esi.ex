@@ -127,10 +127,9 @@ defmodule ESI do
 
 		[
 			headers: headers,
+			finch: [name: ESI.Finch, pool_timeout: Keyword.get(opts, :pool_timeout, :infinity)],
 			receive_timeout: timeout,
-			connect_options: [timeout: timeout],
-			retry: Keyword.get(opts, :retry, :safe_transient),
-			retry_log_level: :info
+			retry: Keyword.get(opts, :retry, false)
 		]
 	end
 

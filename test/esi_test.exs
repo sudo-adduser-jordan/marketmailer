@@ -260,12 +260,33 @@ defmodule ESI.ClientTest do
 		refute ESI.Maintenance.window_open?()
 	end
 
-	test "request options never combine finch with connect_options" do
+	test "request options use the shared pool with an unbounded checkout" do
 		opts = ESI.request_options([])
+		timeout = Marketmailer.Maintenance.request_timeout_ms()
 
-		refute Keyword.has_key?(opts, :finch) and Keyword.has_key?(opts, :connect_options)
-		assert opts[:connect_options] == [timeout: Marketmailer.Maintenance.request_timeout_ms()]
-		assert opts[:receive_timeout] == Marketmailer.Maintenance.request_timeout_ms()
+		assert opts[:finch] == [name: ESI.Finch, pool_timeout: :infinity]
+		refute Keyword.has_key?(opts, :connect_options)
+		assert opts[:receive_timeout] == timeout
+		assert opts[:retry] == false
+	end
+
+	test "market fetches keep one request per worker and honor an explicit checkout" do
+		url = "https://esi.evetech.net/v1/markets/990014/orders/?page=1"
+		parent = self()
+
+		http = fn _url, opts ->
+			send(parent, {:request_options, opts})
+			{:ok, response(304, %{"expires" => ["Thu, 29 Oct 2026 03:59:52 GMT"]})}
+		end
+
+		assert {:not_modified, _meta} = ESI.fetch(990_014, 1, http_fun: http, conditional: false)
+		assert_received {:request_options, opts}
+		assert opts[:retry] == false
+		assert opts[:finch] == [name: ESI.Finch, pool_timeout: :infinity]
+
+		assert {:not_modified, _meta} = ESI.get(url, http_fun: http, conditional: false, pool_timeout: 5_000)
+		assert_received {:request_options, opts}
+		assert opts[:finch] == [name: ESI.Finch, pool_timeout: 5_000]
 	end
 
 	test "an unanswered request never opens a maintenance window" do

@@ -363,8 +363,15 @@ column 0), then pipe to jq:
 - `lib/mix/tasks/sde_import.ex` - `mix sde.import`: official JSONL SDE bulk seed
   (types, regions, systems, composed NPC station names)
 - `lib/esi.ex` - market orders fetch, etag/error-limit/maintenance handling.
-  Market fetches disable Req retries and cap `pool_timeout`, and a raised request
-  (a saturated Finch pool) is rescued into an error instead of killing the page
+  Every ESI request goes through the dedicated `ESI.Finch` pool (8 × 256
+  connections, 30 s transport timeout, started in `lib/app.ex`) with
+  `pool_timeout: :infinity` and `retry: false`, so one page worker wake is
+  exactly one HTTP request and never fails waiting for a connection — the pool
+  is larger than the ~1.9k worker ceiling (1658 market pages + contracts), so
+  the checkout queue stays empty. The connect timeout lives in the pool's
+  `conn_opts`: Req rejects `:finch` and `:connect_options` in the same request,
+  and the top-level `:pool_timeout` is deprecated. A raised adapter error is
+  still rescued into an error instead of killing the page
   worker. `lib/esi/maintenance.ex` - `ESI.Maintenance`: the ESI availability
   window. Edge-based, not TTL-based: the first 5xx opens it in ETS (the pause
   gate is immediate), announcements are debounced (yellow after
