@@ -702,7 +702,7 @@ defmodule Discord.Embeds do
 		if is_nil(margin) do
 			Utils.margin_value(nil)
 		else
-			"#{Utils.margin_value(margin)} (#{Utils.margin_percent(margin, Utils.to_number(item.price))})"
+			"#{Utils.margin_value(margin)} #{Utils.margin_percent(margin, Utils.to_number(item.price))}"
 		end
 	end
 

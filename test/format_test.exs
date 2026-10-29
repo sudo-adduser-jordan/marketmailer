@@ -28,32 +28,32 @@ defmodule Marketmailer.UtilsTest do
 
 	describe "price_value/1" do
 		test "compacts every tier" do
-			assert Utils.price_value(4_990_000) == "4.99m ISK"
-			assert Utils.price_value(215_000) == "215.0k ISK"
-			assert Utils.price_value(999) == "999.00 ISK"
+			assert Utils.price_value(4_990_000) == "4.99m"
+			assert Utils.price_value(215_000) == "215.0k"
+			assert Utils.price_value(999) == "999.00"
 		end
 
 		test "keeps a leading minus only for negatives" do
-			assert Utils.price_value(-1_500_000) == "-1.50m ISK"
-			assert Utils.price_value("2500000") == "2.50m ISK"
+			assert Utils.price_value(-1_500_000) == "-1.50m"
+			assert Utils.price_value("2500000") == "2.50m"
 		end
 
 		test "unknown prices render a placeholder" do
-			assert Utils.price_value(nil) == "? ISK"
-			assert Utils.price_value("") == "? ISK"
+			assert Utils.price_value(nil) == "?"
+			assert Utils.price_value("") == "?"
 		end
 	end
 
 	describe "margin_value/1" do
 		test "signs positive and negative margins" do
-			assert Utils.margin_value(-215_000) == "-215.0k ISK"
-			assert Utils.margin_value(38_700_000) == "+38.70m ISK"
-			assert Utils.margin_value(100) == "+100.00 ISK"
+			assert Utils.margin_value(-215_000) == "-215.0k"
+			assert Utils.margin_value(38_700_000) == "+38.70m"
+			assert Utils.margin_value(100) == "+100.00"
 		end
 
 		test "unknown margins render a placeholder" do
-			assert Utils.margin_value(nil) == "? ISK"
-			assert Utils.margin_value(:nope) == "? ISK"
+			assert Utils.margin_value(nil) == "?"
+			assert Utils.margin_value(:nope) == "?"
 		end
 	end
 

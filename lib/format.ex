@@ -93,22 +93,22 @@ defmodule Marketmailer.Utils do
 	def price_value(price) do
 		case to_number(price) do
 			nil ->
-				"? ISK"
+				"?"
 
 			number ->
 				prefix = if number < 0, do: "-", else: ""
-				"#{prefix}#{isk_compact(abs(number))} ISK"
+				"#{prefix}#{isk_compact(abs(number))}"
 		end
 	end
 
-	def margin_value(nil), do: "? ISK"
+	def margin_value(nil), do: "?"
 
 	def margin_value(profit) when is_number(profit) do
 		sign = if profit >= 0, do: "+", else: "-"
-		"#{sign}#{isk_compact(abs(profit * 1.0))} ISK"
+		"#{sign}#{isk_compact(abs(profit * 1.0))}"
 	end
 
-	def margin_value(_), do: "? ISK"
+	def margin_value(_), do: "?"
 
 	def margin_percent(nil, _cost), do: "?"
 	def margin_percent(_margin, nil), do: "?"

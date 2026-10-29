@@ -567,16 +567,16 @@ defmodule Discord.EmbedsTest do
 		item = %{market_item() | price: 4_990_000.0, buy_price: 4_775_000.0}
 		fields = Discord.Embeds.market_embed(item).fields
 
-		assert Enum.find(fields, &(&1.name == "Sell")).value == "4.99m ISK"
-		assert Enum.find(fields, &(&1.name == "Buy")).value == "4.78m ISK"
-		assert Enum.find(fields, &(&1.name == "Margin")).value == "-215.0k ISK (-4.3%)"
+		assert Enum.find(fields, &(&1.name == "Sell")).value == "4.99m"
+		assert Enum.find(fields, &(&1.name == "Buy")).value == "4.78m"
+		assert Enum.find(fields, &(&1.name == "Margin")).value == "-215.0k -4.3%"
 	end
 
 	test "market embed margin falls back to a placeholder without prices" do
 		item = %{market_item() | price: nil, buy_price: nil}
 		fields = Discord.Embeds.market_embed(item).fields
 
-		assert Enum.find(fields, &(&1.name == "Margin")).value == "? ISK"
+		assert Enum.find(fields, &(&1.name == "Margin")).value == "?"
 	end
 
 	test "messages do not get stuck thinking" do
