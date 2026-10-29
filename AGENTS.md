@@ -43,6 +43,20 @@ Reference: https://taskfile.dev/docs/reference/schema
 - add colored logging
 - [command] content
 
+## Commits
+
+- never write descriptions
+- use user defined commit message format
+- `tag: statement of change`
+```sh
+add: 
+update: 
+remove: 
+move: 
+feature:
+fix:
+```
+- if a tag does not exist in the above list, suggest one
 
 # End User Generated
 
@@ -121,10 +135,14 @@ happens in `task dev` (interactive shell) or the test suite.
   (`mix release --overwrite`), seeds a fresh prod DB from the in-project DB
   when the paths differ, and starts (restart delivery needs no version
   bump). `task stop` is the kill-all switch — it gracefully stops the prod
-  daemon then sweeps orphaned release processes and a detached-dev
-  node (no pid archaeology needed); the host-wide `epmd` and unrelated
-  Erlang nodes (editor language servers) are left alone, as is a test suite
-  under `_build/test`.
+  daemon then sweeps orphaned release processes and any dev node started
+  from this project (`mix run --no-halt`, `mix start`, `iex -S mix run`;
+  matched by working directory under the repo, so editor language servers
+  are left alone) — no pid archaeology needed; the host-wide `epmd` and
+  unrelated Erlang nodes are left alone, as is a test suite under
+  `_build/test`. Taskfile script blocks run under go-task's built-in shell,
+  not `/bin/sh`: `set -e` is on, so every fallible line needs a guard, and
+  `kill` is an unsupported builtin — the tasks call `/bin/kill`.
 - Talk to the live node instead of booting a second one:
   `_build/prod/rel/marketmailer/bin/marketmailer remote`
   (it reads the deployment cookie itself). `task dev` boots a second,
@@ -167,6 +185,9 @@ Formatting uses Quokka + HendricksFormatter plugins (see `.formatter.exs`);
   (gitignored, `priv/data/.gitkeep` keeps the directory) — single-host
   prod uses the same in-project file via `MARKETMAILER_DB` in `.env`, and
   `task docker:run` bind-mounts `./priv/data` for containers. WAL journal mode.
+  Release builds never ship it: `Marketmailer.Release.prune_local_data/1`
+  runs between `:assemble` and `:tar`, so the databases and the `sde/`
+  dumps stay out of the assembled release and out of the tarball.
 - **Fetch -> write -> read.** ESI pollers write only to the single DB file.
   Broadcasts render from the same file via `Market.Database` (`lib/database.ex`),
   which never touches the network. All writes go through `Database.Writer`,

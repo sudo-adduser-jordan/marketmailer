@@ -50,7 +50,11 @@ defmodule Marketmailer.MixProject do
 	defp releases do
 		[
 			marketmailer: fn ->
-				base = [include_executables_for: [:unix], include_erts: true]
+				base = [
+					include_executables_for: [:unix],
+					include_erts: true,
+					steps: [:assemble, &Marketmailer.Release.prune_local_data/1, :tar]
+				]
 
 				case upgrade_baselines() do
 					[] -> Castle.customize(base)

@@ -98,19 +98,34 @@ tasks:
     cmds:
       - |
         BIN={{.BIN}}
+        sweep() {
+          {
+            pgrep -f "$PWD/_build/(prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)|dev/)" 2>/dev/null || true
+            for pid in $(pgrep -f "(^|[ /])(mix (run|start)|iex)( |$)" 2>/dev/null || true); do
+              case "$(cat "/proc/$pid/comm" 2>/dev/null || true)" in
+                beam.smp|beam|erl) ;;
+                *) continue ;;
+              esac
+              cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null || true)
+              case "$cwd" in
+                "$PWD"|"$PWD"/*) echo "$pid" ;;
+              esac
+            done
+          } | grep -v -e "^$$$" -e "^$PPID$" | sort -u || true
+        }
         [ -x "$BIN" ] && "$BIN" pid >/dev/null 2>&1 && { echo "{{.BLUE}}stop: asked prod release to stop (was pid $("$BIN" pid 2>/dev/null || echo unknown)){{.RESET}}"; "$BIN" stop >/dev/null 2>&1 || true; }
-        pids=$(pgrep -f "$PWD/_build/(prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)|dev/)" 2>/dev/null | grep -v -e "^$$$" -e "^$PPID$" | sort -u || true)
+        pids=$(sweep)
         if [ -n "$pids" ]; then
           echo "{{.YELLOW}}stop: terminating leftovers: $(echo $pids | tr '\n' ' '){{.RESET}}"
-          kill $pids 2>/dev/null || true
+          /bin/kill $pids 2>/dev/null || true
           for _ in $(seq 1 20); do
-            pids=$(pgrep -f "$PWD/_build/(prod/rel/marketmailer/.*/(beam\.smp|run_erl|erl|inet_gethost)|dev/)" 2>/dev/null | grep -v -e "^$$$" -e "^$PPID$" | sort -u || true)
+            pids=$(sweep)
             [ -z "$pids" ] && break
             sleep 0.5
           done
           if [ -n "$pids" ]; then
             echo "{{.YELLOW}}stop: killing stubborn leftovers: $(echo $pids | tr '\n' ' '){{.RESET}}"
-            kill -9 $pids 2>/dev/null || true
+            /bin/kill -9 $pids 2>/dev/null || true
           fi
         fi
         rm -f priv/data/marketmailer.pid
