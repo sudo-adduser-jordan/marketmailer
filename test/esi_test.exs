@@ -130,15 +130,33 @@ defmodule ESI.ClientTest do
 		http = fn _url, _opts -> {:error, :timeout} end
 
 		assert {:error, :timeout} = ESI.get(url, http_fun: http, conditional: false)
-		assert Marketmailer.Maintenance.down?()
+		assert eventually(fn -> Marketmailer.Maintenance.down?() end)
+	end
+
+	test "a closed keepalive socket does not pause polling" do
+		url = "https://esi.evetech.net/v1/markets/990015/orders/?page=1"
+		error = %Mint.TransportError{reason: :closed}
+
+		:persistent_term.put({:marketmailer_test, :probe_result}, :ok)
+		on_exit(fn -> :persistent_term.erase({:marketmailer_test, :probe_result}) end)
+
+		http = fn _url, _opts -> {:error, error} end
+
+		assert {:error, ^error} = ESI.get(url, http_fun: http, conditional: false)
+		refute Marketmailer.Maintenance.down?()
 	end
 
 	test "handles transport errors" do
 		url = "https://esi.evetech.net/v1/markets/990006/orders/?page=1"
 		error = %Mint.TransportError{reason: :econnrefused}
+		closed = %Mint.TransportError{reason: :closed}
 
 		assert ESI.network_error?(error)
 		refute ESI.network_error?(:bad_request)
+		assert ESI.hard_disconnect?(error)
+		refute ESI.transient_error?(error)
+		assert ESI.transient_error?(closed)
+		refute ESI.hard_disconnect?(closed)
 
 		http = fn _url, _opts -> {:error, error} end
 

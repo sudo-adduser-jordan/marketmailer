@@ -28,6 +28,7 @@ defmodule Marketmailer.Application do
 					 default: [
 						 size: 256,
 						 count: 8,
+						 conn_max_idle_time: 15_000,
 						 conn_opts: [
 							 transport_opts: [
 								 keepalive: true,

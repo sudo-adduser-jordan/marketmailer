@@ -3,6 +3,7 @@ defmodule Contracts do
 		enabled: true,
 		period_ms: 1_800_000,
 		initial_delay_ms: 30_000,
+		start_jitter_ms: 5_000,
 		excluded_types: ["courier", "auction", "loan", "unknown"],
 		min_margin: 100_000_000,
 		item_retry_ms: 1_800_000,
@@ -437,6 +438,9 @@ end
 defmodule Contracts.PageWorker do
 	use GenServer, restart: :transient
 
+	@max_transient_retries 2
+	@transient_retry_ms 1_000
+
 	def start_link({region, page}) do
 		GenServer.start_link(__MODULE__, {region, page},
 			name: {:via, Registry, {Marketmailer.Registry, {:contract_page, region, page}}}
@@ -452,7 +456,7 @@ defmodule Contracts.PageWorker do
 
 	@impl true
 	def init({region, page}) do
-		{:ok, %{region: region, page: page, round: nil}}
+		{:ok, %{region: region, page: page, round: nil, attempts: 0}}
 	end
 
 	@impl true
@@ -476,15 +480,44 @@ defmodule Contracts.PageWorker do
 					"Contracts #{state.region}/#{state.page}: network down, page skipped"
 				)
 
-				{:noreply, %{state | round: nil}}
+				{:noreply, %{state | round: nil, attempts: 0}}
 
 			true ->
-				state = %{state | round: round}
-				{status, context} = fetch_and_process(state, round)
-				Contracts.RegionManager.page_result(state.region, round, state.page, status, context)
-				{:noreply, %{state | round: nil}}
+				{:noreply, run_round(%{state | round: round, attempts: 0}, round)}
 		end
 	end
+
+	@impl true
+	def handle_info({:retry_round, round}, %{round: round} = state) do
+		if Marketmailer.Maintenance.down?() do
+			Contracts.RegionManager.page_result(state.region, round, state.page, :failed, %{reason: :offline})
+			{:noreply, %{state | round: nil, attempts: 0}}
+		else
+			{:noreply, run_round(state, round)}
+		end
+	end
+
+	def handle_info({:retry_round, _round}, state), do: {:noreply, state}
+	def handle_info(_message, state), do: {:noreply, state}
+
+	defp run_round(state, round) do
+		{status, context} = fetch_and_process(state, round)
+
+		if retry?(status, context, state.attempts) do
+			Process.send_after(self(), {:retry_round, round}, @transient_retry_ms)
+			%{state | attempts: state.attempts + 1}
+		else
+			Contracts.RegionManager.page_result(state.region, round, state.page, status, context)
+			%{state | round: nil, attempts: 0}
+		end
+	end
+
+	defp retry?(:failed, context, attempts) do
+		attempts < @max_transient_retries and Map.get(context, :transient, false) and
+			not Marketmailer.Maintenance.down?()
+	end
+
+	defp retry?(_status, _context, _attempts), do: false
 
 	defp fetch_and_process(%{region: region, page: page}, round) do
 		config = Contracts.config()
@@ -514,7 +547,7 @@ defmodule Contracts.PageWorker do
 				{:failed, %{reason: :service_unavailable}}
 
 			{:error, reason} ->
-				{:failed, %{reason: failure_reason(reason)}}
+				{:failed, %{reason: failure_reason(reason), transient: ESI.transient_error?(reason)}}
 		end
 	rescue
 		error ->
@@ -697,9 +730,6 @@ defmodule Contracts.PageWorker do
 	defp failure_label(reason) when is_atom(reason) or is_binary(reason), do: reason
 	defp failure_label(reason) when is_integer(reason), do: reason
 	defp failure_label(_reason), do: :unknown
-
-	@impl true
-	def handle_info(_message, state), do: {:noreply, state}
 end
 
 defmodule Contracts.RegionManager do
@@ -1039,6 +1069,7 @@ defmodule Contracts.Manager do
 	use GenServer
 
 	@active_round_key {Contracts, :active_round}
+	@min_gap_ms 30_000
 
 	def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -1055,24 +1086,32 @@ defmodule Contracts.Manager do
 	end
 
 	@impl true
-	def init(_opts) do
+	def init(opts) do
 		:persistent_term.erase(@active_round_key)
-		config = Contracts.config()
-		delay = Keyword.fetch!(config, :initial_delay_ms) + :rand.uniform(5_000)
-		Process.send_after(self(), :start_round, delay)
+		config = Contracts.config(Keyword.get(opts, :config, []))
+		now_fun = Keyword.get(opts, :now_fun, &Contracts.now_ms/0)
+		delay = Keyword.fetch!(config, :initial_delay_ms) + jitter_ms(config)
+
 		Marketmailer.Maintenance.subscribe(self())
 
-		{:ok,
-		 %{
-			 config: config,
-			 round: nil,
-			 queue: [],
-			 active: %{},
-			 results: %{},
-			 started_at: nil,
-			 deadline_timer: nil,
-			 paused: false
-		 }}
+		state = %{
+			config: config,
+			regions_fun: Keyword.get(opts, :regions_fun, &Marketmailer.RegionManagerSupervisor.region_ids/0),
+			broadcast_fun: Keyword.get(opts, :broadcast_fun, &Contracts.Broadcast.finalize/3),
+			now_fun: now_fun,
+			round: nil,
+			queue: [],
+			active: %{},
+			results: %{},
+			started_at: nil,
+			deadline_timer: nil,
+			paused: false,
+			next_round_at: now_fun.() + delay,
+			round_timer: nil,
+			interrupted: false
+		}
+
+		{:ok, arm_round_timer(state, delay)}
 	end
 
 	@impl true
@@ -1082,49 +1121,26 @@ defmodule Contracts.Manager do
 
 	@impl true
 	def handle_info(:start_round, state) do
-		if Marketmailer.Maintenance.down?() do
-			state = note_paused(state)
-			Process.send_after(self(), :start_round, Keyword.fetch!(state.config, :pause_recheck_ms))
-			{:noreply, state}
-		else
-			regions = Marketmailer.RegionManagerSupervisor.region_ids()
+		now = state.now_fun.()
 
-			if regions == [] do
-				Marketmailer.Log.warning(
-					"contracts_round_skipped",
-					%{reason: :regions_missing},
-					"Contract round skipped: no SDE regions loaded"
-				)
-
-				Process.send_after(self(), :start_round, 300_000)
-				{:noreply, state}
-			else
-				round = System.unique_integer([:positive, :monotonic])
-				:persistent_term.put(@active_round_key, round)
-
-				deadline =
-					Process.send_after(self(), {:round_deadline, round}, Keyword.fetch!(state.config, :round_deadline_ms))
+		cond do
+			now < state.next_round_at ->
+				due_in = state.next_round_at - now
 
 				Marketmailer.Log.info(
-					"contracts_round_started",
-					%{round: round, regions: length(regions)},
-					"Contract round #{round} started across #{length(regions)} regions"
+					"contracts_round_deferred",
+					%{due_in_ms: due_in},
+					"Contract round deferred for #{div(due_in, 1000)}s"
 				)
 
-				state = %{
-					state
-					| round: round,
-						queue: regions,
-						active: %{},
-						results: %{},
-						started_at: Contracts.now_ms(),
-						deadline_timer: deadline,
-						paused: false
-				}
+				{:noreply, arm_round_timer(%{state | round_timer: nil}, due_in)}
 
-				state = dispatch(state) |> maybe_finalize()
-				{:noreply, state}
-			end
+			Marketmailer.Maintenance.down?() ->
+				state = note_paused(state)
+				{:noreply, arm_round_timer(%{state | round_timer: nil}, Keyword.fetch!(state.config, :pause_recheck_ms))}
+
+			true ->
+				{:noreply, start_round(state, now)}
 		end
 	end
 
@@ -1166,30 +1182,92 @@ defmodule Contracts.Manager do
 		Enum.each(Map.keys(state.active), &Contracts.RegionManager.abort(&1, round))
 		cancel_timer(state.deadline_timer)
 		:persistent_term.erase(@active_round_key)
-		Process.send_after(self(), :start_round, Keyword.fetch!(state.config, :pause_recheck_ms))
+		now = state.now_fun.()
 
-		{:noreply,
-		 %{
-			 state
-			 | round: nil,
-				 queue: [],
-				 active: %{},
-				 results: %{},
-				 started_at: nil,
-				 deadline_timer: nil,
-				 paused: true
-		 }}
+		state = %{
+			state
+			| round: nil,
+				queue: [],
+				active: %{},
+				results: %{},
+				started_at: nil,
+				deadline_timer: nil,
+				paused: true,
+				interrupted: true,
+				next_round_at: min(state.next_round_at, now),
+				round_timer: nil
+		}
+
+		{:noreply, arm_round_timer(state, Keyword.fetch!(state.config, :pause_recheck_ms))}
 	end
 
 	def handle_info({:maintenance, :down}, state), do: {:noreply, %{state | paused: true}}
 
-	def handle_info({:maintenance, :up}, %{round: nil} = state) do
-		send(self(), :start_round)
-		{:noreply, %{state | paused: false}}
+	def handle_info({:maintenance, :up}, state) do
+		now = state.now_fun.()
+		state = %{state | paused: false}
+
+		cond do
+			not is_nil(state.round) ->
+				{:noreply, state}
+
+			state.interrupted ->
+				Marketmailer.Log.info(
+					"contracts_round_resumed",
+					%{due_in_ms: max(state.next_round_at - now, 0)},
+					"Contract round resumed after the network returned"
+				)
+
+				state = %{state | next_round_at: now, round_timer: nil}
+				{:noreply, arm_round_timer(state, 0)}
+
+			true ->
+				{:noreply, arm_round_timer(%{state | round_timer: nil}, max(state.next_round_at - now, 0))}
+		end
 	end
 
-	def handle_info({:maintenance, :up}, state), do: {:noreply, state}
 	def handle_info(_message, state), do: {:noreply, state}
+
+	defp start_round(state, now) do
+		regions = state.regions_fun.()
+
+		if regions == [] do
+			Marketmailer.Log.warning(
+				"contracts_round_skipped",
+				%{reason: :regions_missing},
+				"Contract round skipped: no SDE regions loaded"
+			)
+
+			arm_round_timer(%{state | round_timer: nil}, 300_000)
+		else
+			round = System.unique_integer([:positive, :monotonic])
+			:persistent_term.put(@active_round_key, round)
+
+			deadline =
+				Process.send_after(self(), {:round_deadline, round}, Keyword.fetch!(state.config, :round_deadline_ms))
+
+			Marketmailer.Log.info(
+				"contracts_round_started",
+				%{round: round, regions: length(regions)},
+				"Contract round #{round} started across #{length(regions)} regions"
+			)
+
+			state = %{
+				state
+				| round: round,
+					queue: regions,
+					active: %{},
+					results: %{},
+					started_at: now,
+					deadline_timer: deadline,
+					paused: false,
+					round_timer: nil,
+					interrupted: false
+			}
+
+			dispatch(state) |> maybe_finalize()
+		end
+	end
 
 	defp note_paused(%{paused: true} = state), do: state
 
@@ -1204,7 +1282,7 @@ defmodule Contracts.Manager do
 	end
 
 	defp dispatch(state) do
-		now = Contracts.now_ms()
+		now = state.now_fun.()
 
 		state =
 			Enum.reduce(state.queue, %{state | queue: []}, fn region, state ->
@@ -1241,41 +1319,80 @@ defmodule Contracts.Manager do
 	defp finalize(%{round: round} = state) do
 		cancel_timer(state.deadline_timer)
 		:persistent_term.erase(@active_round_key)
+		now = state.now_fun.()
 
-		try do
-			Contracts.Broadcast.finalize(round, state.results, state.config)
-		rescue
-			error ->
-				Marketmailer.Log.error(
-					"contracts_round_finalize_failed",
-					%{round: round, reason: Exception.message(error)},
-					"Contract round finalize failed"
-				)
-		catch
-			_, reason ->
-				Marketmailer.Log.error(
-					"contracts_round_finalize_failed",
-					%{round: round, reason: inspect(reason)},
-					"Contract round finalize failed"
-				)
+		if Marketmailer.Maintenance.down?() do
+			Marketmailer.Log.warning(
+				"contracts_broadcast_suppressed",
+				%{round: round, reason: "network"},
+				"Contract round #{round} completed while the network was down; digest deferred"
+			)
+
+			state = %{
+				state
+				| round: nil,
+					queue: [],
+					active: %{},
+					results: %{},
+					started_at: nil,
+					deadline_timer: nil,
+					paused: true,
+					interrupted: true,
+					next_round_at: min(state.next_round_at, now),
+					round_timer: nil
+			}
+
+			arm_round_timer(state, Keyword.fetch!(state.config, :pause_recheck_ms))
+		else
+			try do
+				state.broadcast_fun.(round, state.results, state.config)
+			rescue
+				error ->
+					Marketmailer.Log.error(
+						"contracts_round_finalize_failed",
+						%{round: round, reason: Exception.message(error)},
+						"Contract round finalize failed"
+					)
+			catch
+				_, reason ->
+					Marketmailer.Log.error(
+						"contracts_round_finalize_failed",
+						%{round: round, reason: inspect(reason)},
+						"Contract round finalize failed"
+					)
+			end
+
+			period = Keyword.fetch!(state.config, :period_ms)
+			next_at = now + max(period, @min_gap_ms)
+
+			state = %{
+				state
+				| round: nil,
+					queue: [],
+					active: %{},
+					results: %{},
+					started_at: nil,
+					deadline_timer: nil,
+					paused: state.paused,
+					interrupted: false,
+					next_round_at: next_at,
+					round_timer: nil
+			}
+
+			arm_round_timer(state, next_at - now)
 		end
+	end
 
-		now = Contracts.now_ms()
-		period = Keyword.fetch!(state.config, :period_ms)
-		next_at = max((state.started_at || now) + period, now + 30_000)
-		delay = max(next_at - now, 30_000)
-		Process.send_after(self(), :start_round, delay)
+	defp arm_round_timer(state, delay) do
+		cancel_timer(state.round_timer)
+		%{state | round_timer: Process.send_after(self(), :start_round, max(delay, 0))}
+	end
 
-		%{
-			state
-			| round: nil,
-				queue: [],
-				active: %{},
-				results: %{},
-				started_at: nil,
-				deadline_timer: nil,
-				paused: state.paused
-		}
+	defp jitter_ms(config) do
+		case Keyword.get(config, :start_jitter_ms, 5_000) do
+			max when is_integer(max) and max > 0 -> :rand.uniform(max)
+			_ -> 0
+		end
 	end
 
 	defp cancel_timer(nil), do: :ok

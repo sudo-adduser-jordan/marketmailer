@@ -61,6 +61,17 @@ defmodule Marketmailer.Maintenance do
 		:ok
 	end
 
+	def report_suspect(reason) do
+		if up?() do
+			case Process.whereis(__MODULE__) do
+				nil -> :ok
+				_ -> GenServer.cast(__MODULE__, {:suspect, reason})
+			end
+		end
+
+		:ok
+	end
+
 	def report_connected do
 		if down?() do
 			write_status(up_status())
@@ -102,6 +113,7 @@ defmodule Marketmailer.Maintenance do
 			phase: phase,
 			down_since: status().since_ms,
 			probes: 0,
+			suspect: nil,
 			timer: nil,
 			subscribers: MapSet.new()
 		}
@@ -115,7 +127,7 @@ defmodule Marketmailer.Maintenance do
 		cancel_timer(state.timer)
 		write_status(up_status())
 
-		{:reply, :ok, %{state | phase: :up, down_since: nil, probes: 0, timer: nil}}
+		{:reply, :ok, %{state | phase: :up, down_since: nil, probes: 0, suspect: nil, timer: nil}}
 	end
 
 	@impl true
@@ -138,11 +150,18 @@ defmodule Marketmailer.Maintenance do
 			notify(state, :down)
 
 			state
-			|> Map.merge(%{phase: :down, down_since: status().since_ms, probes: 0})
+			|> Map.merge(%{phase: :down, down_since: status().since_ms, probes: 0, suspect: nil})
 			|> ensure_probe()
 			|> then(&{:noreply, &1})
 		end
 	end
+
+	def handle_cast({:suspect, reason}, %{phase: :up} = state) do
+		state = if is_nil(state.suspect), do: %{state | suspect: reason}, else: state
+		{:noreply, ensure_probe(state)}
+	end
+
+	def handle_cast({:suspect, _reason}, state), do: {:noreply, state}
 
 	def handle_cast(:up, state) do
 		if state.phase == :up do
@@ -154,26 +173,71 @@ defmodule Marketmailer.Maintenance do
 
 	@impl true
 	def handle_info(:probe, state) do
-		if down?() do
-			{:noreply, run_probe(%{state | timer: nil})}
-		else
-			{:noreply, %{state | phase: :up, down_since: nil, timer: nil}}
+		cond do
+			down?() -> {:noreply, run_probe(%{state | timer: nil})}
+			not is_nil(state.suspect) -> {:noreply, probe_suspect(%{state | timer: nil})}
+			true -> {:noreply, %{state | phase: :up, down_since: nil, suspect: nil, timer: nil}}
 		end
 	end
 
 	def handle_info(_message, state), do: {:noreply, state}
 
-	defp run_probe(state) do
+	defp probe_suspect(state) do
 		config = state.config
-		result = state.probe_fun.(config[:probe_host], config[:probe_port], config[:probe_timeout_ms])
+		result = run_probe_fun(state)
 
 		case result do
+			:ok ->
+				Marketmailer.Log.info(
+					"network_probe_ok",
+					%{reason: describe(state.suspect), host: config[:probe_host], port: config[:probe_port]},
+					"Network probe succeeded; polling continues"
+				)
+
+				%{state | suspect: nil, timer: nil}
+
+			{:error, reason} ->
+				enter_down(%{state | timer: nil}, state.suspect || reason)
+
+			other ->
+				enter_down(%{state | timer: nil}, state.suspect || other)
+		end
+	rescue
+		error -> enter_down(%{state | timer: nil}, state.suspect || error)
+	end
+
+	defp enter_down(state, reason) do
+		config = state.config
+		now = now_ms()
+
+		write_status(%{state: :down, reason: describe(reason), since_ms: now, probes: 1})
+
+		Marketmailer.Log.warning(
+			"network_lost",
+			%{reason: describe(reason), host: config[:probe_host], port: config[:probe_port]},
+			"Network connection lost; polling paused"
+		)
+
+		notify(state, :down)
+
+		state
+		|> Map.merge(%{phase: :down, down_since: now, probes: 1, suspect: nil})
+		|> schedule_probe(probe_delay(config, 1))
+	end
+
+	defp run_probe(state) do
+		case run_probe_fun(state) do
 			:ok -> mark_up(state)
 			{:error, reason} -> probe_failed(state, reason)
 			other -> probe_failed(state, other)
 		end
 	rescue
 		error -> probe_failed(state, error)
+	end
+
+	defp run_probe_fun(state) do
+		config = state.config
+		state.probe_fun.(config[:probe_host], config[:probe_port], config[:probe_timeout_ms])
 	end
 
 	defp probe_failed(state, reason) do
@@ -203,7 +267,7 @@ defmodule Marketmailer.Maintenance do
 		)
 
 		notify(state, :up)
-		%{state | phase: :up, down_since: nil, probes: 0, timer: nil}
+		%{state | phase: :up, down_since: nil, probes: 0, suspect: nil, timer: nil}
 	end
 
 	defp probe_delay(config, probes) do

@@ -33,12 +33,24 @@ defmodule Marketmailer.MaintenanceTest do
 
 		Maintenance.subscribe()
 
-		Maintenance.report_disconnect(:timeout)
+		Maintenance.report_suspect(:timeout)
 
-		assert_receive {:maintenance, :down}, 1_000
 		assert_receive {:probe, :network}, 1_000
+		assert_receive {:maintenance, :down}, 1_000
 		assert Maintenance.down?()
 		refute_receive {:maintenance, :up}, 200
+	end
+
+	test "a transient error that survives a probe does not pause work" do
+		:persistent_term.put({:marketmailer_test, :probe_result}, :ok)
+
+		Maintenance.subscribe()
+
+		Maintenance.report_suspect(:closed)
+
+		assert_receive {:probe, :network}, 1_000
+		refute_receive {:maintenance, :down}, 200
+		assert Maintenance.up?()
 	end
 
 	test "work is successfully resumed" do

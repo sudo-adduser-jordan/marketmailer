@@ -24,6 +24,17 @@ defmodule ESI do
 		:epipe
 	]
 
+	@hard_disconnect_reasons [
+		:nxdomain,
+		:econnrefused,
+		:ehostunreach,
+		:enetunreach,
+		:enetdown,
+		:eaddrnotavail
+	]
+
+	@transient_reasons [:closed, :econnreset, :etimedout, :timeout, :epipe]
+
 	def wait_for_error_window do
 		now = System.system_time(:millisecond)
 
@@ -102,7 +113,11 @@ defmodule ESI do
 				else
 					cond do
 						network_error?(error) ->
-							Marketmailer.Maintenance.report_disconnect(error)
+							if hard_disconnect?(error) do
+								Marketmailer.Maintenance.report_disconnect(error)
+							else
+								Marketmailer.Maintenance.report_suspect(error)
+							end
 
 						unanswered?(error) ->
 							:ok
@@ -184,6 +199,34 @@ defmodule ESI do
 	def network_error?(reason) when reason in @network_reasons, do: true
 	def network_error?({:error, reason}), do: network_error?(reason)
 	def network_error?(_reason), do: false
+
+	def hard_disconnect?(%{reason: reason}) when reason in @hard_disconnect_reasons, do: true
+
+	def hard_disconnect?(%{__exception__: true} = error) do
+		error
+		|> Exception.message()
+		|> String.downcase()
+		|> String.contains?([
+			"nxdomain",
+			"no route to host",
+			"network is unreachable",
+			"host unreachable",
+			"connection refused",
+			"address not available",
+			"econnrefused",
+			"ehostunreach",
+			"enetunreach"
+		])
+	end
+
+	def hard_disconnect?(reason) when reason in @hard_disconnect_reasons, do: true
+	def hard_disconnect?({:error, reason}), do: hard_disconnect?(reason)
+	def hard_disconnect?(_reason), do: false
+
+	def transient_error?(%{reason: reason}) when reason in @transient_reasons, do: true
+	def transient_error?(reason) when reason in @transient_reasons, do: true
+	def transient_error?({:error, reason}), do: transient_error?(reason)
+	def transient_error?(_reason), do: false
 
 	defp respond(%{status: 200} = response, url) do
 		clear_maintenance()

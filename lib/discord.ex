@@ -763,6 +763,7 @@ defmodule Discord.Broadcaster do
 		regions = Keyword.get(opts, :regions, Marketmailer.RegionManagerSupervisor.region_ids())
 		Enum.each(regions, &subscribe_region/1)
 		ESI.Maintenance.subscribe(self())
+		Marketmailer.Maintenance.subscribe(self())
 
 		state = %{
 			async: Keyword.get(opts, :async, true),
@@ -776,6 +777,8 @@ defmodule Discord.Broadcaster do
 			reports: %{},
 			seen: MapSet.new(),
 			esi_down: ESI.Maintenance.window_open?(),
+			network_down: false,
+			network_down_since: nil,
 			round_timeout: Keyword.get(opts, :round_timeout, @round_timeout_ms),
 			round_timer: nil
 		}
@@ -794,6 +797,8 @@ defmodule Discord.Broadcaster do
 				reports: %{},
 				seen: Map.get(state, :seen, MapSet.new()),
 				esi_down: Map.get(state, :esi_down, ESI.Maintenance.window_open?()),
+				network_down: Map.get(state, :network_down, false),
+				network_down_since: Map.get(state, :network_down_since),
 				round_timeout: Map.get(state, :round_timeout, @round_timeout_ms),
 				round_timer: nil
 			})
@@ -854,6 +859,24 @@ defmodule Discord.Broadcaster do
 	end
 
 	def handle_info({:esi_maintenance, _status, _info}, state), do: {:noreply, state}
+
+	def handle_info({:maintenance, :down}, %{network_down: false} = state) do
+		now = System.system_time(:millisecond)
+		reason = Marketmailer.Maintenance.status().reason
+		state = %{state | network_down: true, network_down_since: now}
+		payload = %{embeds: [Embeds.network_down_embed(reason)], components: []}
+		deliver_lifecycle(state, %{round: state.round}, "network_down", payload)
+	end
+
+	def handle_info({:maintenance, :up}, %{network_down: true} = state) do
+		now = System.system_time(:millisecond)
+		downtime = if is_integer(state.network_down_since), do: max(now - state.network_down_since, 0)
+		state = %{state | network_down: false, network_down_since: nil}
+		payload = %{embeds: [Embeds.network_up_embed(downtime)], components: []}
+		deliver_lifecycle(state, %{round: state.round}, "network_up", payload)
+	end
+
+	def handle_info({:maintenance, _status}, state), do: {:noreply, state}
 
 	def handle_info({:round_deadline, round}, %{round: round} = state), do: stall_round(state)
 	def handle_info({:round_deadline, _round}, state), do: {:noreply, state}
@@ -932,6 +955,15 @@ defmodule Discord.Broadcaster do
 			missing == [] ->
 				{:noreply, state}
 
+			state.network_down ->
+				Marketmailer.Log.info(
+					"broadcast_suppressed",
+					%{round: snapshot.round, reason: "network"},
+					"Round #{snapshot.round} stalled while the network was down"
+				)
+
+				{:noreply, state}
+
 			ESI.Maintenance.window_open?() ->
 				Marketmailer.Log.info(
 					"broadcast_suppressed",
@@ -952,15 +984,25 @@ defmodule Discord.Broadcaster do
 		state = %{state | round: state.round + 1, reports: %{}, round_timer: nil}
 		log_round_closed(snapshot)
 
-		if state.async do
-			start_async_digest(state, snapshot)
-		else
-			case safely_process_digest(snapshot, state) do
-				{:ok, _value} -> :ok
-				{:error, reason} -> log_broadcast_failure("broadcast_failed", reason)
-			end
+		if state.network_down do
+			Marketmailer.Log.info(
+				"broadcast_suppressed",
+				%{round: snapshot.round, reason: "network"},
+				"Round #{snapshot.round} closed while the network was down"
+			)
 
 			{:noreply, state}
+		else
+			if state.async do
+				start_async_digest(state, snapshot)
+			else
+				case safely_process_digest(snapshot, state) do
+					{:ok, _value} -> :ok
+					{:error, reason} -> log_broadcast_failure("broadcast_failed", reason)
+				end
+
+				{:noreply, state}
+			end
 		end
 	end
 
@@ -1137,6 +1179,7 @@ defmodule Discord.Broadcaster do
 
 	defp digest_payload(items, failures) do
 		base = Embeds.market_list_message(items)
+		failures = reject_offline(failures)
 
 		if failures == %{} do
 			base
@@ -1145,19 +1188,30 @@ defmodule Discord.Broadcaster do
 		end
 	end
 
+	defp reject_offline(failures) do
+		Map.reject(failures, fn {_region, reasons} ->
+			reasons |> List.wrap() |> Enum.all?(&offline_reason?/1)
+		end)
+	end
+
+	defp offline_reason?(%{reason: reason}), do: offline_reason?(reason)
+	defp offline_reason?(:offline), do: true
+	defp offline_reason?(:timeout), do: true
+	defp offline_reason?(_reason), do: false
+
 	defp warning_payload(_snapshot) do
 		%{embeds: [Embeds.esi_down_embed()], components: []}
 	end
 
 	defp error_payload(snapshot) do
-		failures = digest_failures(Map.get(snapshot, :reports, %{}))
+		failures = snapshot |> Map.get(:reports, %{}) |> digest_failures() |> reject_offline()
 
 		%{embeds: [Embeds.no_update_embed(failures)], components: []}
 	end
 
 	defp esi_down?(snapshot) do
 		reports = Map.get(snapshot, :reports, %{})
-		failures = digest_failures(reports)
+		failures = reports |> digest_failures() |> reject_offline()
 
 		cond do
 			any_updated?(reports) -> false
@@ -1169,7 +1223,7 @@ defmodule Discord.Broadcaster do
 	defp esi_failures_only?(reports) when map_size(reports) == 0, do: false
 
 	defp esi_failures_only?(reports) do
-		failures = digest_failures(reports)
+		failures = reports |> digest_failures() |> reject_offline()
 
 		if failures == %{} or any_updated?(reports) do
 			false

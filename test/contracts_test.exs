@@ -222,6 +222,128 @@ defmodule ContractsTest do
 		assert Contracts.Database.top_desired(@round + 1, 100, 0) == []
 	end
 
+	describe "scheduler" do
+		setup do
+			if !Process.whereis(Marketmailer.Registry) do
+				start_supervised!({Registry, keys: :unique, name: Marketmailer.Registry})
+			end
+
+			{:ok, clock} = start_supervised({Agent, fn -> 0 end})
+			MarketmailerTest.Fixtures.reset_network()
+
+			{:ok, clock: clock}
+		end
+
+		test "a round only starts when the period is due", %{clock: clock} do
+			start_manager(clock, initial_delay_ms: 60_000, period_ms: 100_000)
+
+			send(manager(), :start_round)
+			refute_receive {:broadcast, _round}, 100
+
+			advance(clock, 60_000)
+			send(manager(), :start_round)
+			assert_receive {:broadcast, _round}, 1_000
+
+			send(manager(), :start_round)
+			send(manager(), :start_round)
+			refute_receive {:broadcast, _round}, 100
+
+			advance(clock, 99_999)
+			send(manager(), :start_round)
+			refute_receive {:broadcast, _round}, 100
+
+			advance(clock, 1)
+			send(manager(), :start_round)
+			assert_receive {:broadcast, _round}, 1_000
+		end
+
+		test "the network returning does not start an early round", %{clock: clock} do
+			start_manager(clock, initial_delay_ms: 60_000, period_ms: 100_000)
+
+			advance(clock, 60_000)
+			send(manager(), :start_round)
+			assert_receive {:broadcast, _round}, 1_000
+
+			send(manager(), {:maintenance, :down})
+			send(manager(), {:maintenance, :up})
+
+			refute_receive {:broadcast, _round}, 100
+		end
+
+		test "an interrupted round resumes exactly once after the network returns", %{clock: clock} do
+			region = 99_000_402
+			start_supervised!({ContractsTest.FakeRegion, {region, self()}})
+
+			start_manager(clock, regions: [region], initial_delay_ms: 0, period_ms: 100_000)
+
+			send(manager(), :start_round)
+			assert_receive {:started, ^region, first_round}, 1_000
+
+			send(manager(), {:maintenance, :down})
+			send(manager(), {:maintenance, :up})
+
+			assert_receive {:started, ^region, resumed_round}, 1_000
+			assert resumed_round != first_round
+
+			refute_receive {:started, ^region, _round}, 100
+			assert Process.alive?(Process.whereis(Contracts.Manager))
+		end
+
+		test "a round that finishes while the network is down is not delivered", %{clock: clock} do
+			region = 99_000_403
+			start_supervised!({ContractsTest.FakeRegion, {region, self()}})
+
+			start_manager(clock, regions: [region], initial_delay_ms: 0, period_ms: 100_000)
+
+			send(manager(), :start_round)
+			assert_receive {:started, ^region, round}, 1_000
+
+			MarketmailerTest.Fixtures.network_down()
+
+			Contracts.Manager.region_complete(round, %{
+				region: region,
+				round: round,
+				pages: 1,
+				updated_pages: [],
+				failures: []
+			})
+
+			refute_receive {:broadcast, _round}, 200
+
+			MarketmailerTest.Fixtures.reset_network()
+			send(manager(), {:maintenance, :up})
+			assert_receive {:started, ^region, resumed_round}, 1_000
+			assert resumed_round != round
+		end
+	end
+
+	defp start_manager(clock, opts) do
+		test_pid = self()
+		regions = Keyword.get(opts, :regions, [99_000_401])
+
+		config =
+			[
+				initial_delay_ms: Keyword.get(opts, :initial_delay_ms, 60_000),
+				start_jitter_ms: 0,
+				period_ms: Keyword.get(opts, :period_ms, 100_000),
+				pause_recheck_ms: 10,
+				round_deadline_ms: 60_000
+			]
+
+		start_supervised!(
+			{Contracts.Manager,
+			 [
+				 config: config,
+				 regions_fun: fn -> regions end,
+				 now_fun: fn -> Agent.get(clock, & &1) end,
+				 broadcast_fun: fn round, _results, _config -> send(test_pid, {:broadcast, round}) end
+			 ]}
+		)
+	end
+
+	defp manager, do: Process.whereis(Contracts.Manager)
+	defp advance(clock, ms), do: Agent.update(clock, &(&1 + ms))
+
 	defp seed(contracts) do
 		assert :ok = Contracts.Database.upsert_page(contracts, @region, 1, @round)
 		Database.query!("UPDATE contracts SET items_fetched = 1")
@@ -316,10 +438,18 @@ end
 defmodule ContractsTest.FakeRegion do
 	use GenServer
 
+	def start_link({id, test_pid}) do
+		GenServer.start_link(__MODULE__, {id, test_pid},
+			name: {:via, Registry, {Marketmailer.Registry, {:contract_region, id}}}
+		)
+	end
+
 	def init({id, test_pid}), do: {:ok, %{id: id, test_pid: test_pid}}
 
 	def handle_cast({:start_round, round}, state) do
 		send(state.test_pid, {:started, state.id, round})
 		{:noreply, state}
 	end
+
+	def handle_cast({:abort, _round}, state), do: {:noreply, state}
 end

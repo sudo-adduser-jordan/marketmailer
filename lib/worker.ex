@@ -6,6 +6,7 @@ defmodule Marketmailer.PageWorker do
 	@ping_interval 10_000
 	@gate_recheck_ms 5_000
 	@start_jitter 30_000
+	@max_transient_retries 3
 
 	def start_link({manager, id, page}) do
 		GenServer.start_link(__MODULE__, {manager, id, page},
@@ -151,23 +152,38 @@ defmodule Marketmailer.PageWorker do
 	defp handle_error(reason, errs, state) do
 		%{id: id, page: page} = state
 
-		delay =
-			if ESI.network_error?(reason) or pause_reason?(reason) do
-				Marketmailer.Maintenance.recheck_ms()
-			else
-				backoff_ms(errs)
-			end
+		if ESI.transient_error?(reason) and errs < @max_transient_retries and
+				 not Marketmailer.Maintenance.down?() do
+			delay = 1_000 * (errs + 1)
 
-		schedule_next(delay)
+			schedule_next(delay)
 
-		Marketmailer.Log.warning(
-			"page_fetch_error",
-			%{region: id, page: page, reason: inspect(reason), retry_in_ms: delay},
-			"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
-		)
+			Marketmailer.Log.info(
+				"page_fetch_retry",
+				%{region: id, page: page, reason: inspect(reason), attempt: errs + 1, retry_in_ms: delay},
+				"Transient fetch error for region #{id} page #{page}; retrying in #{div(delay, 1000)}s"
+			)
 
-		Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: failure_reason(reason)})
-		{:noreply, %{state | errors: errs + 1}}
+			{:noreply, %{state | errors: errs + 1}}
+		else
+			delay =
+				if ESI.network_error?(reason) or pause_reason?(reason) do
+					Marketmailer.Maintenance.recheck_ms()
+				else
+					backoff_ms(errs)
+				end
+
+			schedule_next(delay)
+
+			Marketmailer.Log.warning(
+				"page_fetch_error",
+				%{region: id, page: page, reason: inspect(reason), retry_in_ms: delay},
+				"Fetch error for region #{id} page #{page}: #{inspect(reason)}; retry in #{div(delay, 1000)}s"
+			)
+
+			Marketmailer.RegionManager.page_result(id, page, :failed, %{reason: failure_reason(reason)})
+			{:noreply, %{state | errors: errs + 1}}
+		end
 	end
 
 	defp pause_reason?(%{reason: :request_failed}), do: true

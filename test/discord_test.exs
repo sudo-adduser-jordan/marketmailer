@@ -320,6 +320,142 @@ defmodule Discord.BroadcasterTest do
 		assert log =~ "broadcast_no_channels"
 	end
 
+	test "network loss suppresses rounds and announces the edges once", %{
+		task_supervisor: task_supervisor
+	} do
+		test_pid = self()
+		region = 97_000_070
+
+		broadcaster =
+			start_broadcaster(
+				[region],
+				[300],
+				market_list(),
+				fn _channel, payload ->
+					send(test_pid, {:sent, payload})
+					{:ok, :sent}
+				end,
+				task_supervisor: task_supervisor,
+				cycle_timeout: 10_000
+			)
+
+		MarketmailerTest.Fixtures.network_down(:econnrefused)
+
+		send(broadcaster, {:maintenance, :down})
+		assert_receive {:sent, down_payload}, 1_000
+		assert [down] = down_payload.embeds
+		assert down.title == "Connection lost"
+		assert down.color == 0xFAA61A
+		assert down.description =~ "econnrefused"
+
+		send(broadcaster, {:maintenance, :down})
+		refute_receive {:sent, _payload}, 200
+
+		complete_cycle(region, :updated)
+		refute_receive {:sent, _payload}, 300
+
+		MarketmailerTest.Fixtures.reset_network()
+		send(broadcaster, {:maintenance, :up})
+		assert_receive {:sent, up_payload}, 1_000
+		assert [up] = up_payload.embeds
+		assert up.title == "Connection restored"
+		assert up.color == 0x43B581
+		assert up.description =~ "Polling resumed"
+
+		MarketmailerTest.Fixtures.network_down(:econnrefused)
+		send(broadcaster, {:maintenance, :down})
+		assert_receive {:sent, _down_again}, 1_000
+
+		MarketmailerTest.Fixtures.reset_network()
+		send(broadcaster, {:maintenance, :up})
+		assert_receive {:sent, _up_again}, 1_000
+
+		send(broadcaster, {:maintenance, :up})
+		refute_receive {:sent, _payload}, 200
+
+		complete_cycle(region, :updated)
+		assert_receive {:sent, market_payload}, 1_000
+		assert [market] = market_payload.embeds
+		assert market.author.name == "Jita buy wall (1/1)"
+	end
+
+	test "offline failures never render a market cycle status embed", %{task_supervisor: task_supervisor} do
+		test_pid = self()
+		region = 97_000_071
+
+		start_broadcaster(
+			[region],
+			[300],
+			market_list(),
+			fn _channel, payload ->
+				send(test_pid, {:sent, payload})
+				{:ok, :sent}
+			end,
+			task_supervisor: task_supervisor
+		)
+
+		Marketmailer.RegionManager.page_started(region, 1)
+		Marketmailer.RegionManager.page_started(region, 2)
+		Marketmailer.RegionManager.page_result(region, 1, :updated, %{pages: 2})
+		Marketmailer.RegionManager.page_result(region, 2, :failed, %{pages: 2, reason: :offline})
+
+		assert_receive {:sent, payload}, 1_000
+		assert [embed] = payload.embeds
+		assert embed.author.name == "Jita buy wall (1/1)"
+	end
+
+	test "an offline-only round is a no-update, never an ESI outage", %{task_supervisor: task_supervisor} do
+		test_pid = self()
+		region = 97_000_074
+
+		start_broadcaster(
+			[region],
+			[300],
+			market_list(),
+			fn _channel, payload ->
+				send(test_pid, {:sent, payload})
+				{:ok, :sent}
+			end,
+			task_supervisor: task_supervisor
+		)
+
+		Marketmailer.RegionManager.page_started(region, 1)
+		Marketmailer.RegionManager.page_result(region, 1, :failed, %{pages: 1, reason: :offline})
+
+		assert_receive {:sent, payload}, 1_000
+		assert [embed] = payload.embeds
+		assert embed.title == "No market updates"
+		assert embed.description == "No regions reported updated orders this cycle."
+		refute embed.description =~ "offline"
+	end
+
+	test "a stalled round is suppressed while the network is down", %{task_supervisor: task_supervisor} do
+		test_pid = self()
+		first = 97_000_072
+		second = 97_000_073
+
+		broadcaster =
+			start_broadcaster(
+				[first, second],
+				[300],
+				market_list(),
+				fn _channel, payload ->
+					send(test_pid, {:sent, payload})
+					{:ok, :sent}
+				end,
+				task_supervisor: task_supervisor,
+				round_timeout: 100
+			)
+
+		send(broadcaster, {:maintenance, :down})
+		assert_receive {:sent, down_payload}, 1_000
+		assert [down] = down_payload.embeds
+		assert down.title == "Connection lost"
+
+		complete_cycle(first, :unchanged)
+		refute_receive {:sent, _payload}, 400
+	end
+
 	defp start_broadcaster(regions, channels, market_result, deliver_fun, opts) do
 		cycle_timeout = Keyword.get(opts, :cycle_timeout, 1_000)
 		Enum.each(regions, &start_cycle_manager(&1, cycle_timeout))

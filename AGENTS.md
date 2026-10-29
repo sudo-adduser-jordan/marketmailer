@@ -342,15 +342,38 @@ column 0), then pipe to jq:
 
 - `lib/app.ex` - supervision tree + ETS caches; boot calls
   `Marketmailer.Log.setup/0`, `Database.Migrations.run!/0` and
-  `Market.Database.log_unnamed_undercut_types/0`
+  `Market.Database.log_unnamed_undercut_types/0`. The `ESI.Finch` pool sets
+  `conn_max_idle_time: 15_000`, so a connection idle past the peer timeout is
+  never reused and the stale-keepalive "socket closed" flap disappears.
 - `lib/log.ex` - `Marketmailer.Log` (`info/warning/error` events, the
   boot-time file sink) + `Marketmailer.Log.Format` (the JSON renderer both
   sinks use)
-- `lib/maintenance.ex` - `Marketmailer.Maintenance`: network watchdog. A
-  transport failure halts all ESI polling; a DNS+TCP probe to
-  `esi.evetech.net:443` (configurable, no ESI budget) resumes it on reconnect
-  (`network_lost`/`network_restored`, `{:maintenance, :down | :up}` to
-  subscribers such as `Contracts.Manager`)
+- `lib/maintenance.ex` - `Marketmailer.Maintenance`: network watchdog. ESI
+  transport errors are classified (`ESI.hard_disconnect?/1` /
+  `ESI.transient_error?/1`): hard disconnects (`:nxdomain`, `:econnrefused`,
+  `:ehostunreach`, `:enetunreach`, `:enetdown`, `:eaddrnotavail`) pause all
+  polling immediately (`report_disconnect/1`), while transient ones
+  (`:closed`, `:econnreset`, `:etimedout`, `:timeout`, `:epipe` — a stale
+  keepalive or one dropped request) only mark a suspicion
+  (`report_suspect/1`) and pause nothing until a DNS+TCP probe to
+  `esi.evetech.net:443` (configurable, no ESI budget) also fails; a
+  successful probe clears the suspicion silently (`network_probe_ok`). Once
+  down, the probe retries at a backoff (5 s → 60 s cap) and resumes polling
+  on reconnect (`network_lost`/`network_restored`,
+  `{:maintenance, :down | :up}` to subscribers such as `Contracts.Manager`
+  and `Discord.Broadcaster`)
+- `lib/contracts.ex` - contract pollers + `Contracts.Manager` scheduler: one
+  round timer (`next_round_at` + `round_timer`), no `start_round` storms. A
+  round starts only when due, runs across every SDE region, and the next
+  slot is completion-anchored `now + period_ms` (30 min, `@min_gap_ms`
+  floor). A network drop aborts the round in flight and marks it
+  `interrupted`; if the round finished while the network was down its digest
+  is suppressed (`contracts_broadcast_suppressed`) and the round stays
+  interrupted. On reconnect the interrupted round resumes exactly once
+  (`contracts_round_resumed`) and the slot re-anchors from that completion —
+  so a restart or an outage can never emit two digests back to back. Page
+  workers retry transient transport errors twice before reporting a failure
+  (skipped once the watchdog is already down)
 - `priv/repo/migrations` - schema migrations
 - `lib/sql/*.sql` - every raw statement (market queries, contract writes, SDE
   bookkeeping, schema introspection), embedded at compile time by its owning
@@ -406,7 +429,10 @@ column 0), then pipe to jq:
   a `PageSup` restart (or a worker that stopped without a report) is rebuilt
   instead of leaving the region silently unpolled; a cycle that never completes
   emits `region_refresh_failed` with the missing pages after `cycle_timeout`
-  (10 min), so one lost report cannot wedge the barrier)
+  (10 min), so one lost report cannot wedge the barrier; a transient
+  transport error is retried up to 3 times (`page_fetch_retry`) before the
+  page reports a failure, so one dropped keepalive never shows up as a
+  region failure)
 - `lib/etag.ex` - warms the `:market_cache` ETS table from `etags`
 - `lib/discord.ex` - nostrum consumer, slash commands,
   `Discord.Broadcaster` (starts only with the pollers; collects one report
@@ -418,8 +444,17 @@ column 0), then pipe to jq:
   round closes while polling is paused; a round that stalls for `round_timeout`
   (10 min) is closed with the missing regions as failures (`round_stalled`)
   instead of leaving the channel silent, unless an ESI window already explained
-  the silence,
-  `Discord.BotSupervisor`. The broadcast ships the exact `/list_market`
+  the silence. It also subscribes to `Marketmailer.Maintenance`, posts one
+  "Connection lost" / "Connection restored" embed per network edge (downtime
+  measured by the broadcaster) and, while that flag is set, suppresses both
+  round digests and `round_stalled` — a network blip must never produce a
+  digest or a status card. Single ESI failures that are purely connectivity
+  (`:offline`, `:timeout`) are filtered out of every failure list — cycle
+  status, "No market updates" and the ESI-outage classification — so a
+  network blip can never render an "ESI is down" card and only real ESI
+  errors show.
+  `Discord.BotSupervisor` owns the bot. The broadcast ships the exact
+  `/list_market`
   message (`Discord.Embeds.market_list_message/1`: page 1 of `list_per_page`
   = 10 rows plus Prev/Next buttons), so the command and the broadcast can
   never drift apart; the pager re-queries the DB (page 2+ is live data, not
