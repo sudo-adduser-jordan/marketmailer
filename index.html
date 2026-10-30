@@ -246,7 +246,11 @@ try {
 
   /* ---------- Discord embed gallery ---------- */
   .dc-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .dc-gallery-3 { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
   .dc-col { display: grid; gap: 18px; align-content: start; min-width: 0; }
+  .dc-subhead { margin-top: 44px; }
+  .dc-subhead h3 { font-family: var(--display); font-size: 17px; letter-spacing: 2px; text-transform: uppercase; }
+  .dc-subhead p { color: var(--muted); font-size: 14px; margin-top: 6px; max-width: 640px; }
   .dc-card {
     display: flex; flex-direction: column; gap: 10px; min-width: 0;
     background: var(--card); border: 1px solid var(--line); padding: 16px;
@@ -310,13 +314,19 @@ try {
   .dc-embed.green { border-left-color: #43b581; }
   .dc-embed.purple { border-left-color: #7b68ee; }
   .dc-embed.amber { border-left-color: #faa61a; }
+  .dc-embed.red { border-left-color: #f04747; }
+  .dc-embed.info { border-left-color: #7289da; }
   .dc-embed > .dc-fields, .dc-embed > .dc-image, .dc-embed > .dc-footer { grid-column: 1 / -1; }
   .dc-author { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--dc-head); font-size: 13.5px; font-weight: 600; }
   .dc-author img { flex: none; width: 20px; height: 20px; border-radius: 50%; }
   .dc-thumb img { display: block; width: 64px; height: 64px; border-radius: 4px; background: var(--dc-thumb-bg); }
+  .dc-thumb.wide img { height: auto; }
   .dc-desc { color: var(--dc-text); font-size: 14px; overflow-wrap: anywhere; }
   .dc-desc a { color: var(--dc-link); text-decoration: none; }
   .dc-desc a strong { color: var(--dc-link); }
+  .dc-desc code { font-family: var(--mono); font-size: 13px; color: var(--dc-text); background: var(--dc-code-bg); border-radius: 3px; padding: 0 3px; }
+  .dc-mention { background: rgba(88, 101, 242, 0.3); color: #dee0fc; border-radius: 3px; padding: 0 2px; }
+  [data-theme="light"] .dc-mention { background: rgba(88, 101, 242, 0.15); color: #4752c4; }
   @media (hover: hover) and (pointer: fine) { .dc-desc a:hover { text-decoration: underline; } }
 
   .dc-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; margin-top: 8px; }
@@ -332,6 +342,7 @@ try {
 
   .dc-embed .dc-h2 { font-family: inherit; font-size: 19px; font-weight: 700; letter-spacing: 0; line-height: 1.3; text-transform: none; color: var(--dc-head); margin: 12px 0 4px; }
   .dc-embed .dc-h2:first-child { margin-top: 0; }
+  .dc-embed .dc-title { font-family: inherit; font-size: 16px; font-weight: 600; letter-spacing: 0; line-height: 1.375; text-transform: none; color: var(--dc-head); }
   .dc-quote { border-left: 4px solid var(--dc-quote-bar); padding-left: 10px; color: var(--dc-text); font-size: 14px; }
   .dc-codes { display: grid; gap: 2px; margin-top: 4px; }
   .dc-code { display: block; font-family: var(--mono); font-size: 12px; line-height: 1.4; padding: 6px 8px; border-radius: 3px; background: var(--dc-code-bg); color: var(--dc-text); }
@@ -718,7 +729,7 @@ try {
                 <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="Jita IV - Moon 4 station icon" width="64" height="64" /></div>
                 <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
               </div>
-              <div class="dc-actions" aria-hidden="true"><span class="dc-btn off">Prev</span><span class="dc-btn">Next</span></div>
+              <div class="dc-actions" aria-hidden="true"><span class="dc-btn off">&lt;</span><span class="dc-btn off">Prev</span><span class="dc-btn">Next</span><span class="dc-btn">&gt;</span></div>
             </div>
           </div>
         </figure>
@@ -761,7 +772,7 @@ try {
                 <div class="dc-top">
                   <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>Contracts (1/2)</span></div>
                   <div class="dc-desc">
-                    <a href="https://evector.space/contracts/236540025"><strong>Ishtar x 60</strong></a> +1.2b · +24.6% · Jita IV · 236540025<br />
+                    <a href="https://evector.space/contracts/236540025"><strong>Ishtar x 60</strong></a> · [CAPITAL] +1.2b · +24.6% · Jita IV · 236540025<br />
                     <a href="https://evector.space/contracts/236540139"><strong>Caldari Navy Ballistic Control…</strong></a> +480.0m · +31.2% · Perimeter · 236540139<br />
                     <a href="https://evector.space/contracts/236540244"><strong>Tengu x 25</strong></a> +350.0m · +12.8% · Jita IV · 236540244<br />
                     <a href="https://evector.space/contracts/236540311"><strong>Large Skill Injector x 100</strong></a> +280.0m · +7.4% · Amarr VIII · 236540311<br />
@@ -771,7 +782,7 @@ try {
                 </div>
                 <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
               </div>
-              <div class="dc-actions" aria-hidden="true"><span class="dc-btn off">Prev</span><span class="dc-btn">Next</span></div>
+              <div class="dc-actions" aria-hidden="true"><span class="dc-btn off">&lt;</span><span class="dc-btn off">Prev</span><span class="dc-btn">Next</span><span class="dc-btn">&gt;</span></div>
             </div>
           </div>
         </figure>
@@ -856,6 +867,220 @@ try {
           </div>
         </figure>
       </div>
+    </div>
+    <div class="dc-subhead">
+      <h3>Status &amp; error embeds</h3>
+      <p>Posted outside the digests: the ESI and connection edges, a stalled round, and the replies every command can fall back to.</p>
+    </div>
+    <div class="dc-gallery dc-gallery-3">
+      <figure class="dc-card">
+        <figcaption>Market cycle status</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed red has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/failure.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Market cycle status</div>
+                <div class="dc-desc">Region 10000002 — page 3: timeout<br />Region 10000043 — failed: :closed<br />Region 10000032 — awaiting cycle</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>No market updates</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed red has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">No market updates</div>
+                <div class="dc-desc">No regions reported updated orders this cycle.</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>ESI is down</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed amber has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">ESI is down</div>
+                <div class="dc-desc">Market data is stale; ESI appears to be down.</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>ESI is back</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed green has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">ESI is back</div>
+                <div class="dc-desc">Polling resumed; ESI was unavailable for 18m 4s.</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>Connection lost</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed amber has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Connection lost</div>
+                <div class="dc-desc">Polling paused; the connection to ESI was lost (:econnrefused).</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>Connection restored</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed green has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Connection restored</div>
+                <div class="dc-desc">Polling resumed; the connection was lost for 3m 12s.</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>Channel registration</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed green has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Channel Registration</div>
+                <div class="dc-desc"><span class="dc-mention">#market-alerts</span> is now registered for market alerts.</div>
+              </div>
+              <div class="dc-thumb"><img src="assets/database.png" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>Item not found</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed red has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/failure.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Item not found</div>
+                <div class="dc-desc">No cached market order was found for <strong>Raven</strong>.</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>Not tradable in high sec</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed amber has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Not tradable in high sec</div>
+                <div class="dc-desc"><strong>Nyx</strong> is a capital hull that cannot enter high security space, so it cannot be sold or delivered in Jita. It is excluded from the Jita buy-wall checks.</div>
+              </div>
+              <div class="dc-thumb wide"><img src="assets/expansion/background.png" alt="" width="64" height="30" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>Multiple items found</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed info has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/broadcast.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Multiple items found</div>
+                <div class="dc-desc">Multiple items match <strong>Raven</strong>:<br />1. <strong>Raven</strong><br />2. <strong>Raven Navy Issue</strong><br />3. <strong>Raven State Issue</strong><br /><br />Re-run <code>/check_market</code> with the exact name.</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="dc-card">
+        <figcaption>Error</figcaption>
+        <div class="dc-msg">
+          <div class="dc-avatar"><img src="assets/broadcast.png" alt="" width="24" height="24" /></div>
+          <div class="dc-body">
+            <div class="dc-head"><span class="dc-name">Marketmailer</span><span class="dc-bot">BOT</span><span class="dc-time">Today at 19:04</span></div>
+            <div class="dc-embed red has-thumb">
+              <div class="dc-top">
+                <div class="dc-author"><img src="assets/failure.png" alt="" width="20" height="20" /><span>&#8203;</span></div>
+                <div class="dc-title">Error</div>
+                <div class="dc-desc">Error</div>
+              </div>
+              <div class="dc-thumb"><img src="https://images.evetech.net/types/52678/icon?size=64" alt="" width="64" height="64" /></div>
+              <div class="dc-footer"><span>Oct 27, 2026 19:04 UTC • v0.0.1</span></div>
+            </div>
+          </div>
+        </div>
+      </figure>
     </div>
   </div>
 </section>
